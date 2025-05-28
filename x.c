@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
 #include <X11/Xlib.h>
 #include <X11/Xft/Xft.h>
 
@@ -55,6 +56,8 @@ main(int argc, char *args[])
 
 	// 仮想端末のオープン
 	Term *term = openterm();
+	if (!term)
+		fprintf(stderr, "openterm failed : %s\n", strerror(errno));
 
 	// イベントループ
 	for (;;) {
