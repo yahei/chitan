@@ -40,7 +40,6 @@ main(int argc, char *args[])
 	XSetForeground(display, gc, BlackPixel(display,0));
 	XSetBackground(display, gc, WhitePixel(display,0));
 
-
 	// 文字描画の準備
 	XftFont *font = XftFontOpen(
 			display, 0,
@@ -53,6 +52,9 @@ main(int argc, char *args[])
 	printf("%x\n", color.pixel);
 	XftDraw *draw = XftDrawCreate(display, window, DefaultVisual(display, 0), cmap);
 	char str[64] = "あいうabc";
+
+	// 仮想端末のオープン
+	Term *term = openterm();
 
 	// イベントループ
 	for (;;) {
@@ -82,8 +84,9 @@ main(int argc, char *args[])
 	}
 	printf("\n");
 
-	// 仮想端末のオープン
-	openpty();
+	// 仮想端末のクローズ
+	closeterm(term);
+	term = NULL;
 
 	// XftのClose
 	XftFontClose(display, font);
