@@ -7,5 +7,7 @@ void closeterm(Term *);
 /* Line */
 typedef struct Line Line;
 
-/* UString */
-typedef struct UString UString;
+Line *createline(void);
+void deleteline(Line *);
+void setutf8(Line *, char *);
+char *getutf8(Line *);
