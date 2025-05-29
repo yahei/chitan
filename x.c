@@ -55,7 +55,7 @@ main(int argc, char *args[])
 	char str[64] = "あいうabc";
 
 	// 仮想端末のオープン
-	Term *term = openterm();
+	Term *term = newTerm();
 	if (!term)
 		fprintf(stderr, "openterm failed : %s\n", strerror(errno));
 
@@ -88,7 +88,7 @@ main(int argc, char *args[])
 	printf("\n");
 
 	// 仮想端末のクローズ
-	closeterm(term);
+	deleteTerm(term);
 	term = NULL;
 
 	// XftのClose

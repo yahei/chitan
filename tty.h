@@ -1,13 +1,13 @@
 /* Term */
 typedef struct Term Term;
 
-Term *openterm(void);
-void closeterm(Term *);
+Term *newTerm(void);
+void deleteTerm(Term *);
 
 /* Line */
 typedef struct Line Line;
 
-Line *createline(void);
-void deleteline(Line *);
-void setutf8(Line *, char *);
-char *getutf8(Line *);
+Line *newLine(void);
+void deleteLine(Line *);
+void setmbLine(Line *, char *);
+char *getmbLine(Line *);

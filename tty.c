@@ -12,7 +12,11 @@
 #define MIN(a,b)        ((a) < (b) ? (a) : (b))
 #define MAX(a,b)        ((a) > (b) ? (a) : (b))
 
-/* Term */
+/*
+ * Term
+ *
+ * ターミナルのセッションとバッファを管理する
+ */
 
 struct Term {
 	int master, slave;      /* 疑似端末のファイルディスクリプタ */
@@ -22,7 +26,7 @@ struct Term {
 };
 
 Term *
-openterm(void)
+newTerm(void)
 {
 	Term *term;
 	char *sname;
@@ -31,9 +35,11 @@ openterm(void)
 	if (term == NULL)
 		goto FAIL;
 
+	/* 行数と最終行の設定 */
 	term->maxlines = 32;
 	term->lastline = 0;
 
+	/* バッファの作成 */
 	term->lines = malloc(term->maxlines * sizeof(void *));
 	if (term->lines == NULL)
 		goto FAIL;
@@ -69,57 +75,65 @@ openterm(void)
 		// 読んでバッファに記録
 		char buf[64];
 		read(term->master, buf, sizeof(buf));
-		term->lines[0] = createline();
-		setutf8(term->lines[0], buf);
+		term->lines[0] = newLine();
+		setmbLine(term->lines[0], buf);
 		// バッファから読み出してprintf
-		printf("%s\n", getutf8(term->lines[term->lastline]));
+		printf("%s\n", getmbLine(term->lines[term->lastline]));
 	}
 
 	return term;
 
 FAIL:
-	closeterm(term);
+	deleteTerm(term);
 	return NULL;
 }
 
 void
-closeterm(Term *term)
+deleteTerm(Term *term)
 {
 	int i;
 
 	if (term == NULL)
 		return;
 
+	/* 疑似端末をcloseする */
 	if (term->master >= 0)
 		close(term->master);
+	term->slave  = -1;
+	term->master = -1;
 
+	/* バッファを解放 */
 	for(i = MAX(0, term->lastline - term->maxlines);
 			i < term->lastline;
 			i++) {
 		if (term->lines[i]) {
-			deleteline(term->lines[i]);
+			deleteLine(term->lines[i]);
 			term->lines[i] = NULL;
 		}
 	}
 
-	term->slave  = -1;
-	term->master = -1;
 	free(term);
 }
 
-/* Line */
+
+/*
+ * Line
+ *
+ * バッファ一行分の情報を管理する
+ */
 
 struct Line {
 	char *str;      /* UTF8文字列 */
 };
 
 Line *
-createline(void)
+newLine(void)
 {
 	Line *line = malloc(sizeof(Line));
 	if (line == NULL)
 		goto FAIL;
 
+	/* 初期値としてnull文字をセット */
 	line->str = malloc(1);
 	if (line->str == NULL)
 		goto FAIL;
@@ -128,16 +142,17 @@ createline(void)
 	return line;
 
 FAIL:
-	deleteline(line);
+	deleteLine(line);
 	return NULL;
 }
 
 void
-deleteline(Line *line)
+deleteLine(Line *line)
 {
 	if (line == NULL)
 		return;
 
+	/* 文字列を解放 */
 	free(line->str);
 	line->str = NULL;
 
@@ -145,14 +160,14 @@ deleteline(Line *line)
 }
 
 void
-setutf8(Line *line, char *str)
+setmbLine(Line *line, char *str)
 {
 	line->str = realloc(line->str, strlen(str));
 	strcpy(line->str, str);
 }
 
 char *
-getutf8(Line *line)
+getmbLine(Line *line)
 {
 	return line->str;
 }
