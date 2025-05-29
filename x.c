@@ -1,7 +1,10 @@
+#define _XOPEN_SOURCE 600
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <sys/select.h>
 #include <X11/Xlib.h>
 #include <X11/Xft/Xft.h>
 
@@ -60,32 +63,77 @@ main(int argc, char *args[])
 	if (!term)
 		fprintf(stderr, "openterm failed : %s\n", strerror(errno));
 
+	// pselectの準備
+	fd_set rfds;
+	struct timespec timeout, *ptimeout;
+	int tfd = getfdTerm(term);
+	int xfd = XConnectionNumber(display);
+
 	// イベントループ
 	for (;;) {
-		XEvent event;
-		XNextEvent(display, &event);
+		/* ファイルディスクリプタの監視 */
+		FD_ZERO(&rfds);
+		FD_SET(tfd, &rfds);
+		FD_SET(xfd, &rfds);
+		timeout.tv_sec = 0;
+		timeout.tv_nsec = 0;
+		ptimeout = NULL;
 
-		// イベントの種類番号を出力
-		printf("%d,", event.type);
-		fflush(stdout);
-		
-		if (event.type == KeyPress) {
-			printf("%d.", event.xkey.keycode);
-			fflush(stdout);
-
-			// ESCが押されたら終了する
-			if (event.xkey.keycode == 9)
-				break;
+		if (pselect(MAX(tfd, xfd) + 1, &rfds, NULL, NULL, ptimeout, NULL) < 0) {
+			if (errno == EINTR) {
+				/* シグナル受信 */
+				fprintf(stderr, "signal.\n");
+			} else {
+				/* その他のエラー */
+				fprintf(stderr, "pselect failed : %s\n", strerror(errno));
+				exit(1);
+			}
 		}
 
-		// 描画のテスト
-		int a= rand()%200;
-		int b= rand()%200;
-		XDrawLine(display, window, gc, 10, a, 100, b);
+		/* 疑似端末のread */
+		if (FD_ISSET(tfd, &rfds)) {
+			int last;
+			Line *line;
+			char *mstr;
 
-		// 文字の描画
-		XftDrawStringUtf8(draw, &color, font, 10, 50, (FcChar8*)str, strlen(str));
+			readpty(term);
+			last = getlastlineTerm(term);
+			line = getlineTerm(term, last);
+			mstr = getmbLine(line);
+			printf("%s\n", mstr);
+		}
+
+		/* ウィンドウのイベント処理 */
+		if (FD_ISSET(xfd, &rfds)) {
+			while (XPending(display) > 0) {
+				XEvent event;
+				XNextEvent(display, &event);
+
+				// イベントの種類番号を出力
+				printf("%d,", event.type);
+				fflush(stdout);
+
+				if (event.type == KeyPress) {
+					printf("%d.", event.xkey.keycode);
+					fflush(stdout);
+
+					// ESCが押されたら終了する
+					if (event.xkey.keycode == 9)
+						goto CLOSE;
+				}
+
+				// 描画のテスト
+				int a= rand()%200;
+				int b= rand()%200;
+				XDrawLine(display, window, gc, 10, a, 100, b);
+
+				// 文字の描画
+				XftDrawStringUtf8(draw, &color, font, 10, 50,
+						(FcChar8*)str, strlen(str));
+			}
+		}
 	}
+CLOSE:
 	printf("\n");
 
 	// 仮想端末のクローズ

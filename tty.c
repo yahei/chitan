@@ -6,6 +6,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <termios.h>
 
 #include "tty.h"
 #include "util.h"
@@ -66,18 +67,11 @@ newTerm(void)
 		dup2(term->slave, 0);
 		dup2(term->slave, 1);
 		dup2(term->slave, 2);
-		if (execl("/usr/bin/echo", "テストメッセージ") < 0)
+		if (execl("/usr/bin/ed", "tty.c") < 0)
 			exit(1);
 		break;
 	default: /* 本体側 */
 		close(term->slave);
-		// 読んでバッファに記録
-		char buf[64];
-		read(term->master, buf, sizeof(buf));
-		term->lines[0] = newLine();
-		setmbLine(term->lines[0], buf);
-		// バッファから読み出してprintf
-		printf("%s\n", getmbLine(term->lines[term->lastline]));
 	}
 
 	return term;
@@ -109,6 +103,34 @@ deleteTerm(Term *term)
 	_free(term->lines);
 
 	_free(term);
+}
+
+int
+getfdTerm(Term *term)
+{
+	return term->master;
+}
+
+void
+readpty(Term *term)
+{
+	char buf[1024];
+
+	read(term->master, buf, sizeof(buf));
+	term->lines[0] = newLine();
+	setmbLine(term->lines[0], buf);
+}
+
+int
+getlastlineTerm(Term *term)
+{
+	return term->lastline;
+}
+
+Line *
+getlineTerm(Term *term, int num)
+{
+	return term->lines[num];
 }
 
 
