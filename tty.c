@@ -41,8 +41,6 @@ newTerm(void)
 	term->lines = _malloc(term->maxlines * sizeof(void *));
 	for (i = 0; i < term->maxlines; i++)
 		term->lines[i] = NULL;
-	if (term->lines == NULL)
-		goto FAIL;
 
 	/* 疑似端末をopenする */
 	errno = -1;
