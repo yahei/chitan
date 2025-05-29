@@ -6,6 +6,7 @@
 #include <X11/Xft/Xft.h>
 
 #include "tty.h"
+#include "util.h"
 
 int
 main(int argc, char *args[])

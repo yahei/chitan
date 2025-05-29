@@ -8,9 +8,7 @@
 #include <unistd.h>
 
 #include "tty.h"
-
-#define MIN(a,b)        ((a) < (b) ? (a) : (b))
-#define MAX(a,b)        ((a) > (b) ? (a) : (b))
+#include "util.h"
 
 /*
  * Term
@@ -30,17 +28,18 @@ newTerm(void)
 {
 	Term *term;
 	char *sname;
+	int i;
 
-	term = malloc(sizeof(Term));
-	if (term == NULL)
-		goto FAIL;
+	term = _malloc(sizeof(Term));
 
 	/* 行数と最終行の設定 */
 	term->maxlines = 32;
 	term->lastline = 0;
 
 	/* バッファの作成 */
-	term->lines = malloc(term->maxlines * sizeof(void *));
+	term->lines = _malloc(term->maxlines * sizeof(void *));
+	for (i = 0; i < term->maxlines; i++)
+		term->lines[i] = NULL;
 	if (term->lines == NULL)
 		goto FAIL;
 
@@ -103,16 +102,13 @@ deleteTerm(Term *term)
 	term->master = -1;
 
 	/* バッファを解放 */
-	for(i = MAX(0, term->lastline - term->maxlines);
-			i < term->lastline;
-			i++) {
-		if (term->lines[i]) {
-			deleteLine(term->lines[i]);
-			term->lines[i] = NULL;
-		}
+	for(i = 0; i < term->maxlines; i++) {
+		deleteLine(term->lines[i]);
+		term->lines[i] = NULL;
 	}
+	_free(term->lines);
 
-	free(term);
+	_free(term);
 }
 
 
@@ -129,14 +125,10 @@ struct Line {
 Line *
 newLine(void)
 {
-	Line *line = malloc(sizeof(Line));
-	if (line == NULL)
-		goto FAIL;
+	Line *line = _malloc(sizeof(Line));
 
 	/* 初期値としてnull文字をセット */
-	line->str = malloc(1);
-	if (line->str == NULL)
-		goto FAIL;
+	line->str = _malloc(1);
 	line->str = '\0';
 
 	return line;
@@ -153,10 +145,10 @@ deleteLine(Line *line)
 		return;
 
 	/* 文字列を解放 */
-	free(line->str);
+	_free(line->str);
 	line->str = NULL;
 
-	free(line);
+	_free(line);
 }
 
 void
