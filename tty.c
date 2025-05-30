@@ -34,7 +34,7 @@ newTerm(void)
 	term = _malloc(sizeof(Term));
 
 	/* 行数と最終行の設定 */
-	term->maxlines = 32;
+	term->maxlines = 2 << 15;
 	term->lastline = 0;
 
 	/* バッファの作成 */
@@ -67,7 +67,8 @@ newTerm(void)
 		dup2(term->slave, 1);
 		dup2(term->slave, 2);
 		//if (execl("/usr/bin/ed", "tty.c") < 0)
-		if (execl("/usr/bin/echo", "tty.c") < 0)
+		//if (execl("/usr/bin/ls", "/") < 0)
+		if (execl("/usr/bin/gcc", "--version") < 0)
 			exit(1);
 		break;
 	default: /* 本体側 */
@@ -132,20 +133,29 @@ readpty(Term *term)
 
 	/* 受け取った文字列を数値で表示 */
 	printf("read(%ld):", (long)size);
-	for (int i=0; i < size; i++) {
+	/*
+	for (int i=0; i < size; i++)
 		printf("%d,", buf[i]);
-	}
+	*/
 	printf("\n");
 
-	/* 改行があったら次の行に進むとかの処理(未実装) */
+	/* 改行があったら次の行に進むとかの処理 */
 	for(head = tail = buf; tail < buf + size; tail++) {
 		switch(*tail) {
 		case 10: /* LF */
+			setmbLine(term->lines[term->lastline],
+					head, tail - head);
+			head = tail + 1;
+
+			term->lastline++;
+			if (term->lines[term->lastline] == NULL)
+				term->lines[term->lastline] = newLine();
+			break;
+
 		case 13: /* CR */
 		}
 	}
-
-	setmbLine(term->lines[term->lastline], buf, size);
+	setmbLine(term->lines[term->lastline], head, tail - head);
 
 	return 0;
 }

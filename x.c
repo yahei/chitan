@@ -97,6 +97,7 @@ main(int argc, char *args[])
 			Line *line;
 			char *mstr;
 
+			printf("read start.\n");
 			if (readpty(term)) {
 				/* 終了 */
 				printf("exit...\n");
@@ -106,9 +107,12 @@ main(int argc, char *args[])
 
 			/* 表示 */
 			last = getlastlineTerm(term);
-			line = getlineTerm(term, last);
-			mstr = getmbLine(line);
-			printf("%d[%s]\n", last, mstr);
+			for(int i = 0; i <= last; i++) {
+				line = getlineTerm(term, i);
+				mstr = getmbLine(line);
+				printf("%d|%s\n", i, mstr);
+			}
+			printf("read finish.\n");
 		}
 
 		/* ウィンドウのイベント処理 */
