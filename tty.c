@@ -38,7 +38,7 @@ newTerm(void)
 	term->lastline = 0;
 
 	/* バッファの作成 */
-	term->lines = _malloc(term->maxlines * sizeof(void *));
+	term->lines = _malloc(term->maxlines * sizeof(Line *));
 	for (i = 0; i < term->maxlines; i++)
 		term->lines[i] = NULL;
 	term->lines[term->lastline] = newLine();

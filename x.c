@@ -86,8 +86,7 @@ main(int argc, char *args[])
 				fprintf(stderr, "signal.\n");
 			} else {
 				/* その他のエラー */
-				fprintf(stderr, "pselect failed : %s\n", strerror(errno));
-				exit(1);
+				errExit("pselect failed.\n");
 			}
 		}
 
@@ -100,7 +99,7 @@ main(int argc, char *args[])
 			printf("read start.\n");
 			if (readpty(term)) {
 				/* 終了 */
-				printf("exit...\n");
+				printf("exit...");
 				sleep(5);
 				goto CLOSE;
 			}
@@ -158,6 +157,10 @@ CLOSE:
 
 	// Xサーバから切断
 	XCloseDisplay(display);
+
+	/* freeしていないメモリの数 */
+	if (memcnt != 0)
+		fprintf(stderr, "memcnt: %d\n", memcnt);
 
 	return 0;
 }
