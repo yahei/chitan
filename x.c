@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <unistd.h>
 #include <sys/select.h>
 #include <X11/Xlib.h>
 #include <X11/Xft/Xft.h>
@@ -96,11 +97,18 @@ main(int argc, char *args[])
 			Line *line;
 			char *mstr;
 
-			readpty(term);
+			if (readpty(term)) {
+				/* 終了 */
+				printf("exit...\n");
+				sleep(5);
+				goto CLOSE;
+			}
+
+			/* 表示 */
 			last = getlastlineTerm(term);
 			line = getlineTerm(term, last);
 			mstr = getmbLine(line);
-			printf("%s\n", mstr);
+			printf("%d[%s]\n", last, mstr);
 		}
 
 		/* ウィンドウのイベント処理 */

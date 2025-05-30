@@ -41,6 +41,7 @@ newTerm(void)
 	term->lines = _malloc(term->maxlines * sizeof(void *));
 	for (i = 0; i < term->maxlines; i++)
 		term->lines[i] = NULL;
+	term->lines[term->lastline] = newLine();
 
 	/* 疑似端末をopenする */
 	errno = -1;
@@ -65,7 +66,8 @@ newTerm(void)
 		dup2(term->slave, 0);
 		dup2(term->slave, 1);
 		dup2(term->slave, 2);
-		if (execl("/usr/bin/ed", "tty.c") < 0)
+		//if (execl("/usr/bin/ed", "tty.c") < 0)
+		if (execl("/usr/bin/echo", "tty.c") < 0)
 			exit(1);
 		break;
 	default: /* 本体側 */
@@ -109,14 +111,43 @@ getfdTerm(Term *term)
 	return term->master;
 }
 
-void
+int
 readpty(Term *term)
 {
 	char buf[1024];
+	ssize_t size;
+	char *head, *tail;
 
-	read(term->master, buf, sizeof(buf));
-	term->lines[0] = newLine();
-	setmbLine(term->lines[0], buf);
+	size = read(term->master, buf, sizeof(buf));
+
+	/* 
+	 * 何らかのエラー
+	 * たぶんプロセスが終了している
+	 * 他の原因もあり得るので、後でちゃんとする
+	 */
+	if (size < 0) {
+		fprintf(stderr, "size < 0: %s\n", strerror(errno));
+		return -1;
+	}
+
+	/* 受け取った文字列を数値で表示 */
+	printf("read(%ld):", (long)size);
+	for (int i=0; i < size; i++) {
+		printf("%d,", buf[i]);
+	}
+	printf("\n");
+
+	/* 改行があったら次の行に進むとかの処理(未実装) */
+	for(head = tail = buf; tail < buf + size; tail++) {
+		switch(*tail) {
+		case 10: /* LF */
+		case 13: /* CR */
+		}
+	}
+
+	setmbLine(term->lines[term->lastline], buf, size);
+
+	return 0;
 }
 
 int
@@ -172,10 +203,12 @@ deleteLine(Line *line)
 }
 
 void
-setmbLine(Line *line, char *str)
+setmbLine(Line *line, char *str, int size)
 {
-	line->str = realloc(line->str, strlen(str));
-	strcpy(line->str, str);
+	/* strの末尾に元々null文字があったらnull文字が2つになる */
+	line->str = realloc(line->str, size + 1);
+	strncpy(line->str, str, size);
+	line->str[size] = '\0';
 }
 
 char *

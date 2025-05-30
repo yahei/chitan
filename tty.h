@@ -5,12 +5,12 @@ typedef struct Line Line;
 Term *newTerm(void);
 void deleteTerm(Term *);
 int getfdTerm(Term *);
-void readpty(Term *);
+int readpty(Term *);
 int getlastlineTerm(Term *);
 Line *getlineTerm(Term *, int);
 
 /* Line */
 Line *newLine(void);
 void deleteLine(Line *);
-void setmbLine(Line *, char *);
+void setmbLine(Line *, char *, int);
 char *getmbLine(Line *);
