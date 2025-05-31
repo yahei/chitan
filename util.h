@@ -30,3 +30,11 @@ _free(void *p)
 	if (p)
 		memcnt--;
 }
+
+inline static void *
+_realloc(void *p, size_t size)
+{
+	if (p == NULL)
+		memcnt++;
+	return realloc(p, size);
+}

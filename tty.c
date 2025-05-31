@@ -193,12 +193,9 @@ Line *
 newLine(void)
 {
 	Line *line = _malloc(sizeof(Line));
-
-	/* 初期値としてnull文字をセット */
-	line->str = _malloc(1);
-	line->str[0] = '\0';
+	line->str = NULL;
 	line->len = 0;
-
+	setmbLine(line, "", 0);
 	return line;
 }
 
@@ -218,7 +215,7 @@ deleteLine(Line *line)
 void
 setmbLine(Line *line, char *str, int size)
 {
-	line->str = realloc(line->str, size + 1);
+	line->str = _realloc(line->str, size + 1);
 	strncpy(line->str, str, size);
 	line->str[size] = '\0';
 }
@@ -236,7 +233,7 @@ overwritembLine(Line *line, char *str, int size, int pos)
 
 	/* 必要なら文字列を伸ばす */
 	if (line->len < newlen) {
-		line->str = realloc(line->str, newlen + 1);
+		line->str = _realloc(line->str, newlen + 1);
 		line->str[newlen] = '\0';
 		line->len = newlen;
 	}
