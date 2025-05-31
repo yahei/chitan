@@ -1,3 +1,5 @@
+#include <sys/types.h>
+
 typedef struct Term Term;
 typedef struct Line Line;
 
@@ -5,7 +7,7 @@ typedef struct Line Line;
 Term *newTerm(void);
 void deleteTerm(Term *);
 int getfdTerm(Term *);
-int readpty(Term *);
+ssize_t readpty(Term *);
 int getlastlineTerm(Term *);
 Line *getlineTerm(Term *, int);
 

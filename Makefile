@@ -1,14 +1,17 @@
+.POSIX:
+.PHONY: clean
+
 minty: x.o tty.o util.o
-	c99 -o minty x.o tty.o util.o -lX11 -lXft
+	$(CC) -Wall -o minty x.o tty.o util.o -lX11 -lXft
 
 x.o: x.c tty.h util.h
-	c99 -I /usr/include/freetype2 -c x.c
+	$(CC) -Wall -c x.c -I /usr/include/freetype2
 
 tty.o: tty.c tty.h util.h
-	c99 -c tty.c
+	$(CC) -Wall -c tty.c
 
 util.o: util.c util.h
-	c99 -c util.c
+	$(CC) -Wall -c util.c
 
 clean:
 	rm minty x.o tty.o util.o

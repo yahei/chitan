@@ -1,12 +1,11 @@
 #define _XOPEN_SOURCE 600
 
+#include <errno.h>
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <errno.h>
-#include <fcntl.h>
 #include <unistd.h>
-#include <termios.h>
 
 #include "tty.h"
 #include "util.h"
@@ -114,7 +113,7 @@ getfdTerm(Term *term)
 	return term->master;
 }
 
-int
+ssize_t
 readpty(Term *term)
 {
 	char buf[1024];
@@ -129,8 +128,7 @@ readpty(Term *term)
 	 * 他の原因もあり得るので、後でちゃんとする
 	 */
 	if (size < 0) {
-		fprintf(stderr, "size < 0: %s\n", strerror(errno));
-		return -1;
+		return size;
 	}
 
 	/* 受け取った文字列を数値で表示 */
@@ -156,13 +154,14 @@ readpty(Term *term)
 			break;
 
 		case 13: /* CR */
+			break;
 		}
 	}
 	overwritembLine(term->lines[term->lastline],
 			head, tail - head, term->cursor);
 	term->cursor += tail - head;
 
-	return 0;
+	return size;
 }
 
 int

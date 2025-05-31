@@ -1,11 +1,12 @@
 #define _XOPEN_SOURCE 600
 
+#include <sys/select.h>
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <errno.h>
+#include <time.h>
 #include <unistd.h>
-#include <sys/select.h>
 #include <X11/Xlib.h>
 #include <X11/Xft/Xft.h>
 
@@ -51,18 +52,18 @@ main(int argc, char *args[])
 			display, 0,
 			XFT_FAMILY, XftTypeString, "Noto Serif CJK JP",
 			XFT_SIZE, XftTypeDouble, 24.0,
-			0);
+			NULL);
 	Colormap cmap = DefaultColormap(display, 0);
 	XftColor color;
 	XftColorAllocName(display, DefaultVisual(display, 0), cmap, "red", &color);
-	printf("%x\n", color.pixel);
+	printf("%lx\n", color.pixel);
 	XftDraw *draw = XftDrawCreate(display, window, DefaultVisual(display, 0), cmap);
 	char str[64] = "あいうabc";
 
 	// 仮想端末のオープン
 	Term *term = newTerm();
 	if (!term)
-		fprintf(stderr, "openterm failed : %s\n", strerror(errno));
+		errExit("newTerm failed.\n");
 
 	// pselectの準備
 	fd_set rfds;
@@ -78,7 +79,8 @@ main(int argc, char *args[])
 		FD_SET(xfd, &rfds);
 		timeout.tv_sec = 0;
 		timeout.tv_nsec = 0;
-		ptimeout = NULL;
+		ptimeout = (timeout.tv_nsec > 0 || timeout.tv_nsec > 0) ?
+			&timeout : NULL;
 
 		if (pselect(MAX(tfd, xfd) + 1, &rfds, NULL, NULL, ptimeout, NULL) < 0) {
 			if (errno == EINTR) {
@@ -97,7 +99,7 @@ main(int argc, char *args[])
 			char *mstr;
 
 			printf("read start.\n");
-			if (readpty(term)) {
+			if (readpty(term) < 0) {
 				/* 終了 */
 				printf("exit...");
 				sleep(5);
