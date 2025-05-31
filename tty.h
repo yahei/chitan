@@ -14,3 +14,4 @@ Line *newLine(void);
 void deleteLine(Line *);
 void setmbLine(Line *, char *, int);
 char *getmbLine(Line *);
+void overwritembLine(Line *, char *, int, int);

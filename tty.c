@@ -22,6 +22,7 @@ struct Term {
 	Line **lines;           /* バッファ */
 	int maxlines;           /* バッファの最大行数*/
 	int lastline;           /* 今の最終行 */
+	int cursor;             /* カーソル位置 */
 };
 
 Term *
@@ -33,9 +34,10 @@ newTerm(void)
 
 	term = _malloc(sizeof(Term));
 
-	/* 行数と最終行の設定 */
+	/* 行数と最終行とカーソル位置の設定 */
 	term->maxlines = 2 << 15;
 	term->lastline = 0;
+	term->cursor = 0;
 
 	/* バッファの作成 */
 	term->lines = _malloc(term->maxlines * sizeof(Line *));
@@ -143,11 +145,12 @@ readpty(Term *term)
 	for(head = tail = buf; tail < buf + size; tail++) {
 		switch(*tail) {
 		case 10: /* LF */
-			setmbLine(term->lines[term->lastline],
-					head, tail - head);
+			overwritembLine(term->lines[term->lastline],
+					head, tail - head, term->cursor);
 			head = tail + 1;
 
 			term->lastline++;
+			term->cursor = 0;
 			if (term->lines[term->lastline] == NULL)
 				term->lines[term->lastline] = newLine();
 			break;
@@ -155,7 +158,9 @@ readpty(Term *term)
 		case 13: /* CR */
 		}
 	}
-	setmbLine(term->lines[term->lastline], head, tail - head);
+	overwritembLine(term->lines[term->lastline],
+			head, tail - head, term->cursor);
+	term->cursor += tail - head;
 
 	return 0;
 }
@@ -181,6 +186,7 @@ getlineTerm(Term *term, int num)
 
 struct Line {
 	char *str;      /* UTF8文字列 */
+	int len;        /* 文字数 */
 };
 
 Line *
@@ -190,13 +196,10 @@ newLine(void)
 
 	/* 初期値としてnull文字をセット */
 	line->str = _malloc(1);
-	line->str = '\0';
+	line->str[0] = '\0';
+	line->len = 0;
 
 	return line;
-
-FAIL:
-	deleteLine(line);
-	return NULL;
 }
 
 void
@@ -215,7 +218,6 @@ deleteLine(Line *line)
 void
 setmbLine(Line *line, char *str, int size)
 {
-	/* strの末尾に元々null文字があったらnull文字が2つになる */
 	line->str = realloc(line->str, size + 1);
 	strncpy(line->str, str, size);
 	line->str[size] = '\0';
@@ -225,4 +227,20 @@ char *
 getmbLine(Line *line)
 {
 	return line->str;
+}
+
+void
+overwritembLine(Line *line, char *str, int size, int pos)
+{
+	int newlen = MAX(pos + size, line->len);
+
+	/* 必要なら文字列を伸ばす */
+	if (line->len < newlen) {
+		line->str = realloc(line->str, newlen + 1);
+		line->str[newlen] = '\0';
+		line->len = newlen;
+	}
+
+	/* 文字列を書き込む */
+	strncpy(&line->str[pos], str, size);
 }
