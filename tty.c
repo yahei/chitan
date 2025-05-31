@@ -66,9 +66,9 @@ newTerm(void)
 		dup2(term->slave, 0);
 		dup2(term->slave, 1);
 		dup2(term->slave, 2);
-		//if (execl("/usr/bin/ed", "tty.c") < 0)
-		//if (execl("/usr/bin/ls", "/") < 0)
-		if (execl("/usr/bin/gcc", "--version") < 0)
+		//if (execlp("ed", "ed", "tty.c", NULL) < 0)
+		if (execlp("ls", "ls", "/", "./", "test", NULL) < 0)
+		//if (execlp("gcc", "gcc", "--version", NULL) < 0)
 			exit(1);
 		break;
 	default: /* 本体側 */
