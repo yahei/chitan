@@ -15,3 +15,11 @@ errExit(char *message)
 	fputs("\n", stderr);
 	exit(1);
 }
+
+void
+fatal(char *message)
+{
+	if (message)
+		fputs(message, stderr);
+	exit(1);
+}

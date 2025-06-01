@@ -7,6 +7,7 @@
 #define MAX(a,b)        ((a) > (b) ? (a) : (b))
 
 void errExit(char *);
+void fatal(char *);
 
 #endif
 
