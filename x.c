@@ -60,11 +60,11 @@ init(void)
 	font = XftFontOpen(
 			disp, 0,
 			XFT_FAMILY, XftTypeString, "Noto Serif CJK JP",
-			XFT_SIZE, XftTypeDouble, 24.0,
+			XFT_SIZE, XftTypeDouble, 12.0,
 			NULL);
 	if (font == NULL)
 		fatal("XftFontOpen failed.\n");
-	if (XftColorAllocName(disp, visual, cmap, "red", &color) == 0)
+	if (XftColorAllocName(disp, visual, cmap, "black", &color) == 0)
 		fatal("XftColorAllocName failed.\n");
 	
 	/* ウィンドウの作成 */
@@ -109,8 +109,10 @@ run(void)
 			if (readpty(term) < 0) {
 				/* 終了 */
 				printf("exit...\n");
+				sleep(1);
 				procXEvent();
-				sleep(2);
+				redraw();
+				sleep(5);
 				return;
 			}
 			redraw();
@@ -168,6 +170,7 @@ redraw(void)
 	int last;
 	Line *line;
 	char *mstr;
+	int row;
 
 	/* ターミナルの内容を自分の標準出力に表示 */
 	last = getlastlineTerm(term);
@@ -177,15 +180,14 @@ redraw(void)
 		printf("%d|%s\n", i, mstr);
 	}
 
-	// 描画のテスト
-	int a= rand()%200;
-	int b= rand()%200;
-	XDrawLine(disp, win->window, win->gc, 10, a, 100, b);
-
-	// 文字の描画
-	char str[64] = "あいうabc";
-	XftDrawStringUtf8(win->draw, &color, font, 10, 50,
-			(FcChar8*)str, strlen(str));
+	/* ターミナルの内容をウィンドウに表示 */
+	for (row = getlastlineTerm(term); row >= 0; row--) {
+		int y = row + 1;
+		line = getlineTerm(term, row);
+		mstr = getmbLine(line);
+		XftDrawStringUtf8(win->draw, &color, font, 10, y * 30,
+				(FcChar8*)mstr, strlen(mstr));
+	}
 }
 
 Win *
