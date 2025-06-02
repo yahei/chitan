@@ -141,8 +141,8 @@ procXEvent(void)
 
 	while (XPending(disp) > 0) {
 		XNextEvent(disp, &event);
-
-		if (event.type == KeyPress) {
+		switch (event.type) {
+		case KeyPress:
 			unsigned char ks = XLookupKeysym(&event.xkey, 0);
 			switch (ks) {
 			case '\r' :
@@ -161,6 +161,10 @@ procXEvent(void)
 
 			/* Termに文字を送る */
 			writeptyTerm(term, (char *)&ks, 1);
+			break;
+		case Expose:
+			redraw();
+			break;
 		}
 	}
 }
@@ -205,8 +209,6 @@ redraw(void)
 	int y = 30 * getlastlineTerm(term);
 	XDrawRectangle(disp, win->window, win->gc, x, y + 6, 14, 30);
 
-	usleep(10 * 1000);
-	/* 表示が反映されないことがあるが、ここで少し待つとちゃんと出る */
 	XFlush(disp);
 }
 
