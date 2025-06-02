@@ -67,10 +67,10 @@ newTerm(void)
 		dup2(term->slave, 0);
 		dup2(term->slave, 1);
 		dup2(term->slave, 2);
-		if (execlp("ed", "ed", "README.md", NULL) < 0)
-		//if (execlp("ls", "ls", "/", "./", "test", NULL) < 0)
-		//if (execlp("gcc", "gcc", "--version", NULL) < 0)
-			exit(1);
+		if (setsid() < 0)
+			fatal("setsid failed.\n");
+		if (execlp("sh", "sh", NULL) < 0)
+			fatal("exec failed.\n");
 		break;
 	default: /* 本体側 */
 		close(term->slave);
@@ -258,4 +258,10 @@ overwritembLine(Line *line, char *str, int size, int pos)
 
 	/* 文字列を書き込む */
 	strncpy(&line->str[pos], str, size);
+}
+
+int
+getcursorTerm(Term *term)
+{
+	return term->cursor;
 }

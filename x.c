@@ -172,6 +172,8 @@ redraw(void)
 	Line *line;
 	char *mstr;
 	int row;
+	XGlyphInfo ginfo;
+	XWindowAttributes wattr;
 
 	/* ターミナルの内容を自分の標準出力に表示 */
 	last = getlastlineTerm(term);
@@ -181,6 +183,10 @@ redraw(void)
 		printf("%d|%s\n", i, mstr);
 	}
 
+	/* 画面をクリア */
+	XGetWindowAttributes(disp, win->window, &wattr);
+	XClearArea(disp, win->window, 0, 0, wattr.width, wattr.height, False);
+
 	/* ターミナルの内容をウィンドウに表示 */
 	for (row = getlastlineTerm(term); row >= 0; row--) {
 		int y = row + 1;
@@ -189,6 +195,16 @@ redraw(void)
 		XftDrawStringUtf8(win->draw, &color, font, 10, y * 30,
 				(FcChar8*)mstr, strlen(mstr));
 	}
+
+	/* カーソルを描く */
+	last = getlastlineTerm(term);
+	line = getlineTerm(term, last);
+	mstr = getmbLine(line);
+	XftTextExtentsUtf8(disp, font, (FcChar8*)mstr, getcursorTerm(term), &ginfo);
+	int x = ginfo.xOff + 10;
+	int y = 30 * getlastlineTerm(term);
+	XDrawRectangle(disp, win->window, win->gc, x, y + 6, 14, 30);
+
 	usleep(10 * 1000);
 	/* 表示が反映されないことがあるが、ここで少し待つとちゃんと出る */
 	XFlush(disp);

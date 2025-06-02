@@ -11,6 +11,7 @@ ssize_t readptyTerm(Term *);
 ssize_t writeptyTerm(Term *, char *, ssize_t);
 int getlastlineTerm(Term *);
 Line *getlineTerm(Term *, int);
+int getcursorTerm(Term *);
 
 /* Line */
 Line *newLine(void);
