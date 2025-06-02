@@ -4,18 +4,23 @@ typedef struct Term Term;
 typedef struct Line Line;
 
 /* Term */
-Term *newTerm(void);
-void deleteTerm(Term *);
-int getfdTerm(Term *);
-ssize_t readptyTerm(Term *);
-ssize_t writeptyTerm(Term *, char *, ssize_t);
-int getlastlineTerm(Term *);
-Line *getlineTerm(Term *, int);
-int getcursorTerm(Term *);
+
+struct Term {
+	int master;     /* 疑似端末のファイルディスクリプタ */
+	Line **lines;   /* バッファ */
+	int maxlines;   /* バッファの最大行数*/
+	int lastline;   /* 今の最終行 */
+	int cursor;     /* カーソル位置 */
+};
+
+Term *openTerm(void);
+void closeTerm(Term *);
+ssize_t readPty(Term *);
+ssize_t writePty(Term *, char *, ssize_t);
 
 /* Line */
 Line *newLine(void);
 void deleteLine(Line *);
-void setmbLine(Line *, char *, int);
-char *getmbLine(Line *);
-void overwritembLine(Line *, char *, int, int);
+void setUtf8(Line *, char *, int);
+const char *getUtf8(Line *);
+void overwriteUtf8(Line *, char *, int, int);

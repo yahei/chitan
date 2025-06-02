@@ -6,7 +6,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include <unistd.h>
 #include <X11/Xlib.h>
 #include <X11/Xft/Xft.h>
 
@@ -68,7 +67,7 @@ init(void)
 		fatal("XftColorAllocName failed.\n");
 	
 	/* 疑似端末のオープン */
-	term = newTerm();
+	term = openTerm();
 	if (!term)
 		errExit("newTerm failed.\n");
 	
@@ -81,7 +80,7 @@ run(void)
 {
 	fd_set rfds;
 	struct timespec timeout, *ptimeout;
-	int tfd = getfdTerm(term);
+	int tfd = term->master;
 	int xfd = XConnectionNumber(disp);
 
 	while (1) {
@@ -106,7 +105,7 @@ run(void)
 
 		/* 疑似端末のread */
 		if (FD_ISSET(tfd, &rfds)) {
-			if (readptyTerm(term) < 0) {
+			if (readPty(term) < 0) {
 				/* 終了 */
 				printf("exit.\n");
 				return;
@@ -126,7 +125,7 @@ fin(void)
 {
 	closeWindow(win);
 	win = NULL;
-	deleteTerm(term);
+	closeTerm(term);
 	term = NULL;
 	XftColorFree(disp, visual, cmap, &color);
 	XftFontClose(disp, font);
@@ -145,16 +144,11 @@ procXEvent(void)
 		XNextEvent(disp, &event);
 		switch (event.type) {
 		case KeyPress:
-			// ESCが押されたら終了する
-			if (event.xkey.keycode == 9) {
-				printf("\n");
-				errExit("ESCで終了\n");
-			}
 			/* Termに文字を送る */
 			len = XLookupString(&event.xkey, buf, sizeof(buf), NULL, NULL);
 			printf("(%s)", buf);
 			fflush(stdout);
-			writeptyTerm(term, buf, len);
+			writePty(term, buf, len);
 			break;
 		case Expose:
 			redraw();
@@ -168,7 +162,7 @@ redraw(void)
 {
 	int last;
 	Line *line;
-	char *mstr;
+	const char *mstr;
 	int row;
 	XGlyphInfo ginfo;
 	XWindowAttributes wattr;
@@ -176,18 +170,18 @@ redraw(void)
 	int drawy;
 
 	/* ターミナルの内容を自分の標準出力に表示 */
-	last = getlastlineTerm(term);
+	last = term->lastline;
 	for (int i = 0; i <= last; i++) {
-		line = getlineTerm(term, i);
-		mstr = getmbLine(line);
+		line = term->lines[i];
+		mstr = getUtf8(line);
 		printf("%d|%s\n", i, mstr);
 	}
 
 	/* テキストの高さや横幅を取得 */
-	last = getlastlineTerm(term);
-	line = getlineTerm(term, last);
-	mstr = getmbLine(line);
-	XftTextExtentsUtf8(disp, font, (FcChar8*)mstr, getcursorTerm(term), &ginfo);
+	last = term->lastline;
+	line = term->lines[last];
+	mstr = getUtf8(line);
+	XftTextExtentsUtf8(disp, font, (FcChar8*)mstr, term->cursor, &ginfo);
 	lineh = ginfo.height * 1.25;
 	if (lineh == 0)
 		return;
@@ -197,11 +191,11 @@ redraw(void)
 	XClearArea(disp, win->window, 0, 0, wattr.width, wattr.height, False);
 
 	/* ターミナルの内容をウィンドウに表示 */
-	for (drawy = (int)(wattr.height / lineh), row = getlastlineTerm(term);
+	for (drawy = (int)(wattr.height / lineh), row = term->lastline;
 			row >= 0 && drawy >= 0;
 			row--, drawy--) {
-		line = getlineTerm(term, row);
-		mstr = getmbLine(line);
+		line =term->lines[row];
+		mstr = getUtf8(line);
 		XftDrawStringUtf8(win->draw, &color, font, 10, drawy * lineh,
 				(FcChar8*)mstr, strlen(mstr));
 	}
@@ -238,7 +232,6 @@ openWindow(void)
 
 	/* ウィンドウを表示 */
 	XMapWindow(disp, win->window);
-	XMoveWindow(disp, win->window, 10, 10);
 	XFlush(disp);
 
 	return win;

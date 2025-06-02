@@ -16,29 +16,17 @@
  * ターミナルのセッションとバッファを管理する
  */
 
-struct Term {
-	int master, slave;      /* 疑似端末のファイルディスクリプタ */
-	Line **lines;           /* バッファ */
-	int maxlines;           /* バッファの最大行数*/
-	int lastline;           /* 今の最終行 */
-	int cursor;             /* カーソル位置 */
-};
-
 Term *
-newTerm(void)
+openTerm(void)
 {
 	Term *term;
 	char *sname;
+	int slave;
 	int i;
 
+	/* 構造体の初期化 */
 	term = xmalloc(sizeof(Term));
-
-	/* 行数と最終行とカーソル位置の設定 */
-	term->maxlines = 2 << 15;
-	term->lastline = 0;
-	term->cursor = 0;
-
-	/* バッファの作成 */
+	*term = (Term){ -1, NULL, 2 << 15, 0, 0 };
 	term->lines = xmalloc(term->maxlines * sizeof(Line *));
 	for (i = 0; i < term->maxlines; i++)
 		term->lines[i] = NULL;
@@ -54,7 +42,7 @@ newTerm(void)
 		goto FAIL;
 	if (unlockpt(term->master) < 0)
 		goto FAIL;
-	if ((term->slave = open(sname, O_RDWR)) < 0)
+	if ((slave = open(sname, O_RDWR)) < 0)
 		goto FAIL;
 
 	/* slave側でフォアグラウンドプロセスを起動 */
@@ -64,27 +52,27 @@ newTerm(void)
 		break;
 	case 0: /* プロセス側 */
 		close(term->master);
-		dup2(term->slave, 0);
-		dup2(term->slave, 1);
-		dup2(term->slave, 2);
+		dup2(slave, 0);
+		dup2(slave, 1);
+		dup2(slave, 2);
 		if (setsid() < 0)
 			fatal("setsid failed.\n");
 		if (execlp("sh", "sh", NULL) < 0)
 			fatal("exec failed.\n");
 		break;
 	default: /* 本体側 */
-		close(term->slave);
+		close(slave);
 	}
 
 	return term;
 
 FAIL:
-	deleteTerm(term);
+	closeTerm(term);
 	return NULL;
 }
 
 void
-deleteTerm(Term *term)
+closeTerm(Term *term)
 {
 	int i;
 
@@ -94,8 +82,6 @@ deleteTerm(Term *term)
 	/* 疑似端末をcloseする */
 	if (term->master >= 0)
 		close(term->master);
-	term->slave  = -1;
-	term->master = -1;
 
 	/* バッファを解放 */
 	for (i = 0; i < term->maxlines; i++) {
@@ -107,14 +93,8 @@ deleteTerm(Term *term)
 	free(term);
 }
 
-int
-getfdTerm(Term *term)
-{
-	return term->master;
-}
-
 ssize_t
-readptyTerm(Term *term)
+readPty(Term *term)
 {
 	char buf[1024];
 	ssize_t size;
@@ -143,16 +123,16 @@ readptyTerm(Term *term)
 	for (head = tail = buf; tail < buf + size; tail++) {
 		switch (*tail) {
 		case 9:  /* HT */
-			overwritembLine(term->lines[term->lastline],
+			overwriteUtf8(term->lines[term->lastline],
 					head, tail - head, term->cursor);
 			term->cursor += tail - head;
-			overwritembLine(term->lines[term->lastline],
+			overwriteUtf8(term->lines[term->lastline],
 					"    ", 4, term->cursor);
 			term->cursor += 4;
 			head = tail + 1;
 			break;
 		case 10: /* LF */
-			overwritembLine(term->lines[term->lastline],
+			overwriteUtf8(term->lines[term->lastline],
 					head, tail - head, term->cursor);
 			term->lastline++;
 			if (term->lines[term->lastline] == NULL)
@@ -161,14 +141,14 @@ readptyTerm(Term *term)
 			break;
 
 		case 13: /* CR */
-			overwritembLine(term->lines[term->lastline],
+			overwriteUtf8(term->lines[term->lastline],
 					head, tail - head, term->cursor);
 			term->cursor = 0;
 			head = tail + 1;
 			break;
 		}
 	}
-	overwritembLine(term->lines[term->lastline],
+	overwriteUtf8(term->lines[term->lastline],
 			head, tail - head, term->cursor);
 	term->cursor += tail - head;
 
@@ -176,23 +156,11 @@ readptyTerm(Term *term)
 }
 
 ssize_t
-writeptyTerm(Term *term, char *buf, ssize_t n)
+writePty(Term *term, char *buf, ssize_t n)
 {
 	ssize_t size;
 	size = write(term->master, buf, n);
 	return size;
-}
-
-int
-getlastlineTerm(Term *term)
-{
-	return term->lastline;
-}
-
-Line *
-getlineTerm(Term *term, int num)
-{
-	return term->lines[num];
 }
 
 
@@ -213,7 +181,7 @@ newLine(void)
 	Line *line = xmalloc(sizeof(Line));
 	line->str = NULL;
 	line->len = 0;
-	setmbLine(line, "", 0);
+	setUtf8(line, "", 0);
 	return line;
 }
 
@@ -231,21 +199,21 @@ deleteLine(Line *line)
 }
 
 void
-setmbLine(Line *line, char *str, int size)
+setUtf8(Line *line, char *str, int size)
 {
 	line->str = xrealloc(line->str, size + 1);
 	strncpy(line->str, str, size);
 	line->str[size] = '\0';
 }
 
-char *
-getmbLine(Line *line)
+const char *
+getUtf8(Line *line)
 {
 	return line->str;
 }
 
 void
-overwritembLine(Line *line, char *str, int size, int pos)
+overwriteUtf8(Line *line, char *str, int size, int pos)
 {
 	int newlen = MAX(pos + size, line->len);
 
@@ -258,10 +226,4 @@ overwritembLine(Line *line, char *str, int size, int pos)
 
 	/* 文字列を書き込む */
 	strncpy(&line->str[pos], str, size);
-}
-
-int
-getcursorTerm(Term *term)
-{
-	return term->cursor;
 }
