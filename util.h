@@ -8,33 +8,7 @@
 
 void errExit(char *);
 void fatal(char *);
+void *xmalloc(size_t);
+void *xrealloc(void *p, size_t);
 
 #endif
-
-extern int memcnt;
-
-inline static void *
-_malloc(size_t size)
-{
-	void *p = malloc(size);
-	if (p == NULL)
-		errExit("malloc failed.\n");
-	memcnt++;
-	return p;
-}
-
-inline static void
-_free(void *p)
-{
-	free(p);
-	if (p)
-		memcnt--;
-}
-
-inline static void *
-_realloc(void *p, size_t size)
-{
-	if (p == NULL)
-		memcnt++;
-	return realloc(p, size);
-}

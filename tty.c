@@ -31,7 +31,7 @@ newTerm(void)
 	char *sname;
 	int i;
 
-	term = _malloc(sizeof(Term));
+	term = xmalloc(sizeof(Term));
 
 	/* 行数と最終行とカーソル位置の設定 */
 	term->maxlines = 2 << 15;
@@ -39,7 +39,7 @@ newTerm(void)
 	term->cursor = 0;
 
 	/* バッファの作成 */
-	term->lines = _malloc(term->maxlines * sizeof(Line *));
+	term->lines = xmalloc(term->maxlines * sizeof(Line *));
 	for (i = 0; i < term->maxlines; i++)
 		term->lines[i] = NULL;
 	term->lines[term->lastline] = newLine();
@@ -102,9 +102,9 @@ deleteTerm(Term *term)
 		deleteLine(term->lines[i]);
 		term->lines[i] = NULL;
 	}
-	_free(term->lines);
+	free(term->lines);
 
-	_free(term);
+	free(term);
 }
 
 int
@@ -191,7 +191,7 @@ struct Line {
 Line *
 newLine(void)
 {
-	Line *line = _malloc(sizeof(Line));
+	Line *line = xmalloc(sizeof(Line));
 	line->str = NULL;
 	line->len = 0;
 	setmbLine(line, "", 0);
@@ -205,16 +205,16 @@ deleteLine(Line *line)
 		return;
 
 	/* 文字列を解放 */
-	_free(line->str);
+	free(line->str);
 	line->str = NULL;
 
-	_free(line);
+	free(line);
 }
 
 void
 setmbLine(Line *line, char *str, int size)
 {
-	line->str = _realloc(line->str, size + 1);
+	line->str = xrealloc(line->str, size + 1);
 	strncpy(line->str, str, size);
 	line->str[size] = '\0';
 }
@@ -232,7 +232,7 @@ overwritembLine(Line *line, char *str, int size, int pos)
 
 	/* 必要なら文字列を伸ばす */
 	if (line->len < newlen) {
-		line->str = _realloc(line->str, newlen + 1);
+		line->str = xrealloc(line->str, newlen + 1);
 		line->str[newlen] = '\0';
 		line->len = newlen;
 	}

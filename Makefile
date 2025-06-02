@@ -2,7 +2,7 @@
 .PHONY: clean
 
 minty: x.o tty.o util.o
-	$(CC) -Wall -o minty x.o tty.o util.o -lX11 -lXft
+	$(CC) -Wall -o minty x.o tty.o util.o -lX11 -lXft -lfontconfig
 
 x.o: x.c tty.h util.h
 	$(CC) -Wall -c x.c -I /usr/include/freetype2

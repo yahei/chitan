@@ -42,10 +42,6 @@ main(int argc, char *args[])
 	init();
 	run();
 	fin();
-
-	if (memcnt != 0)
-		fprintf(stderr, "memcnt: %d\n", memcnt);
-
 	return 0;
 }
 
@@ -60,6 +56,7 @@ init(void)
 	cmap = DefaultColormap(disp, 0);
 
 	/* 文字描画の準備 */
+	FcInit();
 	font = XftFontOpen(
 			disp, 0,
 			XFT_FAMILY, XftTypeString, "Noto Serif CJK JP",
@@ -135,6 +132,7 @@ fin(void)
 	win = NULL;
 	XftColorFree(disp, visual, cmap, &color);
 	XftFontClose(disp, font);
+	FcFini();
 	XCloseDisplay(disp);
 }
 
@@ -193,7 +191,7 @@ redraw(void)
 Win *
 openWindow(void)
 {
-	Win *win = _malloc(sizeof(Win));
+	Win *win = xmalloc(sizeof(Win));
 
 	/* ウィンドウ作成 */
 	win->window = XCreateSimpleWindow(
@@ -225,5 +223,5 @@ closeWindow(Win *win)
 	XftDrawDestroy(win->draw);
 	XFreeGC(disp, win->gc);
 	XDestroyWindow(disp, win->window);
-	_free(win);
+	free(win);
 }
