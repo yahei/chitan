@@ -138,29 +138,23 @@ void
 procXEvent(void)
 {
 	XEvent event;
+	char buf[256];
+	int len;
 
 	while (XPending(disp) > 0) {
 		XNextEvent(disp, &event);
 		switch (event.type) {
 		case KeyPress:
-			unsigned char ks = XLookupKeysym(&event.xkey, 0);
-			switch (ks) {
-			case '\r' :
-				printf("[return](%d)\n", ks);
-				break;
-			default:
-				printf("%c(%d).", ks, ks);
-			}
-			fflush(stdout);
-
 			// ESCが押されたら終了する
 			if (event.xkey.keycode == 9) {
 				printf("\n");
 				errExit("ESCで終了\n");
 			}
-
 			/* Termに文字を送る */
-			writeptyTerm(term, (char *)&ks, 1);
+			len = XLookupString(&event.xkey, buf, sizeof(buf), NULL, NULL);
+			printf("(%s)", buf);
+			fflush(stdout);
+			writeptyTerm(term, buf, len);
 			break;
 		case Expose:
 			redraw();
