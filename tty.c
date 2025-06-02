@@ -98,7 +98,7 @@ deleteTerm(Term *term)
 	term->master = -1;
 
 	/* バッファを解放 */
-	for(i = 0; i < term->maxlines; i++) {
+	for (i = 0; i < term->maxlines; i++) {
 		deleteLine(term->lines[i]);
 		term->lines[i] = NULL;
 	}
@@ -140,20 +140,31 @@ readptyTerm(Term *term)
 	printf("\n");
 
 	/* 改行があったら次の行に進むとかの処理 */
-	for(head = tail = buf; tail < buf + size; tail++) {
-		switch(*tail) {
+	for (head = tail = buf; tail < buf + size; tail++) {
+		switch (*tail) {
+		case 9:  /* HT */
+			overwritembLine(term->lines[term->lastline],
+					head, tail - head, term->cursor);
+			term->cursor += tail - head;
+			overwritembLine(term->lines[term->lastline],
+					"    ", 4, term->cursor);
+			term->cursor += 4;
+			head = tail + 1;
+			break;
 		case 10: /* LF */
 			overwritembLine(term->lines[term->lastline],
 					head, tail - head, term->cursor);
-			head = tail + 1;
-
 			term->lastline++;
-			term->cursor = 0;
 			if (term->lines[term->lastline] == NULL)
 				term->lines[term->lastline] = newLine();
+			head = tail + 1;
 			break;
 
 		case 13: /* CR */
+			overwritembLine(term->lines[term->lastline],
+					head, tail - head, term->cursor);
+			term->cursor = 0;
+			head = tail + 1;
 			break;
 		}
 	}

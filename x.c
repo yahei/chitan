@@ -67,13 +67,13 @@ init(void)
 	if (XftColorAllocName(disp, visual, cmap, "black", &color) == 0)
 		fatal("XftColorAllocName failed.\n");
 	
-	/* ウィンドウの作成 */
-	win = openWindow();
-
-	/* 仮想端末のオープン */
+	/* 疑似端末のオープン */
 	term = newTerm();
 	if (!term)
 		errExit("newTerm failed.\n");
+	
+	/* ウィンドウの作成 */
+	win = openWindow();
 }
 
 void
@@ -84,7 +84,7 @@ run(void)
 	int tfd = getfdTerm(term);
 	int xfd = XConnectionNumber(disp);
 
-	while(1) {
+	while (1) {
 		/* ファイルディスクリプタの監視 */
 		FD_ZERO(&rfds);
 		FD_SET(tfd, &rfds);
@@ -124,10 +124,10 @@ run(void)
 void
 fin(void)
 {
-	deleteTerm(term);
-	term = NULL;
 	closeWindow(win);
 	win = NULL;
+	deleteTerm(term);
+	term = NULL;
 	XftColorFree(disp, visual, cmap, &color);
 	XftFontClose(disp, font);
 	FcFini();
@@ -144,7 +144,7 @@ procXEvent(void)
 
 		if (event.type == KeyPress) {
 			unsigned char ks = XLookupKeysym(&event.xkey, 0);
-			switch(ks) {
+			switch (ks) {
 			case '\r' :
 				printf("[return](%d)\n", ks);
 				break;
@@ -175,7 +175,7 @@ redraw(void)
 
 	/* ターミナルの内容を自分の標準出力に表示 */
 	last = getlastlineTerm(term);
-	for(int i = 0; i <= last; i++) {
+	for (int i = 0; i <= last; i++) {
 		line = getlineTerm(term, i);
 		mstr = getmbLine(line);
 		printf("%d|%s\n", i, mstr);
@@ -189,7 +189,9 @@ redraw(void)
 		XftDrawStringUtf8(win->draw, &color, font, 10, y * 30,
 				(FcChar8*)mstr, strlen(mstr));
 	}
-	XSync(disp, False);
+	usleep(10 * 1000);
+	/* 表示が反映されないことがあるが、ここで少し待つとちゃんと出る */
+	XFlush(disp);
 }
 
 Win *
@@ -217,7 +219,7 @@ openWindow(void)
 	/* ウィンドウを表示 */
 	XMapWindow(disp, win->window);
 	XMoveWindow(disp, win->window, 10, 10);
-	XSync(disp, False);
+	XFlush(disp);
 
 	return win;
 }
