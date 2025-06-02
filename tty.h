@@ -7,7 +7,8 @@ typedef struct Line Line;
 Term *newTerm(void);
 void deleteTerm(Term *);
 int getfdTerm(Term *);
-ssize_t readpty(Term *);
+ssize_t readptyTerm(Term *);
+ssize_t writeptyTerm(Term *, char *, ssize_t);
 int getlastlineTerm(Term *);
 Line *getlineTerm(Term *, int);
 

@@ -106,13 +106,9 @@ run(void)
 
 		/* 疑似端末のread */
 		if (FD_ISSET(tfd, &rfds)) {
-			if (readpty(term) < 0) {
+			if (readptyTerm(term) < 0) {
 				/* 終了 */
-				printf("exit...\n");
-				sleep(1);
-				procXEvent();
-				redraw();
-				sleep(5);
+				printf("exit.\n");
 				return;
 			}
 			redraw();
@@ -146,21 +142,26 @@ procXEvent(void)
 	while (XPending(disp) > 0) {
 		XNextEvent(disp, &event);
 
-		// イベントの種類番号を出力
-		printf("%d,", event.type);
-		fflush(stdout);
-
 		if (event.type == KeyPress) {
-			printf("%d.", event.xkey.keycode);
+			unsigned char ks = XLookupKeysym(&event.xkey, 0);
+			switch(ks) {
+			case '\r' :
+				printf("[return](%d)\n", ks);
+				break;
+			default:
+				printf("%c(%d).", ks, ks);
+			}
 			fflush(stdout);
 
 			// ESCが押されたら終了する
 			if (event.xkey.keycode == 9) {
 				printf("\n");
-				return;
+				errExit("ESCで終了\n");
 			}
+
+			/* Termに文字を送る */
+			writeptyTerm(term, (char *)&ks, 1);
 		}
-		redraw();
 	}
 }
 
@@ -188,6 +189,7 @@ redraw(void)
 		XftDrawStringUtf8(win->draw, &color, font, 10, y * 30,
 				(FcChar8*)mstr, strlen(mstr));
 	}
+	XSync(disp, False);
 }
 
 Win *
@@ -215,6 +217,7 @@ openWindow(void)
 	/* ウィンドウを表示 */
 	XMapWindow(disp, win->window);
 	XMoveWindow(disp, win->window, 10, 10);
+	XSync(disp, False);
 
 	return win;
 }

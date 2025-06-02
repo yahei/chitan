@@ -67,8 +67,8 @@ newTerm(void)
 		dup2(term->slave, 0);
 		dup2(term->slave, 1);
 		dup2(term->slave, 2);
-		//if (execlp("ed", "ed", "tty.c", NULL) < 0)
-		if (execlp("ls", "ls", "/", "./", "test", NULL) < 0)
+		if (execlp("ed", "ed", "README.md", NULL) < 0)
+		//if (execlp("ls", "ls", "/", "./", "test", NULL) < 0)
 		//if (execlp("gcc", "gcc", "--version", NULL) < 0)
 			exit(1);
 		break;
@@ -114,7 +114,7 @@ getfdTerm(Term *term)
 }
 
 ssize_t
-readpty(Term *term)
+readptyTerm(Term *term)
 {
 	char buf[1024];
 	ssize_t size;
@@ -161,6 +161,14 @@ readpty(Term *term)
 			head, tail - head, term->cursor);
 	term->cursor += tail - head;
 
+	return size;
+}
+
+ssize_t
+writeptyTerm(Term *term, char *buf, ssize_t n)
+{
+	ssize_t size;
+	size = write(term->master, buf, n);
 	return size;
 }
 
