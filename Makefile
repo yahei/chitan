@@ -1,17 +1,20 @@
 .POSIX:
 .PHONY: clean
 
-minty: x.o tty.o util.o
-	$(CC) -Wall -o minty x.o tty.o util.o -lX11 -lXft -lfontconfig
+minty: main.o term.o line.o util.o
+	$(CC) -Wall -o minty main.o term.o line.o util.o -lX11 -lXft -lfontconfig
 
-x.o: x.c tty.h util.h
-	$(CC) -Wall -c x.c -I /usr/include/freetype2
+main.o: main.c term.h line.h util.h
+	$(CC) -Wall -c main.c -I /usr/include/freetype2
 
-tty.o: tty.c tty.h util.h
-	$(CC) -Wall -c tty.c
+term.o: term.c term.h line.h util.h
+	$(CC) -Wall -c term.c
+
+line.o: line.c line.h util.h
+	$(CC) -Wall -c line.c
 
 util.o: util.c util.h
 	$(CC) -Wall -c util.c
 
 clean:
-	rm minty x.o tty.o util.o
+	rm minty main.o term.o line.o util.o

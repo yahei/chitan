@@ -9,7 +9,7 @@
 #include <X11/Xlib.h>
 #include <X11/Xft/Xft.h>
 
-#include "tty.h"
+#include "term.h"
 #include "util.h"
 
 typedef struct Win {
