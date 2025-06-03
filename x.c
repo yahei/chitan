@@ -66,7 +66,7 @@ init(void)
 	if (XftColorAllocName(disp, visual, cmap, "black", &color) == 0)
 		fatal("XftColorAllocName failed.\n");
 	
-	/* 疑似端末のオープン */
+	/* 端末をオープン */
 	term = openTerm();
 	if (!term)
 		errExit("newTerm failed.\n");
@@ -103,7 +103,7 @@ run(void)
 			}
 		}
 
-		/* 疑似端末のread */
+		/* 端末のread */
 		if (FD_ISSET(tfd, &rfds)) {
 			if (readPty(term) < 0) {
 				/* 終了 */
@@ -144,7 +144,7 @@ procXEvent(void)
 		XNextEvent(disp, &event);
 		switch (event.type) {
 		case KeyPress:
-			/* Termに文字を送る */
+			/* 端末に文字を送る */
 			len = XLookupString(&event.xkey, buf, sizeof(buf), NULL, NULL);
 			printf("(%s)", buf);
 			fflush(stdout);
@@ -169,7 +169,7 @@ redraw(void)
 	int lineh;
 	int drawy;
 
-	/* ターミナルの内容を自分の標準出力に表示 */
+	/* 端末の内容を自分の標準出力に表示 */
 	last = term->lastline;
 	for (int i = 0; i <= last; i++) {
 		line = term->lines[i];
@@ -190,7 +190,7 @@ redraw(void)
 	XGetWindowAttributes(disp, win->window, &wattr);
 	XClearArea(disp, win->window, 0, 0, wattr.width, wattr.height, False);
 
-	/* ターミナルの内容をウィンドウに表示 */
+	/* 端末の内容をウィンドウに表示 */
 	for (drawy = (int)(wattr.height / lineh), row = term->lastline;
 			row >= 0 && drawy >= 0;
 			row--, drawy--) {

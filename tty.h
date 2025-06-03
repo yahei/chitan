@@ -3,8 +3,7 @@
 typedef struct Term Term;
 typedef struct Line Line;
 
-/* Term */
-
+/* 端末 */
 struct Term {
 	int master;     /* 疑似端末のファイルディスクリプタ */
 	Line **lines;   /* バッファ */
@@ -18,7 +17,7 @@ void closeTerm(Term *);
 ssize_t readPty(Term *);
 ssize_t writePty(Term *, char *, ssize_t);
 
-/* Line */
+/* 行 */
 Line *newLine(void);
 void deleteLine(Line *);
 void setUtf8(Line *, char *, int);

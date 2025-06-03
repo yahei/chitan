@@ -13,7 +13,7 @@
 /*
  * Term
  *
- * ターミナルのセッションとバッファを管理する
+ * 疑似端末とバッファを管理する
  */
 
 Term *
@@ -32,7 +32,7 @@ openTerm(void)
 		term->lines[i] = NULL;
 	term->lines[term->lastline] = newLine();
 
-	/* 疑似端末をopenする */
+	/* 疑似端末を開く */
 	errno = -1;
 	if ((term->master = posix_openpt(O_RDWR)) < 0)
 		goto FAIL;
@@ -45,7 +45,7 @@ openTerm(void)
 	if ((slave = open(sname, O_RDWR)) < 0)
 		goto FAIL;
 
-	/* slave側でフォアグラウンドプロセスを起動 */
+	/* slave側でプロセスを起動 */
 	switch (fork()) {
 	case -1:/* 失敗 */
 		goto FAIL;
@@ -79,7 +79,7 @@ closeTerm(Term *term)
 	if (term == NULL)
 		return;
 
-	/* 疑似端末をcloseする */
+	/* 疑似端末を閉じる */
 	if (term->master >= 0)
 		close(term->master);
 
@@ -191,7 +191,6 @@ deleteLine(Line *line)
 	if (line == NULL)
 		return;
 
-	/* 文字列を解放 */
 	free(line->str);
 	line->str = NULL;
 
