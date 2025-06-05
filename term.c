@@ -29,7 +29,7 @@ openTerm(void)
 	term->lines = xmalloc(term->maxlines * sizeof(Line *));
 	for (i = 0; i < term->maxlines; i++)
 		term->lines[i] = NULL;
-	term->lines[term->lastline] = newLine();
+	term->lines[term->lastline] = allocLine();
 
 	/* 疑似端末を開く */
 	errno = -1;
@@ -84,7 +84,7 @@ closeTerm(Term *term)
 
 	/* バッファを解放 */
 	for (i = 0; i < term->maxlines; i++) {
-		deleteLine(term->lines[i]);
+		freeLine(term->lines[i]);
 		term->lines[i] = NULL;
 	}
 	free(term->lines);
@@ -122,33 +122,33 @@ readPty(Term *term)
 	for (head = tail = buf; tail < buf + size; tail++) {
 		switch (*tail) {
 		case 9:  /* HT */
-			overwriteUtf8(term->lines[term->lastline],
-					head, tail - head, term->cursor);
+			putUtf8(term->lines[term->lastline],
+					term->cursor, head, tail - head);
 			term->cursor += tail - head;
-			overwriteUtf8(term->lines[term->lastline],
-					"    ", 4, term->cursor);
+			putUtf8(term->lines[term->lastline]
+					, term->cursor, "    ", 4);
 			term->cursor += 4;
 			head = tail + 1;
 			break;
 		case 10: /* LF */
-			overwriteUtf8(term->lines[term->lastline],
-					head, tail - head, term->cursor);
+			putUtf8(term->lines[term->lastline],
+					term->cursor, head, tail - head);
 			term->lastline++;
 			if (term->lines[term->lastline] == NULL)
-				term->lines[term->lastline] = newLine();
+				term->lines[term->lastline] = allocLine();
 			head = tail + 1;
 			break;
 
 		case 13: /* CR */
-			overwriteUtf8(term->lines[term->lastline],
-					head, tail - head, term->cursor);
+			putUtf8(term->lines[term->lastline],
+					term->cursor, head, tail - head);
 			term->cursor = 0;
 			head = tail + 1;
 			break;
 		}
 	}
-	overwriteUtf8(term->lines[term->lastline],
-			head, tail - head, term->cursor);
+	putUtf8(term->lines[term->lastline],
+			term->cursor, head, tail - head);
 	term->cursor += tail - head;
 
 	return size;

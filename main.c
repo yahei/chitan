@@ -2,9 +2,9 @@
 
 #include <sys/select.h>
 #include <errno.h>
+#include <locale.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 #include <time.h>
 #include <X11/Xlib.h>
 #include <X11/Xft/Xft.h>
@@ -47,6 +47,9 @@ main(int argc, char *args[])
 void
 init(void)
 {
+	/* localeを設定 */
+	setlocale(LC_CTYPE, "");
+
 	/* Xサーバーに接続 */
 	disp= XOpenDisplay(NULL);
 	if (disp== NULL)
@@ -162,7 +165,6 @@ redraw(void)
 {
 	int last;
 	Line *line;
-	const char *mstr;
 	int row;
 	XGlyphInfo ginfo;
 	XWindowAttributes wattr;
@@ -173,18 +175,16 @@ redraw(void)
 	last = term->lastline;
 	for (int i = 0; i <= last; i++) {
 		line = term->lines[i];
-		mstr = getUtf8(line);
-		printf("%d|%s\n", i, mstr);
+		printf("%d|%ls|\n", i, (wchar_t *)line->str);
 	}
 
 	/* テキストの高さや横幅を取得 */
+	XftTextExtents32(disp, font, (utf32 *)L"pl", 2, &ginfo);
+	lineh = ginfo.height * 1.25;
+
 	last = term->lastline;
 	line = term->lines[last];
-	mstr = getUtf8(line);
-	XftTextExtentsUtf8(disp, font, (FcChar8*)mstr, term->cursor, &ginfo);
-	lineh = ginfo.height * 1.25;
-	if (lineh == 0)
-		return;
+	XftTextExtents32(disp, font, line->str, term->cursor, &ginfo);
 
 	/* 画面をクリア */
 	XGetWindowAttributes(disp, win->window, &wattr);
@@ -194,10 +194,9 @@ redraw(void)
 	for (drawy = (int)(wattr.height / lineh), row = term->lastline;
 			row >= 0 && drawy >= 0;
 			row--, drawy--) {
-		line =term->lines[row];
-		mstr = getUtf8(line);
-		XftDrawStringUtf8(win->draw, &color, font, 10, drawy * lineh,
-				(FcChar8*)mstr, strlen(mstr));
+		line = term->lines[row];
+		XftDrawString32(win->draw, &color, font, 10, drawy * lineh,
+				line->str, utf32slen(line->str));
 	}
 
 	/* カーソルを描く */
