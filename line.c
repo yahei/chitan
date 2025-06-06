@@ -114,9 +114,9 @@ void
 putUtf8(Line *line, int pos, const char *str, int len)
 {
 	const int linelen = utf32slen(line->str);
-	int head, tail; // 消去する範囲
-	int lpad, rpad; // 幅広文字を消した後のスペースの数
-	int width;      // 置く文字列の表示幅
+	int head, tail; /* 消去する範囲 */
+	int lpad, rpad; /* 幅広文字を消した後のスペースの数 */
+	int width;      /* 置く文字列の表示幅 */
 
 	if (pos < 0)
 		return;
