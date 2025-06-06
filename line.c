@@ -186,3 +186,20 @@ utf32swidth(const utf32 *str, size_t len)
 
 	return width;
 }
+
+/*
+ * 表示位置を指定してそこが何文字目か調べる
+ * posとして負の数を渡した場合の動作は未定義
+ */
+int
+utf32sposlen(const utf32 *str, int pos)
+{
+	const int linelen = utf32slen(str);
+	int len;
+
+	for (len = 0; len < linelen; len++)
+		if (pos < utf32swidth(str, len + 1))
+			return len;
+
+	return linelen + pos - utf32swidth(str, linelen);
+}
