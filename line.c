@@ -114,7 +114,6 @@ void
 putUtf8(Line *line, int pos, const char *str, int len)
 {
 	const int linelen = utf32slen(line->str);
-	int i;
 	int head, tail; // 消去する範囲
 	int lpad, rpad; // 幅広文字を消した後のスペースの数
 	int width;      // 置く文字列の表示幅
@@ -129,26 +128,29 @@ putUtf8(Line *line, int pos, const char *str, int len)
 	free(buf);
 
 	/* headとlpad */
-	for (i = 0; i < linelen + 1; i++)
-		if (pos < utf32swidth(line->str, i))
+	for (head = 0; head < linelen; head++)
+		if (pos < utf32swidth(line->str, head + 1))
 			break;
-	head = i - 1;
 	lpad = pos - utf32swidth(line->str, head);
 
 	/* tailとrpad */
-	for (i = head; i < linelen; i++)
-		if (pos + width <= utf32swidth(line->str, i))
+	for (tail = head; tail < linelen; tail++)
+		if (pos + width <= utf32swidth(line->str, tail))
 			break;
-	tail = i;
 	rpad = utf32swidth(line->str, tail) - (pos + width);
 
+	/* tailの後が結合文字なら削除範囲に含める */
+	for (; tail < linelen; tail++)
+		if(0 < utf32swidth(&line->str[tail], 1))
+			break;
+
 	/* 幅広文字を消した後のスペースを置く */
-	for (i = rpad; i > 0; i--)
-		insertUtf8(line, tail, " ", 1);
-	for (i = lpad; i > 0; i--)
-		insertUtf8(line, head, " ", 1);
 	head += lpad;
 	tail += lpad;
+	for (; rpad > 0; rpad--)
+		insertUtf8(line, tail - lpad, " ", 1);
+	for (; lpad > 0; lpad--)
+		insertUtf8(line, head - lpad, " ", 1);
 
 	/* 削除と挿入を行う */
 	deleteChars(line, head, tail - head);
