@@ -179,12 +179,18 @@ u32slen(const char32_t *str)
 int
 u32swidth(const char32_t *str, int len)
 {
-	int i, width;
+	int i, width, total;
 
-	for (i = width = 0; i < len && str[i] != L'\0'; i++)
-		width += MAX(wcwidth(str[i]), 0);
+	/*
+	 * -1を返すのは制御文字や未定義領域
+	 * 全角の豆腐で表示されることが多いようなので幅2として扱う
+	 */
+	for (i = total = 0; i < len && str[i] != L'\0'; i++) {
+		width = wcwidth(str[i]);
+		total += width < 0 ? 2 : width;
+	}
 
-	return width;
+	return total;
 }
 
 /*
