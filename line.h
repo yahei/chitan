@@ -12,7 +12,7 @@ Line *allocLine(void);
 void freeLine(Line *);
 void insertU8(Line *, int, const char *, int);
 void deleteChars(Line *, int, int);
-void putU8(Line *, int, const char *, int);
+int putU8(Line *, int, const char *, int);
 
 /* 文字列の操作 */
 void u8sToU32s(const char *, char32_t *, int);

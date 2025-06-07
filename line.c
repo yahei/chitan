@@ -107,10 +107,11 @@ deleteChars(Line *line, int head, int len)
  * 指定された場所に既に文字がある場合、上書きして文字を置く
  * 置く文字が全角文字に半分だけ重なった場合、もう半分は半角スペースになる
  * 末尾より後に置く場合、隙間は半角スペースで埋められる
+ * 置いた文字列の表示幅を戻り値として返す
  * lenより短いNULL終端文字列を渡した場合の動作は未定義
  * posとして負の値を渡した場合の動作は未定義
  */
-void
+int
 putU8(Line *line, int pos, const char *str, int len)
 {
 	const int linelen = u32slen(line->str);
@@ -119,7 +120,7 @@ putU8(Line *line, int pos, const char *str, int len)
 	int width;      /* 置く文字列の表示幅 */
 
 	if (pos < 0)
-		return;
+		return 0;
 
 	/* 置く文字列の表示幅を調べる */
 	char32_t *buf = xmalloc(len * sizeof(char32_t));
@@ -155,6 +156,8 @@ putU8(Line *line, int pos, const char *str, int len)
 	/* 削除と挿入を行う */
 	deleteChars(line, head, tail - head);
 	insertU8(line, head, str, len);
+
+	return width;
 }
 
 /*
