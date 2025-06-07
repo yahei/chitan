@@ -20,7 +20,7 @@ allocLine(void)
 {
 	Line *line = xmalloc(sizeof(Line));
 
-	line->str = xmalloc(sizeof(utf32));
+	line->str = xmalloc(sizeof(char32_t));
 	line->str[0] = L'\0';
 
 	return line;
@@ -43,25 +43,25 @@ freeLine(Line *line)
  * lenより短いNULL終端文字列を渡した場合の動作は未定義
  */
 void
-insertUtf8(Line *line, int head, const char *str, int len)
+insertU8(Line *line, int head, const char *str, int len)
 {
 	int i;
-	const int oldlen = utf32slen(line->str);
+	const int oldlen = u32slen(line->str);
 	const int newlen = oldlen + len + MAX(head - oldlen, 0) + 1;
 	const int movelen = MAX(oldlen - head, 0) + 1;
 
 	/* 文字列を伸ばして書き込む場所を作る */
-	line->str = xrealloc(line->str, newlen * sizeof(utf32));
+	line->str = xrealloc(line->str, newlen * sizeof(char32_t));
 	memmove(&line->str[head + len], &line->str[MIN(head, oldlen)],
-			movelen * sizeof(utf32));
+			movelen * sizeof(char32_t));
 	for (i = oldlen; i < head; i++)
 		line->str[i] = L' ';
 
 	/* 挿入する文字列を書き込む */
-	utf8sToUtf32s(str, &line->str[head], len);
+	u8sToU32s(str, &line->str[head], len);
 
 	/* 末尾にスペースがあれば取り除く */
-	for (i = utf32slen(line->str); 0 < i; i--)
+	for (i = u32slen(line->str); 0 < i; i--)
 		if (line->str[i - 1] != L' ')
 			break;
 	line->str[i] = L'\0';
@@ -74,7 +74,7 @@ void
 deleteChars(Line *line, int head, int len)
 {
 	int i;
-	int oldlen = utf32slen(line->str);
+	int oldlen = u32slen(line->str);
 	int tail = head + len;
 
 	/* 範囲チェック */
@@ -85,17 +85,17 @@ deleteChars(Line *line, int head, int len)
 		return;
 
 	/* 削除後の文字列を作る */
-	utf32 *newstr = xmalloc((oldlen - len + 1) * sizeof(utf32));
-	memcpy(newstr, line->str, head * sizeof(utf32));
+	char32_t *newstr = xmalloc((oldlen - len + 1) * sizeof(char32_t));
+	memcpy(newstr, line->str, head * sizeof(char32_t));
 	memcpy(&newstr[head], &line->str[tail],
-			(oldlen - tail + 1) * sizeof(utf32));
+			(oldlen - tail + 1) * sizeof(char32_t));
 
 	/* lineの文字列を削除後のものに置き換える */
 	free(line->str);
 	line->str = newstr;
 
 	/* 末尾にスペースがあれば取り除く */
-	for (i = utf32slen(line->str); 0 < i; i--)
+	for (i = u32slen(line->str); 0 < i; i--)
 		if (line->str[i - 1] != L' ')
 			break;
 	line->str[i] = L'\0';
@@ -111,9 +111,9 @@ deleteChars(Line *line, int head, int len)
  * posとして負の値を渡した場合の動作は未定義
  */
 void
-putUtf8(Line *line, int pos, const char *str, int len)
+putU8(Line *line, int pos, const char *str, int len)
 {
-	const int linelen = utf32slen(line->str);
+	const int linelen = u32slen(line->str);
 	int head, tail; /* 消去する範囲 */
 	int lpad, rpad; /* 幅広文字を消した後のスペースの数 */
 	int width;      /* 置く文字列の表示幅 */
@@ -122,39 +122,39 @@ putUtf8(Line *line, int pos, const char *str, int len)
 		return;
 
 	/* 置く文字列の表示幅を調べる */
-	utf32 *buf = xmalloc(len * sizeof(utf32));
-	utf8sToUtf32s(str, buf, len);
-	width = utf32swidth(buf, len);
+	char32_t *buf = xmalloc(len * sizeof(char32_t));
+	u8sToU32s(str, buf, len);
+	width = u32swidth(buf, len);
 	free(buf);
 
 	/* headとlpad */
 	for (head = 0; head < linelen; head++)
-		if (pos < utf32swidth(line->str, head + 1))
+		if (pos < u32swidth(line->str, head + 1))
 			break;
-	lpad = pos - utf32swidth(line->str, head);
+	lpad = pos - u32swidth(line->str, head);
 
 	/* tailとrpad */
 	for (tail = head; tail < linelen; tail++)
-		if (pos + width <= utf32swidth(line->str, tail))
+		if (pos + width <= u32swidth(line->str, tail))
 			break;
-	rpad = utf32swidth(line->str, tail) - (pos + width);
+	rpad = u32swidth(line->str, tail) - (pos + width);
 
 	/* tailの後が結合文字なら削除範囲に含める */
 	for (; tail < linelen; tail++)
-		if(0 < utf32swidth(&line->str[tail], 1))
+		if(0 < u32swidth(&line->str[tail], 1))
 			break;
 
 	/* 幅広文字を消した後のスペースを置く */
 	head += lpad;
 	tail += lpad;
 	for (; rpad > 0; rpad--)
-		insertUtf8(line, tail - lpad, " ", 1);
+		insertU8(line, tail - lpad, " ", 1);
 	for (; lpad > 0; lpad--)
-		insertUtf8(line, head - lpad, " ", 1);
+		insertU8(line, head - lpad, " ", 1);
 
 	/* 削除と挿入を行う */
 	deleteChars(line, head, tail - head);
-	insertUtf8(line, head, str, len);
+	insertU8(line, head, str, len);
 }
 
 /*
@@ -162,7 +162,7 @@ putUtf8(Line *line, int pos, const char *str, int len)
  */
 
 void
-utf8sToUtf32s(const char *src, utf32 *dest, int len)
+u8sToU32s(const char *src, char32_t *dest, int len)
 {
 	int i;
 
@@ -171,13 +171,13 @@ utf8sToUtf32s(const char *src, utf32 *dest, int len)
 }
 
 int
-utf32slen(const utf32 *str)
+u32slen(const char32_t *str)
 {
 	return wcslen((const wchar_t *)str);
 }
 
 int
-utf32swidth(const utf32 *str, size_t len)
+u32swidth(const char32_t *str, int len)
 {
 	int i, width;
 
@@ -192,14 +192,14 @@ utf32swidth(const utf32 *str, size_t len)
  * posとして負の数を渡した場合の動作は未定義
  */
 int
-utf32sposlen(const utf32 *str, int pos)
+u32sposlen(const char32_t *str, int pos)
 {
-	const int linelen = utf32slen(str);
+	const int linelen = u32slen(str);
 	int len;
 
 	for (len = 0; len < linelen; len++)
-		if (pos < utf32swidth(str, len + 1))
+		if (pos < u32swidth(str, len + 1))
 			return len;
 
-	return linelen + pos - utf32swidth(str, linelen);
+	return linelen + pos - u32swidth(str, linelen);
 }

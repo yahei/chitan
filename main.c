@@ -179,7 +179,7 @@ redraw(void)
 	}
 
 	/* テキストの高さや横幅を取得 */
-	XftTextExtents32(disp, font, (utf32 *)L"pl", 2, &ginfo);
+	XftTextExtents32(disp, font, (char32_t *)L"pl", 2, &ginfo);
 	lineh = ginfo.height * 1.25;
 
 	last = term->lastline;
@@ -196,7 +196,7 @@ redraw(void)
 			row--, drawy--) {
 		line = term->lines[row];
 		XftDrawString32(win->draw, &color, font, 10, drawy * lineh,
-				line->str, utf32slen(line->str));
+				line->str, u32slen(line->str));
 	}
 
 	/* カーソルを描く */

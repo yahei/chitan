@@ -122,16 +122,16 @@ readPty(Term *term)
 	for (head = tail = buf; tail < buf + size; tail++) {
 		switch (*tail) {
 		case 9:  /* HT */
-			putUtf8(term->lines[term->lastline],
+			putU8(term->lines[term->lastline],
 					term->cursor, head, tail - head);
 			term->cursor += tail - head;
-			putUtf8(term->lines[term->lastline]
+			putU8(term->lines[term->lastline]
 					, term->cursor, "    ", 4);
 			term->cursor += 4;
 			head = tail + 1;
 			break;
 		case 10: /* LF */
-			putUtf8(term->lines[term->lastline],
+			putU8(term->lines[term->lastline],
 					term->cursor, head, tail - head);
 			term->lastline++;
 			if (term->lines[term->lastline] == NULL)
@@ -140,14 +140,14 @@ readPty(Term *term)
 			break;
 
 		case 13: /* CR */
-			putUtf8(term->lines[term->lastline],
+			putU8(term->lines[term->lastline],
 					term->cursor, head, tail - head);
 			term->cursor = 0;
 			head = tail + 1;
 			break;
 		}
 	}
-	putUtf8(term->lines[term->lastline],
+	putU8(term->lines[term->lastline],
 			term->cursor, head, tail - head);
 	term->cursor += tail - head;
 

@@ -1,19 +1,21 @@
+#include <stdint.h>
+
 /* 字 */
-typedef unsigned int utf32;
+typedef uint_least32_t char32_t;
 
 /* 行 */
 typedef struct Line {
-	utf32 *str;
+	char32_t *str;
 } Line;
 
 Line *allocLine(void);
 void freeLine(Line *);
-void insertUtf8(Line *, int, const char *, int);
+void insertU8(Line *, int, const char *, int);
 void deleteChars(Line *, int, int);
-void putUtf8(Line *, int, const char *, int);
+void putU8(Line *, int, const char *, int);
 
 /* 文字列の操作 */
-void utf8sToUtf32s(const char *, utf32 *, int);
-int utf32slen(const utf32 *);
-int utf32swidth(const utf32 *, size_t);
-int utf32sposlen(const utf32 *, int);
+void u8sToU32s(const char *, char32_t *, int);
+int u32slen(const char32_t *);
+int u32swidth(const char32_t *, int);
+int u32sposlen(const char32_t *, int);
