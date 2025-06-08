@@ -37,7 +37,7 @@ freeLine(Line *line)
 }
 
 void
-insertU8(Line *line, int head, const char *str, int len)
+insertU32(Line *line, int head, const char32_t *str, int len)
 {
 	const int oldlen = u32slen(line->str);
 	const int newlen = oldlen + len + MAX(head - oldlen, 0) + 1;
@@ -50,7 +50,7 @@ insertU8(Line *line, int head, const char *str, int len)
 	for (i = oldlen; i < head; i++)
 		line->str[i] = L' ';
 
-	u8sToU32s(&line->str[head], str, strlen(str));
+	memcpy(&line->str[head], str, len * sizeof(char32_t));
 
 	for (i = u32slen(line->str); 0 < i; i--)
 		if (line->str[i - 1] != L' ')
@@ -87,19 +87,15 @@ deleteChars(Line *line, int head, int len)
 }
 
 int
-putU8(Line *line, int col, const char *str, int len)
+putU32(Line *line, int col, const char32_t *str, int len)
 {
 	const int linelen = u32slen(line->str);
-	char32_t buf[len * sizeof(char32_t)];
-	int width;
+	const int width = u32swidth(str, len);
 	int head, tail;
 	int lpad, rpad;
 
 	if (col < 0)
 		return 0;
-
-	u8sToU32s(buf, str, strlen(str));
-	width = u32swidth(buf, len);
 
 	for (head = 0; head < linelen; head++)
 		if (col < u32swidth(line->str, head + 1))
@@ -118,12 +114,12 @@ putU8(Line *line, int col, const char *str, int len)
 	head += lpad;
 	tail += lpad;
 	for (; rpad > 0; rpad--)
-		insertU8(line, tail - lpad, " ", 1);
+		insertU32(line, tail - lpad, (char32_t *)L" ", 1);
 	for (; lpad > 0; lpad--)
-		insertU8(line, head - lpad, " ", 1);
+		insertU32(line, head - lpad, (char32_t *)L" ", 1);
 
 	deleteChars(line, head, tail - head);
-	insertU8(line, head, str, len);
+	insertU32(line, head, str, len);
 
 	return width;
 }

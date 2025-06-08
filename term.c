@@ -96,6 +96,7 @@ ssize_t
 readPty(Term *term)
 {
 	char buf[1024];
+	char32_t buf32[1024];
 	ssize_t size;
 	char *head, *tail;
 
@@ -122,17 +123,19 @@ readPty(Term *term)
 	for (head = tail = buf; tail < buf + size; tail++) {
 		switch (*tail) {
 		case 9:  /* HT */
-			putU8(term->lines[term->lastline],
-					term->cursor, head, tail - head);
+			u8sToU32s(buf32, head, tail - head);
+			putU32(term->lines[term->lastline],
+					term->cursor, buf32, u32slen(buf32));
 			term->cursor += tail - head;
-			putU8(term->lines[term->lastline]
-					, term->cursor, "    ", 4);
+			putU32(term->lines[term->lastline]
+					, term->cursor, (char32_t *)L"    ", 4);
 			term->cursor += 4;
 			head = tail + 1;
 			break;
 		case 10: /* LF */
-			putU8(term->lines[term->lastline],
-					term->cursor, head, tail - head);
+			u8sToU32s(buf32, head, tail - head);
+			putU32(term->lines[term->lastline],
+					term->cursor, buf32, tail - head);
 			term->lastline++;
 			if (term->lines[term->lastline] == NULL)
 				term->lines[term->lastline] = allocLine();
@@ -140,15 +143,17 @@ readPty(Term *term)
 			break;
 
 		case 13: /* CR */
-			putU8(term->lines[term->lastline],
-					term->cursor, head, tail - head);
+			u8sToU32s(buf32, head, tail - head);
+			putU32(term->lines[term->lastline],
+					term->cursor, buf32, tail - head);
 			term->cursor = 0;
 			head = tail + 1;
 			break;
 		}
 	}
-	putU8(term->lines[term->lastline],
-			term->cursor, head, tail - head);
+	u8sToU32s(buf32, head, tail - head);
+	putU32(term->lines[term->lastline],
+			term->cursor, buf32, tail - head);
 	term->cursor += tail - head;
 
 	return size;
