@@ -11,8 +11,8 @@
  * Line
  *
  * バッファ一行分の情報を管理する
- * 行末のスペースは自動的に取り除かれる
  * 挿入と削除に加え、文字がある場所や末尾以降に文字列を置くこともできる
+ * putU32で文字列を置いた場合、行末にスペースがあれば自動的に取り除かれる
  */
 
 Line *
@@ -51,11 +51,6 @@ insertU32(Line *line, int head, const char32_t *str, int len)
 		line->str[i] = L' ';
 
 	memcpy(&line->str[head], str, len * sizeof(char32_t));
-
-	for (i = u32slen(line->str); 0 < i; i--)
-		if (line->str[i - 1] != L' ')
-			break;
-	line->str[i] = L'\0';
 }
 
 void
@@ -64,7 +59,6 @@ deleteChars(Line *line, int head, int len)
 	const int oldlen = u32slen(line->str);
 	char32_t *newstr;
 	int tail = head + len;
-	int i;
 
 	head = MAX(head, 0);
 	tail = MIN(tail, oldlen);
@@ -79,11 +73,6 @@ deleteChars(Line *line, int head, int len)
 
 	free(line->str);
 	line->str = newstr;
-
-	for (i = u32slen(line->str); 0 < i; i--)
-		if (line->str[i - 1] != L' ')
-			break;
-	line->str[i] = L'\0';
 }
 
 int
@@ -93,6 +82,7 @@ putU32(Line *line, int col, const char32_t *str, int len)
 	const int width = u32swidth(str, len);
 	int head, tail;
 	int lpad, rpad;
+	int i;
 
 	if (col < 0)
 		return 0;
@@ -121,6 +111,11 @@ putU32(Line *line, int col, const char32_t *str, int len)
 	deleteChars(line, head, tail - head);
 	insertU32(line, head, str, len);
 
+	for (i = u32slen(line->str); 0 < i; i--)
+		if (line->str[i - 1] != L' ')
+			break;
+	line->str[i] = L'\0';
+
 	return width;
 }
 
@@ -132,7 +127,7 @@ u8sToU32s(char32_t *dst, const char *src, size_t n)
 	int bytes;
 
 	for (res = src; src < last && n > 0;) {
-		switch (bytes = mbtowc((wchar_t *)dst, src, last - src)) {
+		switch (bytes = mbtowc((wchar_t *)dst, src, 4)) {
 		case 0:
 			return (char *)res;
 		case -1:
