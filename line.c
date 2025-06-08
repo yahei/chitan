@@ -50,7 +50,7 @@ insertU8(Line *line, int head, const char *str, int len)
 	for (i = oldlen; i < head; i++)
 		line->str[i] = L' ';
 
-	u8sToU32s(str, &line->str[head], len);
+	u8sToU32s(&line->str[head], str, strlen(str));
 
 	for (i = u32slen(line->str); 0 < i; i--)
 		if (line->str[i - 1] != L' ')
@@ -98,7 +98,7 @@ putU8(Line *line, int col, const char *str, int len)
 	if (col < 0)
 		return 0;
 
-	u8sToU32s(str, buf, len);
+	u8sToU32s(buf, str, strlen(str));
 	width = u32swidth(buf, len);
 
 	for (head = 0; head < linelen; head++)
@@ -128,16 +128,29 @@ putU8(Line *line, int col, const char *str, int len)
 	return width;
 }
 
-int
-u8sToU32s(const char *src, char32_t *dest, int len)
+char *
+u8sToU32s(char32_t *dst, const char *src, size_t n)
 {
-	int i;
+	const char *const last = src + strlen(src);
+	const char *res;
+	int bytes;
 
-	for (i = 0; i < len; i++)
-		if ((src += mbtowc((wchar_t *)dest++, src, 4)) <= 0)
-			break;
+	for (res = src; src < last && n > 0;) {
+		switch (bytes = mbtowc((wchar_t *)dst, src, last - src)) {
+		case 0:
+			return (char *)res;
+		case -1:
+			src++;
+			continue;
+		default:
+			dst++;
+			src += bytes;
+			n--;
+			res = src;
+		}
+	}
 
-	return i;
+	return (char *)res;
 }
 
 int
