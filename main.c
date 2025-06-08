@@ -1,5 +1,3 @@
-#define _XOPEN_SOURCE 600
-
 #include <sys/select.h>
 #include <errno.h>
 #include <locale.h>

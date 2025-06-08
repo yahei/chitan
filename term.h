@@ -1,5 +1,3 @@
-#include <sys/types.h>
-
 #include "line.h"
 
 /* 端末 */

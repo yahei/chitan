@@ -1,20 +1,21 @@
 .POSIX:
-.PHONY: clean
 
-minty: main.o term.o line.o util.o
-	$(CC) -Wall -o minty main.o term.o line.o util.o -lX11 -lXft -lfontconfig
+CFLAGS  = -Wall -D_XOPEN_SOURCE=600 -I/usr/include/freetype2
+SRCS    = main.c term.c line.c util.c
+OBJS    = $(SRCS:.c=.o)
 
-main.o: main.c term.h line.h util.h
-	$(CC) -Wall -c main.c -I /usr/include/freetype2
+minty: $(OBJS)
+	$(CC) -o minty $(OBJS) -lX11 -lXft -lfontconfig
 
-term.o: term.c term.h line.h util.h
-	$(CC) -Wall -c term.c
+.c.o:
+	$(CC) $(CFLAGS) -c $<
 
-line.o: line.c line.h util.h
-	$(CC) -Wall -c line.c
-
-util.o: util.c util.h
-	$(CC) -Wall -c util.c
+main.o: term.h line.h util.h
+term.o: term.h line.h util.h
+line.o: line.h util.h
+util.o: util.h
 
 clean:
-	rm minty main.o term.o line.o util.o
+	rm minty $(OBJS)
+
+.PHONY: clean
