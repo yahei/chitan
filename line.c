@@ -3,7 +3,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <wchar.h>
-#include <fontconfig/fontconfig.h>
 
 #include "line.h"
 #include "util.h"
@@ -129,13 +128,16 @@ putU8(Line *line, int col, const char *str, int len)
 	return width;
 }
 
-void
+int
 u8sToU32s(const char *src, char32_t *dest, int len)
 {
 	int i;
 
 	for (i = 0; i < len; i++)
-		src += FcUtf8ToUcs4((const FcChar8 *)src, dest++, 4);
+		if ((src += mbtowc((wchar_t *)dest++, src, 4)) <= 0)
+			break;
+
+	return i;
 }
 
 int
