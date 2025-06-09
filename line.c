@@ -120,14 +120,13 @@ putU32(Line *line, int col, const char32_t *str, int len)
 char *
 u8sToU32s(char32_t *dst, const char *src, size_t n)
 {
-	const char *const last = src + strlen(src);
-	const char *res;
+	const char *rest;
 	int bytes;
 
-	for (res = src; src < last && n > 0;) {
+	for (rest = src; 0 < n;) {
 		switch (bytes = mbtowc((wchar_t *)dst, src, 4)) {
 		case 0:
-			return (char *)res;
+			return (char *)rest;
 		case -1:
 			src++;
 			continue;
@@ -135,11 +134,11 @@ u8sToU32s(char32_t *dst, const char *src, size_t n)
 			dst++;
 			src += bytes;
 			n--;
-			res = src;
+			rest = src;
 		}
 	}
 
-	return (char *)res;
+	return (char *)rest;
 }
 
 int

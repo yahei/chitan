@@ -3,10 +3,11 @@
 /* 端末 */
 typedef struct Term {
 	int master;     /* 疑似端末のファイルディスクリプタ */
-	Line **lines;   /* バッファ */
-	int maxlines;   /* バッファの最大行数*/
+	Line **lines;   /* ログ */
+	int maxlines;   /* ログの最大行数*/
 	int lastline;   /* 今の最終行 */
 	int cursor;     /* カーソル位置 */
+	char *NCCs;     /* 非制御文字のバッファ */
 } Term;
 
 Term *openTerm(void);

@@ -1,7 +1,7 @@
 #include <errno.h>
 #include <fcntl.h>
-#include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 
 #include "term.h"
@@ -10,8 +10,12 @@
 /*
  * Term
  *
- * 疑似端末とバッファを管理する
+ * 疑似端末とログを管理する
  */
+
+static void procNCCs(Term *);
+
+#define READBUF_SIZE 16
 
 Term *
 openTerm(void)
@@ -23,11 +27,15 @@ openTerm(void)
 
 	/* 構造体の初期化 */
 	term = xmalloc(sizeof(Term));
-	*term = (Term){ -1, NULL, 2 << 15, 0, 0 };
+	*term = (Term){ -1, NULL, 2 << 15, 0, 0, NULL};
+
 	term->lines = xmalloc(term->maxlines * sizeof(Line *));
 	for (i = 0; i < term->maxlines; i++)
 		term->lines[i] = NULL;
 	term->lines[term->lastline] = allocLine();
+
+	term->NCCs = xmalloc(READBUF_SIZE + 1);
+	term->NCCs[0] = '\0';
 
 	/* 疑似端末を開く */
 	errno = -1;
@@ -87,74 +95,70 @@ closeTerm(Term *term)
 	}
 	free(term->lines);
 
+	free(term->NCCs);
+
 	free(term);
 }
 
 ssize_t
 readPty(Term *term)
 {
-	char buf[1024];
-	char32_t buf32[1024];
+	unsigned char readbuf[READBUF_SIZE], *reading;
 	ssize_t size;
-	char *head, *tail;
+	char *pNCC = strchr(term->NCCs, '\0');
 
-	size = read(term->master, buf, sizeof(buf));
+	size = read(term->master, readbuf, term->NCCs + READBUF_SIZE - pNCC);
 
-	/* 
-	 * 何らかのエラー
-	 * たぶんプロセスが終了している
-	 * 他の原因もあり得るので、後でちゃんとする
-	 */
-	if (size < 0) {
+	/* プロセスが終了してる場合など */
+	if (size < 0)
 		return size;
-	}
 
-	/* 受け取った文字列を数値で表示 */
-	printf("read(%ld):", (long)size);
-	/*
-	for (int i=0; i < size; i++)
-		printf("%d,", buf[i]);
-	*/
-	printf("\n");
+	for (reading = readbuf; reading - readbuf < size; reading++) {
+		/* 非制御文字 */
+		if (31 < *reading && *reading != 127) {
+			*(pNCC++) = *reading;
+			continue;
+		}
 
-	/* 改行があったら次の行に進むとかの処理 */
-	for (head = tail = buf; tail < buf + size; tail++) {
-		switch (*tail) {
+		/* 制御文字 */
+		*pNCC = '\0';
+		procNCCs(term);
+		pNCC = strchr(term->NCCs, '\0');
+
+		switch (*reading) {
 		case 9:  /* HT */
-			u8sToU32s(buf32, head, tail - head);
-			putU32(term->lines[term->lastline],
-					term->cursor, buf32, u32slen(buf32));
-			term->cursor += tail - head;
-			putU32(term->lines[term->lastline]
-					, term->cursor, (char32_t *)L"    ", 4);
-			term->cursor += 4;
-			head = tail + 1;
+			term->cursor += 8 - term->cursor % 8;
 			break;
 		case 10: /* LF */
-			u8sToU32s(buf32, head, tail - head);
-			putU32(term->lines[term->lastline],
-					term->cursor, buf32, tail - head);
 			term->lastline++;
 			if (term->lines[term->lastline] == NULL)
 				term->lines[term->lastline] = allocLine();
-			head = tail + 1;
 			break;
-
 		case 13: /* CR */
-			u8sToU32s(buf32, head, tail - head);
-			putU32(term->lines[term->lastline],
-					term->cursor, buf32, tail - head);
 			term->cursor = 0;
-			head = tail + 1;
 			break;
 		}
 	}
-	u8sToU32s(buf32, head, tail - head);
-	putU32(term->lines[term->lastline],
-			term->cursor, buf32, tail - head);
-	term->cursor += tail - head;
+	*pNCC = '\0';
+	procNCCs(term);
 
 	return size;
+}
+
+void
+procNCCs(Term *term)
+{
+	char32_t decoded[READBUF_SIZE + 1];
+	char *rest;
+	int restlen;
+
+	rest = u8sToU32s(decoded, term->NCCs, READBUF_SIZE);
+	decoded[READBUF_SIZE] = L'\0';
+	term->cursor += putU32(term->lines[term->lastline], term->cursor,
+			decoded, u32slen(decoded));
+
+	restlen = strlen(rest);
+	memmove(term->NCCs, rest + MAX(restlen - 3, 0), MIN(restlen + 1, 4));
 }
 
 ssize_t
