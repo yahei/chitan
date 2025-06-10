@@ -9,8 +9,6 @@
  * Line
  *
  * バッファ一行分の情報を管理する
- * 挿入と削除に加え、文字がある場所や末尾以降に文字列を置くこともできる
- * putU32で文字列を置いた場合、行末にスペースがあれば自動的に取り除かれる
  */
 
 Line *
@@ -38,16 +36,12 @@ void
 insertU32(Line *line, int head, const char32_t *str, int len)
 {
 	const int oldlen = u32slen(line->str);
-	const int newlen = oldlen + len + MAX(head - oldlen, 0) + 1;
+	const int newlen = oldlen + len + 1;
 	const int movelen = MAX(oldlen - head, 0) + 1;
-	int i;
 
 	line->str = xrealloc(line->str, newlen * sizeof(char32_t));
 	memmove(&line->str[head + len], &line->str[MIN(head, oldlen)],
 			movelen * sizeof(char32_t));
-	for (i = oldlen; i < head; i++)
-		line->str[i] = L' ';
-
 	memcpy(&line->str[head], str, len * sizeof(char32_t));
 }
 
@@ -80,7 +74,6 @@ putU32(Line *line, int col, const char32_t *str, int len)
 	const int width = u32swidth(str, len);
 	int head, tail;
 	int lpad, rpad;
-	int i;
 
 	if (col < 0)
 		return 0;
@@ -109,12 +102,18 @@ putU32(Line *line, int col, const char32_t *str, int len)
 	deleteChars(line, head, tail - head);
 	insertU32(line, head, str, len);
 
+	return width;
+}
+
+void
+deleteTrail(Line *line)
+{
+	int i;
+
 	for (i = u32slen(line->str); 0 < i; i--)
 		if (line->str[i - 1] != L' ')
 			break;
 	line->str[i] = L'\0';
-
-	return width;
 }
 
 char *

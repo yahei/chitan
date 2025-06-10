@@ -11,6 +11,7 @@ void freeLine(Line *);
 void insertU32(Line *, int, const char32_t *, int);
 void deleteChars(Line *, int, int);
 int putU32(Line *, int, const char32_t *, int);
+void deleteTrail(Line *);
 
 char *u8sToU32s(char32_t *,const char *, size_t);
 int u32slen(const char32_t *);

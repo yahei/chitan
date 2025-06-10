@@ -130,6 +130,7 @@ readPty(Term *term)
 			term->cursor += 8 - term->cursor % 8;
 			break;
 		case 10: /* LF */
+			deleteTrail(term->lines[term->lastline]);
 			term->lastline++;
 			if (term->lines[term->lastline] == NULL)
 				term->lines[term->lastline] = allocLine();
