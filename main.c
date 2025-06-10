@@ -161,27 +161,21 @@ procXEvent(void)
 void
 redraw(void)
 {
-	int last;
-	Line *line;
-	int row;
 	XGlyphInfo ginfo;
 	XWindowAttributes wattr;
 	int lineh;
-	int drawy;
+	Line *line;
+	int i;
 
 	/* 端末の内容を自分の標準出力に表示 */
-	last = term->lastline;
-	for (int i = 0; i <= last; i++) {
-		line = term->lines[i];
+	for (i = 0; (line = getLine(term, i)); i++)
 		printf("%d|%ls|\n", i, (wchar_t *)line->str);
-	}
 
 	/* テキストの高さや横幅を取得 */
 	XftTextExtents32(disp, font, (char32_t *)L"pl", 2, &ginfo);
 	lineh = ginfo.height * 1.25;
 
-	last = term->lastline;
-	line = term->lines[last];
+	line = getLine(term, 0);
 	XftTextExtents32(disp, font, line->str, term->cursor, &ginfo);
 
 	/* 画面をクリア */
@@ -189,17 +183,14 @@ redraw(void)
 	XClearArea(disp, win->window, 0, 0, wattr.width, wattr.height, False);
 
 	/* 端末の内容をウィンドウに表示 */
-	for (drawy = (int)(wattr.height / lineh), row = term->lastline;
-			row >= 0 && drawy >= 0;
-			row--, drawy--) {
-		line = term->lines[row];
-		XftDrawString32(win->draw, &color, font, 10, drawy * lineh,
+	for (i = 0; (line = getLine(term, i)); i++)
+		XftDrawString32(win->draw, &color, font, 10,
+				(wattr.height / lineh - i) * lineh,
 				line->str, u32slen(line->str));
-	}
 
 	/* カーソルを描く */
 	int x = ginfo.xOff + 10;
-	int y = (int)(wattr.height / lineh - 1) * lineh;
+	int y = (wattr.height / lineh - 1) * lineh;
 	XDrawRectangle(disp, win->window, win->gc, x, y + lineh/4, lineh/2, lineh);
 
 	XFlush(disp);

@@ -27,12 +27,11 @@ openTerm(void)
 
 	/* 構造体の初期化 */
 	term = xmalloc(sizeof(Term));
-	*term = (Term){ -1, NULL, 2 << 15, 0, 0, NULL};
+	*term = (Term){ -1, NULL, 16, 0, 0, NULL};
 
 	term->lines = xmalloc(term->maxlines * sizeof(Line *));
 	for (i = 0; i < term->maxlines; i++)
-		term->lines[i] = NULL;
-	term->lines[term->lastline] = allocLine();
+		term->lines[i] = allocLine();
 
 	term->NCCs = xmalloc(READBUF_SIZE + 1);
 	term->NCCs[0] = '\0';
@@ -130,10 +129,9 @@ readPty(Term *term)
 			term->cursor += 8 - term->cursor % 8;
 			break;
 		case 10: /* LF */
-			deleteTrail(term->lines[term->lastline]);
+			deleteTrail(getLine(term, 0));
 			term->lastline++;
-			if (term->lines[term->lastline] == NULL)
-				term->lines[term->lastline] = allocLine();
+			putU32(getLine(term, 0), 0, (char32_t *)L"\0", 1);
 			break;
 		case 13: /* CR */
 			term->cursor = 0;
@@ -155,7 +153,7 @@ procNCCs(Term *term)
 
 	rest = u8sToU32s(decoded, term->NCCs, READBUF_SIZE);
 	decoded[READBUF_SIZE] = L'\0';
-	term->cursor += putU32(term->lines[term->lastline], term->cursor,
+	term->cursor += putU32(getLine(term, 0), term->cursor,
 			decoded, u32slen(decoded));
 
 	restlen = strlen(rest);
@@ -168,4 +166,13 @@ writePty(Term *term, char *buf, ssize_t n)
 	ssize_t size;
 	size = write(term->master, buf, n);
 	return size;
+}
+
+Line *
+getLine(Term *term, int index)
+{
+	if (index > term->lastline || index < 0 || index >= term->maxlines)
+		return NULL;
+
+	return term->lines[(term->lastline - index) % term->maxlines];
 }
