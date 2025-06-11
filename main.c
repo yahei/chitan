@@ -91,7 +91,7 @@ run(void)
 		FD_SET(xfd, &rfds);
 		timeout.tv_sec = 0;
 		timeout.tv_nsec = 0;
-		ptimeout = (timeout.tv_nsec > 0 || timeout.tv_nsec > 0) ?
+		ptimeout = (0 < timeout.tv_nsec || 0 < timeout.tv_nsec) ?
 			&timeout : NULL;
 
 		if (pselect(MAX(tfd, xfd) + 1, &rfds, NULL, NULL, ptimeout, NULL) < 0) {
@@ -141,7 +141,7 @@ procXEvent(void)
 	char buf[256];
 	int len;
 
-	while (XPending(disp) > 0) {
+	while (0 < XPending(disp)) {
 		XNextEvent(disp, &event);
 		switch (event.type) {
 		case KeyPress:

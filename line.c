@@ -8,7 +8,7 @@
 /*
  * Line
  *
- * バッファ一行分の情報を管理する
+ * ログ1行を管理する
  */
 
 Line *
@@ -94,9 +94,9 @@ putU32(Line *line, int col, const char32_t *str, int len)
 
 	head += lpad;
 	tail += lpad;
-	for (; rpad > 0; rpad--)
+	for (; 0 < rpad; rpad--)
 		insertU32(line, tail - lpad, (char32_t *)L" ", 1);
-	for (; lpad > 0; lpad--)
+	for (; 0 < lpad; lpad--)
 		insertU32(line, head - lpad, (char32_t *)L" ", 1);
 
 	deleteChars(line, head, tail - head);

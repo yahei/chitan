@@ -84,7 +84,7 @@ closeTerm(Term *term)
 		return;
 
 	/* 疑似端末を閉じる */
-	if (term->master >= 0)
+	if (0 <= term->master)
 		close(term->master);
 
 	/* バッファを解放 */
@@ -171,7 +171,7 @@ writePty(Term *term, char *buf, ssize_t n)
 Line *
 getLine(Term *term, int index)
 {
-	if (index > term->lastline || index < 0 || index >= term->maxlines)
+	if (term->lastline < index || index < 0 || term->maxlines <= index)
 		return NULL;
 
 	return term->lines[(term->lastline - index) % term->maxlines];
