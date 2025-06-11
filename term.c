@@ -169,9 +169,11 @@ writePty(Term *term, char *buf, ssize_t n)
 }
 
 Line *
-getLine(Term *term, int index)
+getLine(Term *term, unsigned int index)
 {
-	if (term->lastline < index || index < 0 || term->maxlines <= index)
+	if (term->maxlines <= index)
+		return NULL;
+	if (term->lastline < index)
 		return NULL;
 
 	return term->lines[(term->lastline - index) % term->maxlines];

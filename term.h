@@ -14,4 +14,4 @@ Term *openTerm(void);
 void closeTerm(Term *);
 ssize_t readPty(Term *);
 ssize_t writePty(Term *, char *, ssize_t);
-Line * getLine(Term *, int);
+Line * getLine(Term *, unsigned int);

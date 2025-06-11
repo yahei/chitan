@@ -39,6 +39,9 @@ insertU32(Line *line, int head, const char32_t *str, int len)
 	const int newlen = oldlen + len + 1;
 	const int movelen = MAX(oldlen - head, 0) + 1;
 
+	if (head < 0 || len <= 0)
+		return;
+
 	line->str = xrealloc(line->str, newlen * sizeof(char32_t));
 	memmove(&line->str[head + len], &line->str[MIN(head, oldlen)],
 			movelen * sizeof(char32_t));
@@ -50,15 +53,12 @@ deleteChars(Line *line, int head, int len)
 {
 	const int oldlen = u32slen(line->str);
 	char32_t *newstr;
-	int tail = head + len;
+	int tail = MIN(head + len, oldlen);
 
-	head = MAX(head, 0);
-	tail = MIN(tail, oldlen);
-	len = tail - head;
-	if (len <= 0)
+	if (head < 0 || tail <= head)
 		return;
 
-	newstr = xmalloc((oldlen - len + 1) * sizeof(char32_t));
+	newstr = xmalloc((oldlen - (tail - head) + 1) * sizeof(char32_t));
 	memcpy(newstr, line->str, head * sizeof(char32_t));
 	memcpy(&newstr[head], &line->str[tail],
 			(oldlen - tail + 1) * sizeof(char32_t));
@@ -165,6 +165,9 @@ u32slencol(const char32_t *str, int col)
 {
 	const int linelen = u32slen(str);
 	int len;
+
+	if (col < 0)
+		return -col;
 
 	for (len = 0; len < linelen; len++)
 		if (col < u32swidth(str, len + 1))

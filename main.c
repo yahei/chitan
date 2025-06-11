@@ -24,14 +24,13 @@ XftColor color;
 Win *win;
 Term *term;
 
-int main(int, char *[]);
-void init(void);
-void run(void);
-void fin(void);
-void procXEvent(void);
-void redraw(void);
-Win *openWindow(void);
-void closeWindow(Win *);
+static void init(void);
+static void run(void);
+static void fin(void);
+static void procXEvent(void);
+static void redraw(void);
+static Win *openWindow(void);
+static void closeWindow(Win *);
 
 int
 main(int argc, char *args[])
