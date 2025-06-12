@@ -13,9 +13,9 @@
  * 疑似端末とログを管理する
  */
 
-static void procNCCs(Term *);
+static char *procNCCs(Term *, char *, char *);
 
-#define READBUF_SIZE 16
+#define READ_SIZE 16
 
 Term *
 openTerm(void)
@@ -27,14 +27,14 @@ openTerm(void)
 
 	/* 構造体の初期化 */
 	term = xmalloc(sizeof(Term));
-	*term = (Term){ -1, NULL, 16, 0, 0, NULL};
+	*term = (Term){ -1, NULL, 16, 0, 0, NULL, 0};
 
 	term->lines = xmalloc(term->maxlines * sizeof(Line *));
 	for (i = 0; i < term->maxlines; i++)
 		term->lines[i] = allocLine();
 
-	term->NCCs = xmalloc(READBUF_SIZE + 1);
-	term->NCCs[0] = '\0';
+	term->readbuf = xmalloc(1);
+	term->readbuf[0] = '\0';
 
 	/* 疑似端末を開く */
 	errno = -1;
@@ -94,7 +94,7 @@ closeTerm(Term *term)
 	}
 	free(term->lines);
 
-	free(term->NCCs);
+	free(term->readbuf);
 
 	free(term);
 }
@@ -102,28 +102,36 @@ closeTerm(Term *term)
 ssize_t
 readPty(Term *term)
 {
-	unsigned char readbuf[READBUF_SIZE], *reading;
+	char *reading, *rest;
 	ssize_t size;
-	char *pNCC = strchr(term->NCCs, '\0');
 
-	size = read(term->master, readbuf, term->NCCs + READBUF_SIZE - pNCC);
+	/* バッファサイズを調整してread */
+	term->readbuf = xrealloc(term->readbuf, term->rblen+ READ_SIZE);
+	size = read(term->master, term->readbuf + term->rblen, READ_SIZE);
+	term->rblen += size;
 
 	/* プロセスが終了してる場合など */
 	if (size < 0)
 		return size;
 
-	for (reading = readbuf; reading - readbuf < size; reading++) {
+	/* readしたものを1文字ずつチェック */
+	for (reading = term->readbuf; reading < term->readbuf + term->rblen;) {
 		/* 非制御文字 */
-		if (31 < *reading && *reading != 127) {
-			*(pNCC++) = *reading;
+		if (*reading < 0 || (31 < *reading && *reading != 127)) {
+			reading++;
 			continue;
 		}
 
 		/* 制御文字 */
-		*pNCC = '\0';
-		procNCCs(term);
-		pNCC = strchr(term->NCCs, '\0');
 
+		/* ここまでに現れた非制御文字列を処理 */
+		rest = procNCCs(term, term->readbuf, reading);
+		memmove(term->readbuf, rest,
+				term->readbuf + term->rblen - rest);
+		term->rblen -= rest - term->readbuf;
+		reading -= rest - term->readbuf;
+
+		/* 制御文字を処理 */
 		switch (*reading) {
 		case 9:  /* HT */
 			term->cursor += 8 - term->cursor % 8;
@@ -137,27 +145,44 @@ readPty(Term *term)
 			term->cursor = 0;
 			break;
 		}
+
+		/* 処理した制御文字をバッファから取り除き、また頭から読む */
+		memmove(reading, reading + 1,
+				term->readbuf + term->rblen - (reading + 1));
+		term->rblen -= 1;
+		reading = term->readbuf;
 	}
-	*pNCC = '\0';
-	procNCCs(term);
+	/* 末尾まで読んだ */
+	rest = procNCCs(term, term->readbuf, reading);
+	memmove(term->readbuf, rest, reading - rest);
+	term->rblen = reading - rest;
 
 	return size;
 }
 
-void
-procNCCs(Term *term)
+char *
+procNCCs(Term *term, char *head, char *tail)
 {
-	char32_t decoded[READBUF_SIZE + 1];
+	/*
+	 * headからtailまでのUTF8文字列をデコードしてLineに書き込む
+	 * 変換できなかったバイト列の先頭を指すポインタを返す
+	 */
+	const int len = tail - head + 1;
+	char32_t decoded[len];
+	char tmp;
 	char *rest;
-	int restlen;
 
-	rest = u8sToU32s(decoded, term->NCCs, READBUF_SIZE);
-	decoded[READBUF_SIZE] = L'\0';
+	tmp = *tail;
+	*tail = '\0';
+
+	decoded[len] = L'\0';
+	rest = u8sToU32s(decoded, head, len);
 	term->cursor += putU32(getLine(term, 0), term->cursor,
 			decoded, u32slen(decoded));
 
-	restlen = strlen(rest);
-	memmove(term->NCCs, rest + MAX(restlen - 3, 0), MIN(restlen + 1, 4));
+	*tail = tmp;
+
+	return rest;
 }
 
 ssize_t

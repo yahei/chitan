@@ -7,7 +7,8 @@ typedef struct Term {
 	int maxlines;   /* ログの最大行数*/
 	int lastline;   /* ログの最終行 */
 	int cursor;     /* カーソル位置 */
-	char *NCCs;     /* 非制御文字のバッファ */
+	char *readbuf;  /* 可変長リードバッファ */
+	int rblen;      /* リードバッファに残っている文字の数 */
 } Term;
 
 Term *openTerm(void);
