@@ -13,7 +13,7 @@ void deleteChars(Line *, int, int);
 int putU32(Line *, int, const char32_t *, int);
 void deleteTrail(Line *);
 
-char *u8sToU32s(char32_t *,const char *, size_t);
+const char *u8sToU32s(char32_t *,const char *, size_t);
 int u32slen(const char32_t *);
 int u32swidth(const char32_t *, int);
 int u32slencol(const char32_t *, int);

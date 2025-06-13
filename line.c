@@ -116,15 +116,15 @@ deleteTrail(Line *line)
 	line->str[i] = L'\0';
 }
 
-char *
+const char *
 u8sToU32s(char32_t *dst, const char *src, size_t n)
 {
 	const char *rest = src;
 	int bytes;
 
 	for (;;) {
-		if (n <= 0)
-			return (char *)rest;
+		if (n == 0)
+			return rest;
 
 		if ((0 <= *src && *src < 32) || *src == 127)
 			break;
@@ -141,7 +141,7 @@ u8sToU32s(char32_t *dst, const char *src, size_t n)
 	}
 
 	*dst = L'\0';
-	return (char *)rest;
+	return rest;
 }
 
 int

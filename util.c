@@ -6,7 +6,7 @@
 #include "util.h"
 
 void
-errExit(char *message)
+errExit(const char *message)
 {
 	if (message)
 		fputs(message, stderr);
@@ -16,7 +16,7 @@ errExit(char *message)
 }
 
 void
-fatal(char *message)
+fatal(const char *message)
 {
 	if (message)
 		fputs(message, stderr);

@@ -13,8 +13,8 @@
  * 疑似端末とログを管理する
  */
 
-static char *procNCCs(Term *, char *);
-static char *procCC(Term *, char *);
+static const char *procNCCs(Term *, const char *);
+static const char *procCC(Term *, const char *);
 
 #define READ_SIZE 16
 
@@ -103,14 +103,13 @@ closeTerm(Term *term)
 ssize_t
 readPty(Term *term)
 {
-	char *reading, *rest, *tail;
+	const char *reading, *rest, *tail;
 	ssize_t size;
 
-	/* バッファサイズを調整してread */
 	term->readbuf = xrealloc(term->readbuf, term->rblen + READ_SIZE + 1);
 	size = read(term->master, term->readbuf + term->rblen, READ_SIZE);
 	tail = term->readbuf + term->rblen + size;
-	*tail = '\0';
+	*(char *)tail = '\0';
 
 	/*
 	 * readしたデータの途中に\0が含まれている場合があり、
@@ -124,7 +123,6 @@ readPty(Term *term)
 		return size;
 
 	for (reading = term->readbuf; reading < tail;) {
-		/* 非制御文字列を処理 */
 		rest = procNCCs(term, reading);
 		if (reading != rest) {
 			memmove(term->readbuf, rest, tail - rest + 1);
@@ -133,7 +131,6 @@ readPty(Term *term)
 			continue;
 		}
 
-		/* 制御文字を処理 */
 		rest = procCC(term, reading);
 		if (reading != rest) {
 			memmove(term->readbuf, rest, tail - rest + 1);
@@ -149,16 +146,17 @@ readPty(Term *term)
 	return size;
 }
 
-char *
-procNCCs(Term *term, char *head)
+const char *
+procNCCs(Term *term, const char *head)
 {
 	/*
-	 * headからtailまでのUTF8文字列をデコードしてLineに書き込む
-	 * 変換できなかったバイト列の先頭を指すポインタを返す
+	 * 制御文字か変換できないバイト列が出てくるまでデコードしてLineに書き込む
+	 * 変換しなかったバイト列の先頭を指すポインタを返す
 	 */
+
 	const int len = strlen(head) + 1;
 	char32_t decoded[len];
-	char *rest;
+	const char *rest;
 
 	rest = u8sToU32s(decoded, head, len);
 	term->cursor += putU32(getLine(term, 0), term->cursor,
@@ -167,15 +165,14 @@ procNCCs(Term *term, char *head)
 	return rest;
 }
 
-char *
-procCC(Term *term, char *head)
+const char *
+procCC(Term *term, const char *head)
 {
 	/*
 	 * 制御文字を1文字処理する
 	 * 後続のバイト列の先頭を指すポインタを返す
 	 */
 
-	/* 制御文字じゃなかったら何もしない */
 	if (*head < 0 || (31 < *head && *head != 127))
 		return head;
 
@@ -199,7 +196,7 @@ procCC(Term *term, char *head)
 }
 
 ssize_t
-writePty(Term *term, char *buf, ssize_t n)
+writePty(Term *term, const char *buf, ssize_t n)
 {
 	ssize_t size;
 	size = write(term->master, buf, n);

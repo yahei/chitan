@@ -14,5 +14,5 @@ typedef struct Term {
 Term *openTerm(void);
 void closeTerm(Term *);
 ssize_t readPty(Term *);
-ssize_t writePty(Term *, char *, ssize_t);
+ssize_t writePty(Term *, const char *, ssize_t);
 Line * getLine(Term *, unsigned int);
