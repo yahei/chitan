@@ -14,6 +14,7 @@
  */
 
 static char *procNCCs(Term *, char *, char *);
+static char *procCC(Term *, char *);
 
 #define READ_SIZE 16
 
@@ -102,20 +103,20 @@ closeTerm(Term *term)
 ssize_t
 readPty(Term *term)
 {
-	char *reading, *rest;
+	char *reading, *rest, *tail;
 	ssize_t size;
 
 	/* バッファサイズを調整してread */
-	term->readbuf = xrealloc(term->readbuf, term->rblen+ READ_SIZE);
+	term->readbuf = xrealloc(term->readbuf, term->rblen + READ_SIZE);
 	size = read(term->master, term->readbuf + term->rblen, READ_SIZE);
-	term->rblen += size;
+	tail = term->readbuf + term->rblen + size;
 
 	/* プロセスが終了してる場合など */
 	if (size < 0)
 		return size;
 
 	/* readしたものを1文字ずつチェック */
-	for (reading = term->readbuf; reading < term->readbuf + term->rblen;) {
+	for (reading = term->readbuf; reading < tail;) {
 		/* 非制御文字 */
 		if (*reading < 0 || (31 < *reading && *reading != 127)) {
 			reading++;
@@ -126,30 +127,14 @@ readPty(Term *term)
 
 		/* ここまでに現れた非制御文字列を処理 */
 		rest = procNCCs(term, term->readbuf, reading);
-		memmove(term->readbuf, rest,
-				term->readbuf + term->rblen - rest);
-		term->rblen -= rest - term->readbuf;
+		memmove(term->readbuf, rest, tail - rest);
+		tail -= rest - term->readbuf;
 		reading -= rest - term->readbuf;
 
 		/* 制御文字を処理 */
-		switch (*reading) {
-		case 9:  /* HT */
-			term->cursor += 8 - term->cursor % 8;
-			break;
-		case 10: /* LF */
-			deleteTrail(getLine(term, 0));
-			term->lastline++;
-			putU32(getLine(term, 0), 0, (char32_t *)L"\0", 1);
-			break;
-		case 13: /* CR */
-			term->cursor = 0;
-			break;
-		}
-
-		/* 処理した制御文字をバッファから取り除き、また頭から読む */
-		memmove(reading, reading + 1,
-				term->readbuf + term->rblen - (reading + 1));
-		term->rblen -= 1;
+		rest = procCC(term, reading);
+		memmove(reading, rest, tail - rest);
+		tail -= rest - term->readbuf;
 		reading = term->readbuf;
 	}
 	/* 末尾まで読んだ */
@@ -183,6 +168,30 @@ procNCCs(Term *term, char *head, char *tail)
 	*tail = tmp;
 
 	return rest;
+}
+
+char *
+procCC(Term *term, char *head)
+{
+	/*
+	 * 制御文字を1文字処理する
+	 * 後続のバイト列の先頭を指すポインタを返す
+	 */
+	switch (*head) {
+	case 9:  /* HT */
+		term->cursor += 8 - term->cursor % 8;
+		break;
+	case 10: /* LF */
+		deleteTrail(getLine(term, 0));
+		term->lastline++;
+		putU32(getLine(term, 0), 0, (char32_t *)L"\0", 1);
+		break;
+	case 13: /* CR */
+		term->cursor = 0;
+		break;
+	}
+
+	return head + 1;
 }
 
 ssize_t
