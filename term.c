@@ -13,7 +13,7 @@
  * 疑似端末とログを管理する
  */
 
-static char *procNCCs(Term *, char *, char *);
+static char *procNCCs(Term *, char *);
 static char *procCC(Term *, char *);
 
 #define READ_SIZE 16
@@ -107,65 +107,62 @@ readPty(Term *term)
 	ssize_t size;
 
 	/* バッファサイズを調整してread */
-	term->readbuf = xrealloc(term->readbuf, term->rblen + READ_SIZE);
+	term->readbuf = xrealloc(term->readbuf, term->rblen + READ_SIZE + 1);
 	size = read(term->master, term->readbuf + term->rblen, READ_SIZE);
 	tail = term->readbuf + term->rblen + size;
+	*tail = '\0';
+
+	/*
+	 * readしたデータの途中に\0が含まれている場合があり、
+	 * \0は文字列の終わりを意味しないことに注意
+	 * 終了判定はtailの位置まで読んだかどうかで行う必要がある
+	 * tailに\0を置いているのはUTF8をデコードする関数に終端を知らせるため
+	 */
 
 	/* プロセスが終了してる場合など */
 	if (size < 0)
 		return size;
 
-	/* readしたものを1文字ずつチェック */
 	for (reading = term->readbuf; reading < tail;) {
-		/* 非制御文字 */
-		if (*reading < 0 || (31 < *reading && *reading != 127)) {
-			reading++;
+		/* 非制御文字列を処理 */
+		rest = procNCCs(term, reading);
+		if (reading != rest) {
+			memmove(term->readbuf, rest, tail - rest + 1);
+			tail -= rest - term->readbuf;
+			reading = term->readbuf;
 			continue;
 		}
 
-		/* 制御文字 */
-
-		/* ここまでに現れた非制御文字列を処理 */
-		rest = procNCCs(term, term->readbuf, reading);
-		memmove(term->readbuf, rest, tail - rest);
-		tail -= rest - term->readbuf;
-		reading -= rest - term->readbuf;
-
 		/* 制御文字を処理 */
 		rest = procCC(term, reading);
-		memmove(reading, rest, tail - rest);
-		tail -= rest - term->readbuf;
-		reading = term->readbuf;
+		if (reading != rest) {
+			memmove(term->readbuf, rest, tail - rest + 1);
+			tail -= rest - term->readbuf;
+			reading = term->readbuf;
+			continue;
+		}
+
+		reading++;
 	}
-	/* 末尾まで読んだ */
-	rest = procNCCs(term, term->readbuf, reading);
-	memmove(term->readbuf, rest, reading - rest);
-	term->rblen = reading - rest;
+	term->rblen = tail - term->readbuf;
 
 	return size;
 }
 
 char *
-procNCCs(Term *term, char *head, char *tail)
+procNCCs(Term *term, char *head)
 {
 	/*
 	 * headからtailまでのUTF8文字列をデコードしてLineに書き込む
 	 * 変換できなかったバイト列の先頭を指すポインタを返す
 	 */
-	const int len = tail - head + 1;
+	const int len = strlen(head) + 1;
 	char32_t decoded[len];
-	char tmp;
 	char *rest;
 
-	tmp = *tail;
-	*tail = '\0';
-
-	decoded[len] = L'\0';
 	rest = u8sToU32s(decoded, head, len);
 	term->cursor += putU32(getLine(term, 0), term->cursor,
 			decoded, u32slen(decoded));
-
-	*tail = tmp;
 
 	return rest;
 }
@@ -177,7 +174,14 @@ procCC(Term *term, char *head)
 	 * 制御文字を1文字処理する
 	 * 後続のバイト列の先頭を指すポインタを返す
 	 */
+
+	/* 制御文字じゃなかったら何もしない */
+	if (*head < 0 || (31 < *head && *head != 127))
+		return head;
+
 	switch (*head) {
+	case 0:  /* NUL */
+		return head + 1;
 	case 9:  /* HT */
 		term->cursor += 8 - term->cursor % 8;
 		break;

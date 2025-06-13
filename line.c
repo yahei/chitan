@@ -119,24 +119,28 @@ deleteTrail(Line *line)
 char *
 u8sToU32s(char32_t *dst, const char *src, size_t n)
 {
-	const char *rest;
+	const char *rest = src;
 	int bytes;
 
-	for (rest = src; 0 < n;) {
-		switch (bytes = mbtowc((wchar_t *)dst, src, 4)) {
-		case 0:
+	for (;;) {
+		if (n <= 0)
 			return (char *)rest;
-		case -1:
-			src++;
-			continue;
-		default:
-			dst++;
-			src += bytes;
-			n--;
-			rest = src;
-		}
+
+		if ((0 <= *src && *src < 32) || *src == 127)
+			break;
+
+		bytes = mbtowc((wchar_t *)dst, src, 4);
+
+		if (bytes < 0)
+			break;
+
+		dst++;
+		n--;
+		src += bytes;
+		rest = src;
 	}
 
+	*dst = L'\0';
 	return (char *)rest;
 }
 
