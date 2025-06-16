@@ -111,13 +111,6 @@ readPty(Term *term)
 	tail = term->readbuf + term->rblen + size;
 	*(char *)tail = '\0';
 
-	/*
-	 * readしたデータの途中に\0が含まれている場合があり、
-	 * \0は文字列の終わりを意味しないことに注意
-	 * 終了判定はtailの位置まで読んだかどうかで行う必要がある
-	 * tailに\0を置いているのはUTF8をデコードする関数に終端を知らせるため
-	 */
-
 	/* プロセスが終了してる場合など */
 	if (size < 0)
 		return size;
@@ -149,11 +142,6 @@ readPty(Term *term)
 const char *
 procNCCs(Term *term, const char *head)
 {
-	/*
-	 * 制御文字か変換できないバイト列が出てくるまでデコードしてLineに書き込む
-	 * 変換しなかったバイト列の先頭を指すポインタを返す
-	 */
-
 	const int len = strlen(head) + 1;
 	char32_t decoded[len];
 	const char *rest;
@@ -168,17 +156,12 @@ procNCCs(Term *term, const char *head)
 const char *
 procCC(Term *term, const char *head)
 {
-	/*
-	 * 制御文字を1文字処理する
-	 * 後続のバイト列の先頭を指すポインタを返す
-	 */
-
 	if (*head < 0 || (31 < *head && *head != 127))
 		return head;
 
 	switch (*head) {
 	case 0:  /* NUL */
-		return head + 1;
+		break;
 	case 9:  /* HT */
 		term->cursor += 8 - term->cursor % 8;
 		break;

@@ -146,11 +146,10 @@ procXEvent(void)
 		case KeyPress:
 			/* 端末に文字を送る */
 			len = XLookupString(&event.xkey, buf, sizeof(buf), NULL, NULL);
-			printf("(%s)", buf);
-			fflush(stdout);
 			writePty(term, buf, len);
 			break;
 		case Expose:
+			/* 画面を再描画する */
 			redraw();
 			break;
 		}
@@ -165,10 +164,6 @@ redraw(void)
 	int lineh;
 	Line *line;
 	int i;
-
-	/* 端末の内容を自分の標準出力に表示 */
-	for (i = 0; (line = getLine(term, i)); i++)
-		printf("%d|%ls|\n", i, (wchar_t *)line->str);
 
 	/* テキストの高さや横幅を取得 */
 	XftTextExtents32(disp, font, (char32_t *)L"pl", 2, &ginfo);
