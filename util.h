@@ -3,6 +3,7 @@
 
 #define MIN(a,b)        ((a) < (b) ? (a) : (b))
 #define MAX(a,b)        ((a) > (b) ? (a) : (b))
+#define BETWEEN(a,b,c)  ((b) <= (a) && (a) < (c))
 
 void errExit(const char *);
 void fatal(const char *);
