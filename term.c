@@ -169,10 +169,18 @@ procCC(Term *term, const char *head, const char *tail)
 
 	/* C0 基本集合 */
 	switch (*head) {
-	case 0x00:  /* NUL */
+	case 0x00: /* NUL */
 		break;
 
-	case 0x09:  /* HT */
+	case 0x07: /* BEL */
+		fprintf(stdout, "<BELL>\n");
+		break;
+
+	case 0x08: /* BS */
+		term->cursor -= 1;
+		break;
+
+	case 0x09: /* HT */
 		term->cursor += 8 - term->cursor % 8;
 		break;
 
