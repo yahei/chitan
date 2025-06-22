@@ -68,10 +68,9 @@ deleteChars(Line *line, int head, int len)
 }
 
 int
-putU32(Line *line, int col, const char32_t *str, int len)
+eraseInLine(Line *line, int col, int width)
 {
 	const int linelen = u32slen(line->str);
-	const int width = u32swidth(str, len);
 	int head, tail;
 	int lpad, rpad;
 	CharCnt cc;
@@ -99,6 +98,20 @@ putU32(Line *line, int col, const char32_t *str, int len)
 		insertU32(line, head - lpad, (char32_t *)L" ", 1);
 
 	deleteChars(line, head, tail - head);
+
+	return head;
+}
+
+int
+putU32(Line *line, int col, const char32_t *str, int len)
+{
+	const int width = u32swidth(str, len);
+	int head;
+
+	if (col < 0)
+		return 0;
+
+	head = eraseInLine(line, col, width);
 	insertU32(line, head, str, len);
 
 	return width;

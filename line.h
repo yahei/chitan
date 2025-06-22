@@ -16,6 +16,7 @@ Line *allocLine(void);
 void freeLine(Line *);
 void insertU32(Line *, int, const char32_t *, int);
 void deleteChars(Line *, int, int);
+int eraseInLine(Line *, int, int);
 int putU32(Line *, int, const char32_t *, int);
 void deleteTrail(Line *);
 CharCnt getCharCnt(const Line *, int);
