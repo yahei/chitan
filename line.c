@@ -74,19 +74,18 @@ putU32(Line *line, int col, const char32_t *str, int len)
 	const int width = u32swidth(str, len);
 	int head, tail;
 	int lpad, rpad;
+	CharCnt cc;
 
 	if (col < 0)
 		return 0;
 
-	for (head = 0; head < linelen; head++)
-		if (col < u32swidth(line->str, head + 1))
-			break;
-	lpad = col - u32swidth(line->str, head);
+	cc = getCharCnt(line, col);
+	head = MIN(cc.index, linelen);
+	lpad = col - MIN(cc.col, u32swidth(line->str, linelen));
 
-	for (tail = head; tail < linelen; tail++)
-		if (col + width <= u32swidth(line->str, tail))
-			break;
-	rpad = u32swidth(line->str, tail) - (col + width);
+	cc = getCharCnt(line, col + width - 1);
+	tail = MIN(cc.index, linelen) + 1;
+	rpad = (cc.col + cc.width) - (col + width);
 
 	for (; tail < linelen; tail++)
 		if(0 < u32swidth(&line->str[tail], 1))
@@ -114,6 +113,27 @@ deleteTrail(Line *line)
 		if (line->str[i - 1] != L' ')
 			break;
 	line->str[i] = L'\0';
+}
+
+CharCnt
+getCharCnt(const Line *line, int col)
+{
+	const int linelen = u32slen(line->str);
+	int width, total;
+	int i;
+
+	if (col < 0)
+		return (CharCnt){col, col, 1};
+
+	for (i = 0, total = 0; i < linelen; i++) {
+		width = wcwidth(line->str[i]);
+		width = width < 0 ? 2 : width;
+		if (col < total + width)
+			return(CharCnt){i, total, width};
+		total += width;
+	}
+
+	return (CharCnt){linelen + (col - total), col, 1};
 }
 
 const char *
@@ -162,20 +182,4 @@ u32swidth(const char32_t *str, int len)
 	}
 
 	return total;
-}
-
-int
-u32slencol(const char32_t *str, int col)
-{
-	const int linelen = u32slen(str);
-	int len;
-
-	if (col < 0)
-		return -col;
-
-	for (len = 0; len < linelen; len++)
-		if (col < u32swidth(str, len + 1))
-			return len;
-
-	return linelen + col - u32swidth(str, linelen);
 }

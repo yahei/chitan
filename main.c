@@ -163,6 +163,7 @@ redraw(void)
 	XWindowAttributes wattr;
 	int lineh;
 	Line *line;
+	int index;
 	int i;
 
 	/* テキストの高さや横幅を取得 */
@@ -170,7 +171,8 @@ redraw(void)
 	lineh = ginfo.height * 1.25;
 
 	line = getLine(term, 0);
-	XftTextExtents32(disp, font, line->str, term->cursor, &ginfo);
+	index = getCharCnt(line, term->cursor).index;
+	XftTextExtents32(disp, font, line->str, index, &ginfo);
 
 	/* 画面をクリア */
 	XGetWindowAttributes(disp, win->window, &wattr);
