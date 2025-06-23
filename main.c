@@ -170,8 +170,8 @@ redraw(void)
 	XftTextExtents32(disp, font, (char32_t *)L"pl", 2, &ginfo);
 	lineh = ginfo.height * 1.25;
 
-	line = getLine(term, 0);
-	index = getCharCnt(line, term->cursor).index;
+	line = getLine(term, term->cy);
+	index = getCharCnt(line, term->cx).index;
 	XftTextExtents32(disp, font, line->str, index, &ginfo);
 
 	/* 画面をクリア */
@@ -181,12 +181,12 @@ redraw(void)
 	/* 端末の内容をウィンドウに表示 */
 	for (i = 0; (line = getLine(term, i)); i++)
 		XftDrawString32(win->draw, &color, font, 10,
-				(wattr.height / lineh - i) * lineh,
+				(i + 1) * lineh,
 				line->str, u32slen(line->str));
 
 	/* カーソルを描く */
 	int x = ginfo.xOff + 10;
-	int y = (wattr.height / lineh - 1) * lineh;
+	int y = term->cy * lineh;
 	XDrawRectangle(disp, win->window, win->gc, x, y + lineh/4, lineh/2, lineh);
 
 	XFlush(disp);

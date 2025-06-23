@@ -33,7 +33,7 @@ openTerm(void)
 
 	/* 構造体の初期化 */
 	term = xmalloc(sizeof(Term));
-	*term = (Term){ -1, NULL, 16, 0, 0, NULL, 0};
+	*term = (Term){ -1, NULL, 32, 0, 0, 0, 24, NULL, 0};
 
 	term->lines = xmalloc(term->maxlines * sizeof(Line *));
 	for (i = 0; i < term->maxlines; i++)
@@ -155,7 +155,7 @@ procNCCs(Term *term, const char *head)
 	const char *rest;
 
 	rest = u8sToU32s(decoded, head, len);
-	term->cursor += putU32(getLine(term, 0), term->cursor,
+	term->cx += putU32(getLine(term, term->cy), term->cx,
 			decoded, u32slen(decoded));
 
 	return rest;
@@ -177,21 +177,28 @@ procCC(Term *term, const char *head, const char *tail)
 		break;
 
 	case 0x08: /* BS */
-		term->cursor -= 1;
+		term->cx -= 1;
 		break;
 
 	case 0x09: /* HT */
-		term->cursor += 8 - term->cursor % 8;
+		term->cx += 8 - term->cx % 8;
 		break;
 
 	case 0x0a: /* LF */
-		deleteTrail(getLine(term, 0));
+		if (getLine(term, term->cy + 1)) {
+			term->cy++;
+			break;
+		}
+		
+		if (term->cy < term->rows - 1)
+			term->cy++;
+
 		term->lastline++;
-		putU32(getLine(term, 0), 0, (char32_t *)L"\0", 1);
+		putU32(getLine(term, term->cy), 0, (char32_t *)L"\0", 1);
 		break;
 
 	case 0x0d: /* CR */
-		term->cursor = 0;
+		term->cx = 0;
 		break;
 
 	case 0x1b: /* ESC */
@@ -341,12 +348,13 @@ writePty(Term *term, const char *buf, ssize_t n)
 }
 
 Line *
-getLine(Term *term, unsigned int index)
+getLine(Term *term, int row)
 {
-	if (term->maxlines <= index)
-		return NULL;
-	if (term->lastline < index)
+	int index = MAX(term->lastline - (term->rows - 1), 0) + row;
+
+	if (index < 0 || index < term->lastline - (term->maxlines - 1) || 
+			term->lastline < index)
 		return NULL;
 
-	return term->lines[(term->lastline - index) % term->maxlines];
+	return term->lines[index % term->maxlines];
 }
