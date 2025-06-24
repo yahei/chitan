@@ -33,7 +33,7 @@ openTerm(void)
 
 	/* 構造体の初期化 */
 	term = xmalloc(sizeof(Term));
-	*term = (Term){ -1, NULL, 32, 0, 0, 0, 24, NULL, 0};
+	*term = (Term){ -1, NULL, 32, 24, 0, 0, 24, NULL, 0};
 
 	term->lines = xmalloc(term->maxlines * sizeof(Line *));
 	for (i = 0; i < term->maxlines; i++)
@@ -185,14 +185,10 @@ procCC(Term *term, const char *head, const char *tail)
 		break;
 
 	case 0x0a: /* LF */
-		if (getLine(term, term->cy + 1)) {
+		if (term->cy < term->rows - 1) {
 			term->cy++;
 			break;
 		}
-		
-		if (term->cy < term->rows - 1)
-			term->cy++;
-
 		term->lastline++;
 		putU32(getLine(term, term->cy), 0, (char32_t *)L"\0", 1);
 		break;
@@ -350,10 +346,10 @@ writePty(Term *term, const char *buf, ssize_t n)
 Line *
 getLine(Term *term, int row)
 {
-	int index = MAX(term->lastline - (term->rows - 1), 0) + row;
+	int index = term->lastline - (term->rows - 1) + row;
+	int oldest = term->lastline - (term->maxlines - 1);
 
-	if (index < 0 || index < term->lastline - (term->maxlines - 1) || 
-			term->lastline < index)
+	if (index < 0 || index < oldest || term->lastline < index)
 		return NULL;
 
 	return term->lines[index % term->maxlines];
