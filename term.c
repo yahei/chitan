@@ -251,7 +251,7 @@ procCSI(Term *term, const char *head, const char *tail)
 	char inter[tail - head + 1], *pi;
 	char *str1, *str2;
 	Line *line;
-	int i;
+	int i, begin, end;
 
 	/* パラメタバイト */
 	for (pp = param; BETWEEN(*head, 0x30, 0x40); head++) {
@@ -283,12 +283,36 @@ procCSI(Term *term, const char *head, const char *tail)
 		}
 		break;
 
+	case 0x4a: /* ED ページ内消去 */
+		line = getLine(term, term->cy);
+		switch (*param) {
+		default:
+		case '0':
+			putU32(line, term->cx, (char32_t *)L"\0", 1);
+			begin = term->cy + 1;
+			end = term->rows;
+			break;
+		case '1':
+			begin = 0;
+			end = term->cy;
+			for (i = 0; i <= term->cx; i++)
+				putU32(line, i, (char32_t *)L" ", 1);
+			break;
+		case '2':
+			begin = 0;
+			end = term->rows;
+			break;
+		}
+		for (i = begin; i < end; i++)
+			putU32(getLine(term, i), 0, (char32_t *)L"\0", 1);
+		break;
+
 	case 0x4b: /* EL 行内消去 */
 		line = getLine(term, term->cy);
 		switch (*param) {
 		default:
 		case '0':
-			eraseInLine(line, term->cx, 2<<16);
+			putU32(line, term->cx, (char32_t *)L"\0", 1);
 			break;
 		case '1':
 			for (i = 0; i <= term->cx; i++)
