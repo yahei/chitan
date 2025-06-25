@@ -74,6 +74,7 @@ eraseInLine(Line *line, int col, int width)
 	int head, tail;
 	int lpad, rpad;
 	CharCnt cc;
+	int i;
 
 	if (col < 0)
 		return 0;
@@ -90,16 +91,12 @@ eraseInLine(Line *line, int col, int width)
 		if(0 < u32swidth(&line->str[tail], 1))
 			break;
 
-	head += lpad;
-	tail += lpad;
-	for (; 0 < rpad; rpad--)
-		insertU32(line, tail - lpad, (char32_t *)L" ", 1);
-	for (; 0 < lpad; lpad--)
-		insertU32(line, head - lpad, (char32_t *)L" ", 1);
-
 	deleteChars(line, head, tail - head);
 
-	return head;
+	for (i = 0; i < rpad + lpad; i++)
+		insertU32(line, head, (char32_t *)L" ", 1);
+
+	return head + lpad;
 }
 
 int
