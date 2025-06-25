@@ -249,6 +249,7 @@ procCSI(Term *term, const char *head, const char *tail)
 {
 	char param[tail - head + 1], *pp;
 	char inter[tail - head + 1], *pi;
+	char *str1, *str2;
 	Line *line;
 	int i;
 
@@ -273,6 +274,15 @@ procCSI(Term *term, const char *head, const char *tail)
 
 	/* 終端バイト */
 	switch (*head) {
+	case 0x48: /* CUP カーソル位置決め */
+		str1 = strtok(param, ";");
+		str2 = strtok(NULL, ";");
+		if (str1 && str2) {
+			term->cy = atoi(str1) - 1;
+			term->cx = atoi(str2) - 1;
+		}
+		break;
+
 	case 0x4b: /* EL 行内消去 */
 		line = getLine(term, term->cy);
 		switch (*param) {
