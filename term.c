@@ -249,6 +249,8 @@ procCSI(Term *term, const char *head, const char *tail)
 {
 	char param[tail - head + 1], *pp;
 	char inter[tail - head + 1], *pi;
+	Line *line;
+	int i;
 
 	/* パラメタバイト */
 	for (pp = param; BETWEEN(*head, 0x30, 0x40); head++) {
@@ -271,6 +273,23 @@ procCSI(Term *term, const char *head, const char *tail)
 
 	/* 終端バイト */
 	switch (*head) {
+	case 0x4b: /* EL 行内消去 */
+		line = getLine(term, term->cy);
+		switch (*param) {
+		default:
+		case '0':
+			eraseInLine(line, term->cx, 2<<16);
+			break;
+		case '1':
+			for (i = 0; i <= term->cx; i++)
+				putU32(line, i, (char32_t *)L" ", 1);
+			break;
+		case '2':
+			putU32(line, 0, (char32_t *)L"\0", 1);
+			break;
+		}
+		break;
+
 	default: /* 未対応 */
 		if (BETWEEN(*head, 0x40, 0x7f))
 			fprintf(stderr, "Not Supported CSI: CSI(%s)%s%c\n",
