@@ -12,6 +12,7 @@ typedef struct Term {
 	int rblen;      /* リードバッファに残っている文字の数 */
 	char opt[8];    /* オプション */
 	char dec[1100]; /* 拡張オプション */
+	int scrs, scre; /* スクロール範囲 */
 } Term;
 
 Term *openTerm(void);

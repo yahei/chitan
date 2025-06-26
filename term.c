@@ -35,7 +35,7 @@ openTerm(void)
 
 	/* 構造体の初期化 */
 	term = xmalloc(sizeof(Term));
-	*term = (Term){ -1, NULL, 32, 24, 0, 0, 24, NULL, 0, {0}, {0}};
+	*term = (Term){ -1, NULL, 32, 24, 0, 0, 24, NULL, 0, {0}, {0}, 0, 23};
 
 	term->lines = xmalloc(term->maxlines * sizeof(Line *));
 	for (i = 0; i < term->maxlines; i++)
@@ -338,6 +338,18 @@ procCSI(Term *term, const char *head, const char *tail)
 			decset(term, atoi(param + 1), 0);
 		else
 			optset(term, atoi(param), 0);
+		break;
+
+	case 0x72: /* DECSTBM スクロール範囲設定 */
+		str1 = strtok(param, ";");
+		str2 = strtok(NULL, ";");
+		if (str1 && str2) {
+			term->scrs = atoi(str1) - 1;
+			term->scre = atoi(str2) - 1;
+		} else {
+			term->scrs = 0;
+			term->scre = term->rows - 1;
+		}
 		break;
 
 	default: /* 未対応 */
