@@ -22,6 +22,7 @@ static const char *procESC(Term *, const char *, const char *);
 static const char *procCSI(Term *, const char *, const char *);
 static const char *procCStr(Term *, const char *, const char *);
 static const char *procSOS(Term *, const char *, const char *);
+void areaScroll(Term *, int, int, int);
 void optset(Term *, unsigned int, int);
 void decset(Term *, unsigned int, int);
 
@@ -187,8 +188,12 @@ procCC(Term *term, const char *head, const char *tail)
 		break;
 
 	case 0x0a: /* LF */
-		if (term->cy < term->rows - 1) {
+		if (term->cy < term->scre) {
 			term->cy++;
+			break;
+		}
+		if (0 < term->scrs || term->scre < term->rows - 1) {
+			areaScroll(term, term->scrs, term->scre, 1);
 			break;
 		}
 		term->lastline++;
@@ -326,6 +331,14 @@ procCSI(Term *term, const char *head, const char *tail)
 		}
 		break;
 
+	case 0x4c: /* IL 行挿入 */
+		areaScroll(term, term->cy, term->scre, -MAX(atoi(param), 1));
+		break;
+
+	case 0x4d: /* DL 行削除 */
+		areaScroll(term, term->cy, term->scre, MAX(atoi(param), 1));
+		break;
+
 	case 0x68: /* SM DECSET オプション設定 */
 		if (*param == '?')
 			decset(term, atoi(param + 1), 1);
@@ -343,7 +356,7 @@ procCSI(Term *term, const char *head, const char *tail)
 	case 0x72: /* DECSTBM スクロール範囲設定 */
 		str1 = strtok(param, ";");
 		str2 = strtok(NULL, ";");
-		if (str1 && str2) {
+		if (str1 && str2 && atoi(str1) <= atoi(str2)) {
 			term->scrs = atoi(str1) - 1;
 			term->scre = atoi(str2) - 1;
 		} else {
@@ -414,6 +427,33 @@ procCStr(Term *term, const char *head, const char *tail)
 	fprintf(stderr, "\n");
 
 	return ps + 1;
+}
+
+void
+areaScroll(Term *term, int first, int last, int num)
+{
+	int area = last - first + 1;
+	Line *tmp[area];
+	int index;
+	int i;
+
+	for (i = 0; i < area; i++) {
+		index = term->lastline - (term->rows - 1) + first + i;
+		tmp[i] = term->lines[index % term->maxlines];
+	}
+
+	for (i = 0; i < area; i++) {
+		index = term->lastline - (term->rows - 1) + first + i;
+
+		if (i - num < 0 || area <= i - num)
+			freeLine(term->lines[index % term->maxlines]);
+
+		if (0 <= num + i && num + i < area)
+			term->lines[index % term->maxlines] = tmp[num + i];
+
+		if (i + num < 0 || area <= i + num)
+			term->lines[index % term->maxlines] = allocLine();
+	}
 }
 
 void
