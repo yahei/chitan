@@ -22,6 +22,8 @@ static const char *procESC(Term *, const char *, const char *);
 static const char *procCSI(Term *, const char *, const char *);
 static const char *procCStr(Term *, const char *, const char *);
 static const char *procSOS(Term *, const char *, const char *);
+void optset(Term *, unsigned int, int);
+void decset(Term *, unsigned int, int);
 
 Term *
 openTerm(void)
@@ -33,7 +35,7 @@ openTerm(void)
 
 	/* 構造体の初期化 */
 	term = xmalloc(sizeof(Term));
-	*term = (Term){ -1, NULL, 32, 24, 0, 0, 24, NULL, 0};
+	*term = (Term){ -1, NULL, 32, 24, 0, 0, 24, NULL, 0, {0}, {0}};
 
 	term->lines = xmalloc(term->maxlines * sizeof(Line *));
 	for (i = 0; i < term->maxlines; i++)
@@ -324,6 +326,20 @@ procCSI(Term *term, const char *head, const char *tail)
 		}
 		break;
 
+	case 0x68: /* SM DECSET オプション設定 */
+		if (*param == '?')
+			decset(term, atoi(param + 1), 1);
+		else
+			optset(term, atoi(param), 1);
+		break;
+
+	case 0x6c: /* RM DECRST オプション解除 */
+		if (*param == '?')
+			decset(term, atoi(param + 1), 0);
+		else
+			optset(term, atoi(param), 0);
+		break;
+
 	default: /* 未対応 */
 		if (BETWEEN(*head, 0x40, 0x7f))
 			fprintf(stderr, "Not Supported CSI: CSI(%s)%s%c\n",
@@ -386,6 +402,34 @@ procCStr(Term *term, const char *head, const char *tail)
 	fprintf(stderr, "\n");
 
 	return ps + 1;
+}
+
+void
+optset(Term *term, unsigned int num, int flag)
+{
+	if (sizeof(term->opt) * 8 <= num) {
+		fprintf(stderr, "Option: %d\n", num);
+		return;
+	}
+
+	if (flag)
+		term->opt[num / 8] |=  1 << (num % 8);
+	else
+		term->opt[num / 8] &= ~1 << (num % 8);
+}
+
+void
+decset(Term *term, unsigned int num, int flag)
+{
+	if (sizeof(term->dec) * 8 <= num) {
+		fprintf(stderr, "DEC Option: %d\n", num);
+		return;
+	}
+
+	if (flag)
+		term->dec[num / 8] |=  1 << (num % 8);
+	else
+		term->dec[num / 8] &= ~1 << (num % 8);
 }
 
 ssize_t

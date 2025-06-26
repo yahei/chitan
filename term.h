@@ -10,6 +10,8 @@ typedef struct Term {
 	int rows;       /* 画面の列数 */
 	char *readbuf;  /* 可変長リードバッファ */
 	int rblen;      /* リードバッファに残っている文字の数 */
+	char opt[8];    /* オプション */
+	char dec[1100]; /* 拡張オプション */
 } Term;
 
 Term *openTerm(void);
