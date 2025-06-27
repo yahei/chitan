@@ -281,6 +281,22 @@ procCSI(Term *term, const char *head, const char *tail)
 
 	/* 終端バイト */
 	switch (*head) {
+	case 0x41: /* CUU */
+		term->cy = MAX(term->cy - atoi(param), term->scrs);
+		break;
+
+	case 0x42: /* CUD */
+		term->cy = MIN(term->cy + atoi(param), term->scre);
+		break;
+
+	case 0x43: /* CUF */
+		term->cx = MIN(term->cx + atoi(param), 80);
+		break;
+
+	case 0x44: /* CUB */
+		term->cx = MAX(term->cx - atoi(param), 0);
+		break;
+
 	case 0x48: /* CUP カーソル位置決め */
 		str1 = strtok(param, ";");
 		str2 = strtok(NULL, ";");
