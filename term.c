@@ -429,7 +429,8 @@ procCStr(Term *term, const char *head, const char *tail)
 			return NULL;
 
 		/* 指令列に使えない文字が出たら終了 */
-		if (!BETWEEN(*ps, 0x20, 0x7f))
+		if (!BETWEEN(*ps, 0x08, 0x0e) && !BETWEEN(*ps, 0x20, 0x7f)
+				&& *ps != 0x1b)
 			break;
 	}
 
@@ -520,3 +521,4 @@ getLine(Term *term, int row)
 
 	return LINE(term, index);
 }
+
