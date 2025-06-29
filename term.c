@@ -15,6 +15,7 @@
  */
 
 #define READ_SIZE 16
+#define LINE(a,b)    (a->lines[b % a->maxlines])
 
 static const char *procNCCs(Term *, const char *);
 static const char *procCC(Term *, const char *, const char *);
@@ -455,20 +456,20 @@ areaScroll(Term *term, int first, int last, int num)
 
 	for (i = 0; i < area; i++) {
 		index = term->lastline - (term->rows - 1) + first + i;
-		tmp[i] = term->lines[index % term->maxlines];
+		tmp[i] = LINE(term, index);
 	}
 
 	for (i = 0; i < area; i++) {
 		index = term->lastline - (term->rows - 1) + first + i;
 
 		if (i - num < 0 || area <= i - num)
-			freeLine(term->lines[index % term->maxlines]);
+			freeLine(LINE(term, index));
 
 		if (0 <= num + i && num + i < area)
-			term->lines[index % term->maxlines] = tmp[num + i];
+			LINE(term, index) = tmp[num + i];
 
 		if (i + num < 0 || area <= i + num)
-			term->lines[index % term->maxlines] = allocLine();
+			LINE(term, index) = allocLine();
 	}
 }
 
@@ -517,5 +518,5 @@ getLine(Term *term, int row)
 	if (index < 0 || index < oldest || term->lastline < index)
 		return NULL;
 
-	return term->lines[index % term->maxlines];
+	return LINE(term, index);
 }
