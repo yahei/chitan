@@ -58,8 +58,8 @@ init(void)
 	FcInit();
 	font = XftFontOpen(
 			disp, 0,
-			XFT_FAMILY, XftTypeString, "Noto Serif CJK JP",
-			XFT_SIZE, XftTypeDouble, 12.0,
+			XFT_FAMILY, XftTypeString, "monospace",
+			XFT_SIZE, XftTypeDouble, 11.5,
 			NULL);
 	if (font == NULL)
 		fatal("XftFontOpen failed.\n");
@@ -90,7 +90,7 @@ run(void)
 		FD_SET(xfd, &rfds);
 		timeout.tv_sec = 0;
 		timeout.tv_nsec = 0;
-		ptimeout = (0 < timeout.tv_nsec || 0 < timeout.tv_nsec) ?
+		ptimeout = (0 < timeout.tv_sec || 0 < timeout.tv_nsec) ?
 			&timeout : NULL;
 
 		if (pselect(MAX(tfd, xfd) + 1, &rfds, NULL, NULL, ptimeout, NULL) < 0) {

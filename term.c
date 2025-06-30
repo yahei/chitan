@@ -14,8 +14,8 @@
  * 疑似端末とログを管理する
  */
 
-#define READ_SIZE 16
-#define LINE(a,b)    (a->lines[b % a->maxlines])
+#define READ_SIZE       16
+#define LINE(a,b)       (a->lines[b % a->maxlines])
 
 static const char *procNCCs(Term *, const char *);
 static const char *procCC(Term *, const char *, const char *);
@@ -69,6 +69,7 @@ openTerm(void)
 		dup2(slave, 0);
 		dup2(slave, 1);
 		dup2(slave, 2);
+		setenv("TERM", "st-256color", 1);
 		if (setsid() < 0)
 			fatal("setsid failed.\n");
 		if (execlp("sh", "sh", NULL) < 0)
@@ -241,7 +242,7 @@ procESC(Term *term, const char *head, const char *tail)
 		 * 0x20-0x2f   nF型
 		 * 0x30-0x3f   Fp/3Fp型 私用制御機能
 		 * 0x40-0x5f   Fe型     C1 補助集合
-		 * 0x60-0x7e   Fs型     標準単独制御機能 (standardのs?)
+		 * 0x60-0x7e   Fs型     標準単独制御機能
 		 */
 		if (BETWEEN(*head, 0x20, 0x7f))
 			fprintf(stderr, "Not Supported ESC Seq: ESC %c\n", *head);
