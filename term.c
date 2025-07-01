@@ -1,3 +1,4 @@
+#include <sys/ioctl.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
@@ -37,7 +38,7 @@ openTerm(void)
 
 	/* 構造体の初期化 */
 	term = xmalloc(sizeof(Term));
-	*term = (Term){ -1, NULL, 32, 24, 0, 0, 24, NULL, 0, {0}, {0}, 0, 23};
+	*term = (Term){ -1, NULL, 99, 24, 0, 0, 24, NULL, 0, {0}, {0}, 0, 23};
 
 	term->lines = xmalloc(term->maxlines * sizeof(Line *));
 	for (i = 0; i < term->maxlines; i++)
@@ -303,7 +304,7 @@ procCSI(Term *term, const char *head, const char *tail)
 		str1 = strtok(param, ";");
 		str2 = strtok(NULL, ";");
 		if (str1 && str2) {
-			term->cy = atoi(str1) - 1;
+			term->cy = MIN(atoi(str1), term->rows) - 1;
 			term->cx = atoi(str2) - 1;
 		}
 		break;
@@ -523,3 +524,36 @@ getLine(Term *term, int row)
 	return LINE(term, index);
 }
 
+void
+setWinSize(Term *term, int row, int col, int xpixel, int ypixel)
+{
+	struct winsize ws;
+
+	row = MIN(row, term->maxlines);
+	row = MAX(row, 1);
+	col = MAX(col, 1);
+	ws = (struct winsize){row, col, xpixel, ypixel};
+
+	term->cx = MIN(term->cx, col - 1);
+
+	while (term->rows < row) {
+		term->rows++;
+		if (term->rows - 1 < term->lastline)
+			term->cy++;
+		else
+			putU32(LINE(term, term->lastline++), 0,
+					(char32_t *)L"\0", 1);
+	}
+	while (row < term->rows) {
+		term->rows--;
+		if (term->rows - 1 < term->cy ||
+				LINE(term, term->lastline)->str[0] != L'\0')
+			term->cy = MAX(term->cy - 1, 0);
+		else
+			term->lastline--;
+	}
+	term->scrs = 0;
+	term->scre = row - 1;
+
+	ioctl(term->master, TIOCSWINSZ, &ws);
+}

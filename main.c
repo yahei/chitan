@@ -23,6 +23,7 @@ XftFont *font;
 XftColor color;
 Win *win;
 Term *term;
+int charx, chary;
 
 static void init(void);
 static void run(void);
@@ -44,6 +45,8 @@ main(int argc, char *args[])
 void
 init(void)
 {
+	XGlyphInfo ginfo;
+
 	/* localeを設定 */
 	setlocale(LC_CTYPE, "");
 
@@ -66,6 +69,11 @@ init(void)
 	if (XftColorAllocName(disp, visual, cmap, "black", &color) == 0)
 		fatal("XftColorAllocName failed.\n");
 	
+	/* テキストの高さや横幅を取得 */
+	XftTextExtents32(disp, font, (char32_t *)L"plmM", 4, &ginfo);
+	chary = ginfo.height * 1.25;
+	charx = ginfo.width / 4;
+
 	/* 端末をオープン */
 	term = openTerm();
 	if (!term)
@@ -137,6 +145,7 @@ void
 procXEvent(void)
 {
 	XEvent event;
+	XConfigureEvent *e;
 	char buf[256];
 	int len;
 
@@ -152,6 +161,13 @@ procXEvent(void)
 			/* 画面を再描画する */
 			redraw();
 			break;
+		case ConfigureNotify:
+			/* ウィンドウサイズ変更 */
+			e = (XConfigureEvent *)&event;
+			setWinSize(term, (e->height - 10) / chary,
+					(e->width - 20) / charx,
+					e->width, e->height);
+			break;
 		}
 	}
 }
@@ -161,15 +177,11 @@ redraw(void)
 {
 	XGlyphInfo ginfo;
 	XWindowAttributes wattr;
-	int lineh;
 	Line *line;
 	int index;
 	int i;
 
-	/* テキストの高さや横幅を取得 */
-	XftTextExtents32(disp, font, (char32_t *)L"pl", 2, &ginfo);
-	lineh = ginfo.height * 1.25;
-
+	/* カーソルの位置を取得 */
 	line = getLine(term, term->cy);
 	index = getCharCnt(line, term->cx).index;
 	XftTextExtents32(disp, font, line->str, index, &ginfo);
@@ -181,13 +193,13 @@ redraw(void)
 	/* 端末の内容をウィンドウに表示 */
 	for (i = 0; (line = getLine(term, i)); i++)
 		XftDrawString32(win->draw, &color, font, 10,
-				(i + 1) * lineh,
+				(i + 1) * chary,
 				line->str, u32slen(line->str));
 
 	/* カーソルを描く */
 	int x = ginfo.xOff + 10;
-	int y = term->cy * lineh;
-	XDrawRectangle(disp, win->window, win->gc, x, y + lineh/4, lineh/2, lineh);
+	int y = term->cy * chary;
+	XDrawRectangle(disp, win->window, win->gc, x, y + chary/4, charx, chary);
 
 	XFlush(disp);
 }
@@ -206,7 +218,8 @@ openWindow(void)
 			WhitePixel(disp, 0));
 
 	/* イベントマスク */
-	XSelectInput(disp, win->window, ExposureMask | KeyPressMask);
+	XSelectInput(disp, win->window,
+			ExposureMask | KeyPressMask | StructureNotifyMask);
 
 	/* 描画の準備 */
 	win->gc = XCreateGC(disp, win->window, 0, NULL);

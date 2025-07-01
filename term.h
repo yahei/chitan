@@ -20,3 +20,4 @@ void closeTerm(Term *);
 ssize_t readPty(Term *);
 ssize_t writePty(Term *, const char *, ssize_t);
 Line *getLine(Term *, int);
+void setWinSize(Term *, int, int, int, int);
