@@ -38,7 +38,7 @@ openTerm(void)
 
 	/* 構造体の初期化 */
 	term = xmalloc(sizeof(Term));
-	*term = (Term){ -1, NULL, 99, 24, 0, 0, 24, NULL, 0, {0}, {0}, 0, 23};
+	*term = (Term){ -1, NULL, 99, 24, 0, 0, 24, 80, NULL, 0, {0}, {0}, 0, 23};
 
 	term->lines = xmalloc(term->maxlines * sizeof(Line *));
 	for (i = 0; i < term->maxlines; i++)
@@ -293,7 +293,7 @@ procCSI(Term *term, const char *head, const char *tail)
 		break;
 
 	case 0x43: /* CUF */
-		term->cx = MIN(term->cx + atoi(param), 80);
+		term->cx = MIN(term->cx + atoi(param), term->cols - 1);
 		break;
 
 	case 0x44: /* CUB */
@@ -305,7 +305,7 @@ procCSI(Term *term, const char *head, const char *tail)
 		str2 = strtok(NULL, ";");
 		if (str1 && str2) {
 			term->cy = MIN(atoi(str1), term->rows) - 1;
-			term->cx = atoi(str2) - 1;
+			term->cx = MIN(atoi(str2), term->cols) - 1;
 		}
 		break;
 
@@ -376,8 +376,8 @@ procCSI(Term *term, const char *head, const char *tail)
 		str1 = strtok(param, ";");
 		str2 = strtok(NULL, ";");
 		if (str1 && str2 && atoi(str1) <= atoi(str2)) {
-			term->scrs = atoi(str1) - 1;
-			term->scre = atoi(str2) - 1;
+			term->scrs = MIN(atoi(str1), term->rows) - 1;
+			term->scre = MIN(atoi(str2), term->rows) - 1;
 		} else {
 			term->scrs = 0;
 			term->scre = term->rows - 1;
@@ -535,6 +535,7 @@ setWinSize(Term *term, int row, int col, int xpixel, int ypixel)
 	ws = (struct winsize){row, col, xpixel, ypixel};
 
 	term->cx = MIN(term->cx, col - 1);
+	term->cols = col;
 
 	while (term->rows < row) {
 		term->rows++;
