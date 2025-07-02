@@ -70,6 +70,7 @@ openTerm(void)
 		dup2(slave, 0);
 		dup2(slave, 1);
 		dup2(slave, 2);
+		close(slave);
 		setenv("TERM", "st-256color", 1);
 		if (setsid() < 0)
 			fatal("setsid failed.\n");
