@@ -22,6 +22,7 @@ Colormap cmap;
 XftFont *font;
 XftColor color;
 Win *win;
+XClassHint *hint;
 Term *term;
 int charx, chary;
 
@@ -80,6 +81,7 @@ init(void)
 		errExit("newTerm failed.\n");
 	
 	/* ウィンドウの作成 */
+	hint = XAllocClassHint();
 	win = openWindow();
 }
 
@@ -131,6 +133,8 @@ run(void)
 void
 fin(void)
 {
+	XFree(hint);
+	hint = NULL;
 	closeWindow(win);
 	win = NULL;
 	closeTerm(term);
@@ -216,6 +220,11 @@ openWindow(void)
 			10, 10, 800, 600, 1,
 			BlackPixel(disp, 0),
 			WhitePixel(disp, 0));
+
+	/* プロパティ */
+	hint->res_name = "minty";
+	hint->res_class = "minty";
+	XSetClassHint(disp, win->window, hint);
 
 	/* イベントマスク */
 	XSelectInput(disp, win->window,
