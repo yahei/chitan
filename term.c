@@ -160,10 +160,11 @@ procNCCs(Term *term, const char *head)
 	const int len = strlen(head) + 1;
 	char32_t decoded[len];
 	const char *rest;
+	Line *line;
 
 	rest = u8sToU32s(decoded, head, len);
-	term->cx += putU32(getLine(term, term->cy), term->cx,
-			decoded, u32slen(decoded));
+	if ((line = getLine(term, term->cy)))
+		term->cx += putU32(line, term->cx, decoded, u32slen(decoded));
 
 	return rest;
 }
@@ -171,6 +172,8 @@ procNCCs(Term *term, const char *head)
 const char *
 procCC(Term *term, const char *head, const char *tail)
 {
+	Line *line;
+
 	if (!BETWEEN(*head, 0x00, 0x20) && *head != 0x7f)
 		return head;
 
@@ -194,14 +197,13 @@ procCC(Term *term, const char *head, const char *tail)
 	case 0x0a: /* LF */
 		if (term->cy < term->scre) {
 			term->cy++;
-			break;
-		}
-		if (0 < term->scrs || term->scre < term->rows - 1) {
+		} else if (0 < term->scrs || term->scre < term->rows - 1) {
 			areaScroll(term, term->scrs, term->scre, 1);
-			break;
+		} else {
+			term->lastline++;
+			if ((line = getLine(term, term->cy)))
+				putU32(line, 0, (char32_t *)L"\0", 1);
 		}
-		term->lastline++;
-		putU32(getLine(term, term->cy), 0, (char32_t *)L"\0", 1);
 		break;
 
 	case 0x0d: /* CR */
@@ -311,7 +313,8 @@ procCSI(Term *term, const char *head, const char *tail)
 		break;
 
 	case 0x4a: /* ED ページ内消去 */
-		line = getLine(term, term->cy);
+		if (!(line = getLine(term, term->cy)))
+			break;
 		switch (*param) {
 		default:
 		case '0':
@@ -335,7 +338,8 @@ procCSI(Term *term, const char *head, const char *tail)
 		break;
 
 	case 0x4b: /* EL 行内消去 */
-		line = getLine(term, term->cy);
+		if (!(line = getLine(term, term->cy)))
+			break;
 		switch (*param) {
 		default:
 		case '0':
@@ -457,6 +461,9 @@ areaScroll(Term *term, int first, int last, int num)
 	Line *tmp[area];
 	int index;
 	int i;
+
+	if (!(0 < first && first <= last && last < term->rows))
+		return;
 
 	for (i = 0; i < area; i++) {
 		index = term->lastline - (term->rows - 1) + first + i;
