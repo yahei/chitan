@@ -27,6 +27,7 @@ static const char *procSOS(Term *, const char *, const char *);
 void areaScroll(Term *, int, int, int);
 void optset(Term *, unsigned int, int);
 void decset(Term *, unsigned int, int);
+void setScrBufSize(Term *term, int, int);
 
 Term *
 openTerm(void)
@@ -40,20 +41,26 @@ openTerm(void)
 	term = xmalloc(sizeof(Term));
 	*term = (Term){
 		.master = -1,
-		.lines = NULL,
-		.maxlines = 256,
-		.lastline = 24,
-		.cx = 0, .cy = 0,
-		.rows = 24, .cols = 80,
+		.ori = {}, .alt = {}, .sb = NULL,
+		.cx = 0, .cy = 0, .svx = 0, .svy = 0,
 		.readbuf = NULL,
 		.rblen = 0,
 		.opt = {0}, .dec = {0},
-		.scrs = 0, .scre = 23
 	};
 
-	term->lines = xmalloc(term->maxlines * sizeof(Line *));
-	for (i = 0; i < term->maxlines; i++)
-		term->lines[i] = allocLine();
+	term->ori = term->alt = (struct ScreenBuffer){
+		.lastline = 24,
+		.maxlines = 256,
+		.rows = 24, .cols = 80,
+		.scrs = 0, .scre = 23,
+	};
+	term->ori.lines = xmalloc(term->ori.maxlines * sizeof(Line *));
+	term->alt.lines = xmalloc(term->alt.maxlines * sizeof(Line *));
+	term->sb = &term->ori;
+	for (i = 0; i < term->ori.maxlines; i++)
+		term->ori.lines[i] = allocLine();
+	for (i = 0; i < term->alt.maxlines; i++)
+		term->alt.lines[i] = allocLine();
 
 	term->readbuf = xmalloc(1);
 	term->readbuf[0] = '\0';
@@ -110,10 +117,13 @@ closeTerm(Term *term)
 	if (0 <= term->master)
 		close(term->master);
 
-	for (i = 0; i < term->maxlines; i++)
-		freeLine(term->lines[i]);
+	for (i = 0; i < term->sb->maxlines; i++) {
+		freeLine(term->ori.lines[i]);
+		freeLine(term->alt.lines[i]);
+	}
 
-	free(term->lines);
+	free(term->ori.lines);
+	free(term->alt.lines);
 	free(term->readbuf);
 	free(term);
 }
@@ -177,6 +187,7 @@ procNCCs(Term *term, const char *head)
 const char *
 procCC(Term *term, const char *head, const char *tail)
 {
+	struct ScreenBuffer *sb = term->sb;
 	Line *line;
 
 	if (!BETWEEN(*head, 0x00, 0x20) && *head != 0x7f)
@@ -200,12 +211,12 @@ procCC(Term *term, const char *head, const char *tail)
 		break;
 
 	case 0x0a: /* LF */
-		if (term->cy < term->scre) {
+		if (term->cy < sb->scre) {
 			term->cy++;
-		} else if (0 < term->scrs || term->scre < term->rows - 1) {
-			areaScroll(term, term->scrs, term->scre, 1);
+		} else if (0 < sb->scrs || sb->scre < sb->rows - 1) {
+			areaScroll(term, sb->scrs, sb->scre, 1);
 		} else {
-			term->lastline++;
+			sb->lastline++;
 			if ((line = getLine(term, term->cy)))
 				putU32(line, 0, (char32_t *)L"\0", 1);
 		}
@@ -265,6 +276,7 @@ procESC(Term *term, const char *head, const char *tail)
 const char *
 procCSI(Term *term, const char *head, const char *tail)
 {
+	struct ScreenBuffer *sb = term->sb;
 	char param[tail - head + 1], *pp;
 	char inter[tail - head + 1], *pi;
 	char *str1, *str2;
@@ -293,15 +305,15 @@ procCSI(Term *term, const char *head, const char *tail)
 	/* 終端バイト */
 	switch (*head) {
 	case 0x41: /* CUU */
-		term->cy = MAX(term->cy - atoi(param), term->scrs);
+		term->cy = MAX(term->cy - atoi(param), sb->scrs);
 		break;
 
 	case 0x42: /* CUD */
-		term->cy = MIN(term->cy + atoi(param), term->scre);
+		term->cy = MIN(term->cy + atoi(param), sb->scre);
 		break;
 
 	case 0x43: /* CUF */
-		term->cx = MIN(term->cx + atoi(param), term->cols - 1);
+		term->cx = MIN(term->cx + atoi(param), sb->cols - 1);
 		break;
 
 	case 0x44: /* CUB */
@@ -312,8 +324,8 @@ procCSI(Term *term, const char *head, const char *tail)
 		str1 = strtok(param, ";");
 		str2 = strtok(NULL, ";");
 		if (str1 && str2) {
-			term->cy = MIN(atoi(str1), term->rows) - 1;
-			term->cx = MIN(atoi(str2), term->cols) - 1;
+			term->cy = MIN(atoi(str1), sb->rows) - 1;
+			term->cx = MIN(atoi(str2), sb->cols) - 1;
 		}
 		break;
 
@@ -325,7 +337,7 @@ procCSI(Term *term, const char *head, const char *tail)
 		case '0':
 			putU32(line, term->cx, (char32_t *)L"\0", 1);
 			begin = term->cy + 1;
-			end = term->rows;
+			end = sb->rows;
 			break;
 		case '1':
 			begin = 0;
@@ -335,7 +347,7 @@ procCSI(Term *term, const char *head, const char *tail)
 			break;
 		case '2':
 			begin = 0;
-			end = term->rows;
+			end = sb->rows;
 			break;
 		}
 		for (i = begin; i < end; i++)
@@ -361,11 +373,11 @@ procCSI(Term *term, const char *head, const char *tail)
 		break;
 
 	case 0x4c: /* IL 行挿入 */
-		areaScroll(term, term->cy, term->scre, -MAX(atoi(param), 1));
+		areaScroll(term, term->cy, sb->scre, -MAX(atoi(param), 1));
 		break;
 
 	case 0x4d: /* DL 行削除 */
-		areaScroll(term, term->cy, term->scre, MAX(atoi(param), 1));
+		areaScroll(term, term->cy, sb->scre, MAX(atoi(param), 1));
 		break;
 
 	case 0x68: /* SM DECSET オプション設定 */
@@ -386,11 +398,11 @@ procCSI(Term *term, const char *head, const char *tail)
 		str1 = strtok(param, ";");
 		str2 = strtok(NULL, ";");
 		if (str1 && str2 && atoi(str1) <= atoi(str2)) {
-			term->scrs = MIN(atoi(str1), term->rows) - 1;
-			term->scre = MIN(atoi(str2), term->rows) - 1;
+			sb->scrs = MIN(atoi(str1), sb->rows) - 1;
+			sb->scre = MIN(atoi(str2), sb->rows) - 1;
 		} else {
-			term->scrs = 0;
-			term->scre = term->rows - 1;
+			sb->scrs = 0;
+			sb->scre = sb->rows - 1;
 		}
 		break;
 
@@ -462,30 +474,31 @@ procCStr(Term *term, const char *head, const char *tail)
 void
 areaScroll(Term *term, int first, int last, int num)
 {
+	struct ScreenBuffer *sb = term->sb;
 	int area = last - first + 1;
 	Line *tmp[area];
 	int index;
 	int i;
 
-	if (!(0 < first && first <= last && last < term->rows))
+	if (!(0 <= first && first <= last && last < sb->rows))
 		return;
 
 	for (i = 0; i < area; i++) {
-		index = term->lastline - (term->rows - 1) + first + i;
-		tmp[i] = LINE(term, index);
+		index = sb->lastline - (sb->rows - 1) + first + i;
+		tmp[i] = LINE(sb, index);
 	}
 
 	for (i = 0; i < area; i++) {
-		index = term->lastline - (term->rows - 1) + first + i;
+		index = sb->lastline - (sb->rows - 1) + first + i;
 
 		if (i - num < 0 || area <= i - num)
-			freeLine(LINE(term, index));
+			freeLine(LINE(sb, index));
 
 		if (0 <= num + i && num + i < area)
-			LINE(term, index) = tmp[num + i];
+			LINE(sb, index) = tmp[num + i];
 
 		if (i + num < 0 || area <= i + num)
-			LINE(term, index) = allocLine();
+			LINE(sb, index) = allocLine();
 	}
 }
 
@@ -506,9 +519,31 @@ optset(Term *term, unsigned int num, int flag)
 void
 decset(Term *term, unsigned int num, int flag)
 {
-	if (sizeof(term->dec) * 8 <= num) {
-		fprintf(stderr, "DEC Option: %d\n", num);
-		return;
+	struct ScreenBuffer *oldsb;
+
+	switch (num) {
+	case 1049:  /* altscreen */
+		oldsb = term->sb;
+		term->sb = flag ? &term->alt : &term->ori;
+
+		if (oldsb == term->sb)
+			break;
+
+		if (flag) {
+			term->svx = term->cx;
+			term->svy = term->cy;
+		} else {
+			term->cx = term->svx;
+			term->cy = term->svy;
+		}
+
+		setScrBufSize(term, oldsb->rows, oldsb->cols);
+		break;
+
+	default:
+		fprintf(stderr, "Not Supported DEC Option: %d\n", num);
+		if (sizeof(term->dec) * 8 <= num)
+			return;
 	}
 
 	if (flag)
@@ -528,13 +563,14 @@ writePty(Term *term, const char *buf, ssize_t n)
 Line *
 getLine(Term *term, int row)
 {
-	int index = term->lastline - (term->rows - 1) + row;
-	int oldest = term->lastline - (term->maxlines - 1);
+	struct ScreenBuffer *sb = term->sb;
+	int index = sb->lastline - (sb->rows - 1) + row;
+	int oldest = sb->lastline - (sb->maxlines - 1);
 
-	if (index < 0 || index < oldest || term->lastline < index)
+	if (index < 0 || index < oldest || sb->lastline < index)
 		return NULL;
 
-	return LINE(term, index);
+	return LINE(sb, index);
 }
 
 void
@@ -542,32 +578,40 @@ setWinSize(Term *term, int row, int col, int xpixel, int ypixel)
 {
 	struct winsize ws;
 
-	row = MIN(row, term->maxlines);
+	row = MIN(row, term->sb->maxlines);
 	row = MAX(row, 1);
 	col = MAX(col, 1);
 	ws = (struct winsize){row, col, xpixel, ypixel};
 
 	term->cx = MIN(term->cx, col - 1);
-	term->cols = col;
+	term->sb->cols = col;
 
-	while (term->rows < row) {
-		term->rows++;
-		if (term->rows - 1 < term->lastline)
-			term->cy++;
-		else
-			putU32(LINE(term, term->lastline++), 0,
-					(char32_t *)L"\0", 1);
-	}
-	while (row < term->rows) {
-		term->rows--;
-		if (term->rows - 1 < term->cy ||
-				LINE(term, term->lastline)->str[0] != L'\0')
-			term->cy = MAX(term->cy - 1, 0);
-		else
-			term->lastline--;
-	}
-	term->scrs = 0;
-	term->scre = row - 1;
+	setScrBufSize(term, row, col);
 
 	ioctl(term->master, TIOCSWINSZ, &ws);
+}
+
+void
+setScrBufSize(Term *term, int row, int col)
+{
+	struct ScreenBuffer *sb = term->sb;
+
+	while (sb->rows < row) {
+		sb->rows++;
+		if (sb->rows - 1 < sb->lastline)
+			term->cy++;
+		else
+			putU32(LINE(sb, sb->lastline++), 0,
+					(char32_t *)L"\0", 1);
+	}
+	while (row < sb->rows) {
+		sb->rows--;
+		if (sb->rows - 1 < term->cy ||
+				LINE(sb, sb->lastline)->str[0] != L'\0')
+			term->cy = MAX(term->cy - 1, 0);
+		else
+			sb->lastline--;
+	}
+	sb->scrs = 0;
+	sb->scre = row - 1;
 }

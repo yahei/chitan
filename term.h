@@ -3,16 +3,19 @@
 /* 端末 */
 typedef struct Term {
 	int master;     /* 疑似端末のファイルディスクリプタ */
-	Line **lines;   /* ログ */
-	int maxlines;   /* ログの最大行数*/
-	int lastline;   /* ログの最終行 */
+	struct ScreenBuffer {
+		Line **lines;   /* ログ */
+		int maxlines;   /* ログの最大行数*/
+		int lastline;   /* ログの最終行 */
+		int rows, cols; /* 画面の行数と列数 */
+		int scrs, scre; /* スクロール範囲 */
+	} ori, alt, *sb;
 	int cx, cy;     /* カーソル位置 */
-	int rows, cols; /* 画面の行数と列数 */
+	int svx, svy;   /* 保存したカーソル位置 */
 	char *readbuf;  /* 可変長リードバッファ */
 	int rblen;      /* リードバッファに残っている文字の数 */
 	char opt[8];    /* オプション */
 	char dec[1100]; /* 拡張オプション */
-	int scrs, scre; /* スクロール範囲 */
 } Term;
 
 Term *openTerm(void);
