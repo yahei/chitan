@@ -159,6 +159,8 @@ procXEvent(void)
 		case KeyPress:
 			/* 端末に文字を送る */
 			len = XLookupString(&event.xkey, buf, sizeof(buf), NULL, NULL);
+			if (event.xkey.state & Mod1Mask)
+				writePty(term, "\e", 1);
 			writePty(term, buf, len);
 			break;
 		case Expose:
