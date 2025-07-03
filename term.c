@@ -38,7 +38,18 @@ openTerm(void)
 
 	/* 構造体の初期化 */
 	term = xmalloc(sizeof(Term));
-	*term = (Term){ -1, NULL, 99, 24, 0, 0, 24, 80, NULL, 0, {0}, {0}, 0, 23};
+	*term = (Term){
+		.master = -1,
+		.lines = NULL,
+		.maxlines = 256,
+		.lastline = 24,
+		.cx = 0, .cy = 0,
+		.rows = 24, .cols = 80,
+		.readbuf = NULL,
+		.rblen = 0,
+		.opt = {0}, .dec = {0},
+		.scrs = 0, .scre = 23
+	};
 
 	term->lines = xmalloc(term->maxlines * sizeof(Line *));
 	for (i = 0; i < term->maxlines; i++)
@@ -96,20 +107,14 @@ closeTerm(Term *term)
 	if (term == NULL)
 		return;
 
-	/* 疑似端末を閉じる */
 	if (0 <= term->master)
 		close(term->master);
 
-	/* バッファを解放 */
-	for (i = 0; i < term->maxlines; i++) {
+	for (i = 0; i < term->maxlines; i++)
 		freeLine(term->lines[i]);
-		term->lines[i] = NULL;
-	}
 
 	free(term->lines);
-
 	free(term->readbuf);
-
 	free(term);
 }
 
