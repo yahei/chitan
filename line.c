@@ -100,7 +100,7 @@ eraseInLine(Line *line, int col, int width)
 }
 
 int
-putU32(Line *line, int col, const char32_t *str, int len)
+putU32s(Line *line, int col, const char32_t *str, int attr, int fg, int bg, int len)
 {
 	const int width = u32swidth(str, len);
 	int head;

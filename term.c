@@ -17,6 +17,8 @@
 
 #define READ_SIZE       16
 #define LINE(a,b)       (a->lines[b % a->maxlines])
+#define PUT_NUL(l,x)    (putU32s(l, x, (char32_t *)L"\0", 0, 256, 257, 1))
+#define PUT_SPC(l,x)    (putU32s(l, x, (char32_t *)L" ", 0, 256, 257, 1))
 
 static const char *procNCCs(Term *, const char *);
 static const char *procCC(Term *, const char *, const char *);
@@ -181,7 +183,8 @@ procNCCs(Term *term, const char *head)
 
 	rest = u8sToU32s(decoded, head, len);
 	if ((line = getLine(term, term->cy)))
-		term->cx += putU32(line, term->cx, decoded, u32slen(decoded));
+		term->cx += putU32s(line, term->cx, decoded, term->attr,
+				term->fg, term->bg, u32slen(decoded));
 
 	return rest;
 }
@@ -220,7 +223,7 @@ procCC(Term *term, const char *head, const char *tail)
 		} else {
 			sb->lastline++;
 			if ((line = getLine(term, term->cy)))
-				putU32(line, 0, (char32_t *)L"\0", 1);
+				PUT_NUL(line, 0);
 		}
 		break;
 
@@ -337,7 +340,7 @@ procCSI(Term *term, const char *head, const char *tail)
 		switch (*param) {
 		default:
 		case '0':
-			putU32(line, term->cx, (char32_t *)L"\0", 1);
+			PUT_NUL(line, term->cx);
 			begin = term->cy + 1;
 			end = sb->rows;
 			break;
@@ -345,7 +348,7 @@ procCSI(Term *term, const char *head, const char *tail)
 			begin = 0;
 			end = term->cy;
 			for (i = 0; i <= term->cx; i++)
-				putU32(line, i, (char32_t *)L" ", 1);
+				PUT_SPC(line, i);
 			break;
 		case '2':
 			begin = 0;
@@ -353,7 +356,8 @@ procCSI(Term *term, const char *head, const char *tail)
 			break;
 		}
 		for (i = begin; i < end; i++)
-			putU32(getLine(term, i), 0, (char32_t *)L"\0", 1);
+			if ((line = getLine(term, i)))
+				PUT_NUL(line, 0);
 		break;
 
 	case 0x4b: /* EL 行内消去 */
@@ -362,14 +366,14 @@ procCSI(Term *term, const char *head, const char *tail)
 		switch (*param) {
 		default:
 		case '0':
-			putU32(line, term->cx, (char32_t *)L"\0", 1);
+			PUT_NUL(line, term->cx);
 			break;
 		case '1':
 			for (i = 0; i <= term->cx; i++)
-				putU32(line, i, (char32_t *)L" ", 1);
+				PUT_SPC(line, i);
 			break;
 		case '2':
-			putU32(line, 0, (char32_t *)L"\0", 1);
+			PUT_NUL(line, 0);
 			break;
 		}
 		break;
@@ -680,8 +684,7 @@ setScrBufSize(Term *term, int row, int col)
 		if (sb->rows - 1 < sb->lastline)
 			term->cy++;
 		else
-			putU32(LINE(sb, sb->lastline++), 0,
-					(char32_t *)L"\0", 1);
+			PUT_NUL(LINE(sb, sb->lastline++), 0);
 	}
 	while (row < sb->rows) {
 		sb->rows--;

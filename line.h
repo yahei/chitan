@@ -30,7 +30,7 @@ void freeLine(Line *);
 void insertU32(Line *, int, const char32_t *, int);
 void deleteChars(Line *, int, int);
 int eraseInLine(Line *, int, int);
-int putU32(Line *, int, const char32_t *, int);
+int putU32s(Line *, int, const char32_t *, int, int, int, int);
 void deleteTrail(Line *);
 CharCnt getCharCnt(const Line *, int);
 
