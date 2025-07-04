@@ -2,6 +2,19 @@
 
 typedef uint_least32_t char32_t;
 
+enum sgt_attribute {
+	BOLD    = 1 << 0,   /* 太字 */
+	FAINT   = 1 << 1,   /* 細字 */
+	ITALIC  = 1 << 2,   /* 斜体 */
+	ULINE   = 1 << 3,   /* 下線 */
+	BLINK   = 1 << 4,   /* 点滅 */
+	RAPID   = 1 << 5,   /* 高速点滅 */
+	NEGA    = 1 << 6,   /* 反転 */
+	CONCEAL = 1 << 7,   /* 非表示 */
+	STRIKE  = 1 << 8,   /* 取消 */
+	DULINE  = 1 << 9    /* 二重下線 */
+};
+
 typedef struct Line {
 	char32_t *str;
 } Line;

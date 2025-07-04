@@ -10,12 +10,13 @@ typedef struct Term {
 		int rows, cols; /* 画面の行数と列数 */
 		int scrs, scre; /* スクロール範囲 */
 	} ori, alt, *sb;
-	int cx, cy;     /* カーソル位置 */
-	int svx, svy;   /* 保存したカーソル位置 */
-	char *readbuf;  /* 可変長リードバッファ */
-	int rblen;      /* リードバッファに残っている文字の数 */
-	char opt[8];    /* オプション */
-	char dec[1100]; /* 拡張オプション */
+	int cx, cy;             /* カーソル位置 */
+	int svx, svy;           /* 保存したカーソル位置 */
+	char *readbuf;          /* 可変長リードバッファ */
+	int rblen;              /* リードバッファに残っている文字の数 */
+	char opt[8];            /* オプション */
+	char dec[1100];         /* 拡張オプション */
+	int attr, fg, bg;       /* 現在のSGR */
 } Term;
 
 Term *openTerm(void);

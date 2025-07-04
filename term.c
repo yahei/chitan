@@ -27,6 +27,7 @@ static const char *procSOS(Term *, const char *, const char *);
 void areaScroll(Term *, int, int, int);
 void optset(Term *, unsigned int, int);
 void decset(Term *, unsigned int, int);
+void setSGR(Term *, char *);
 void setScrBufSize(Term *term, int, int);
 
 Term *
@@ -46,6 +47,7 @@ openTerm(void)
 		.readbuf = NULL,
 		.rblen = 0,
 		.opt = {0}, .dec = {0},
+		.attr = 0, .fg = 256, .bg = 257
 	};
 
 	term->ori = term->alt = (struct ScreenBuffer){
@@ -394,6 +396,11 @@ procCSI(Term *term, const char *head, const char *tail)
 			optset(term, atoi(param), 0);
 		break;
 
+	case 0x6d: /* SGR 表示様式選択 */
+		setSGR(term, param);
+		printf("SGR:%s   \tat:%d,\tfg:%d,\tbg:%d\n",param, term->attr, term->fg, term->bg);
+		break;
+
 	case 0x72: /* DECSTBM スクロール範囲設定 */
 		str1 = strtok(param, ";");
 		str2 = strtok(NULL, ";");
@@ -589,6 +596,78 @@ setWinSize(Term *term, int row, int col, int xpixel, int ypixel)
 	setScrBufSize(term, row, col);
 
 	ioctl(term->master, TIOCSWINSZ, &ws);
+}
+
+void
+setSGR(Term *term, char *param)
+{
+	char *str1 = strtok(param, ";");
+	int n = atoi(str1);
+
+	/* すべての効果を取り消す */
+	if (n == 0) {
+		term->attr = 0;
+		term->fg = 256;
+		term->bg = 257;
+	}
+
+	/* 属性 */
+	if (BETWEEN(n, 1, 10))
+		term->attr |= 1 << (n - 1);
+	if (n == 21)
+		term->attr |= DULINE;
+	if (n == 22)
+		term->attr &= ~(BOLD | FAINT);
+	if (n == 23)
+		term->attr &= ~ITALIC;
+	if (n == 24)
+		term->attr &= ~(ULINE | DULINE);
+	if (n == 25)
+		term->attr &= ~(BLINK | RAPID);
+	if (n == 27)
+		term->attr &= ~NEGA;
+	if (n == 28)
+		term->attr &= ~CONCEAL;
+	if (n == 29)
+		term->attr &= ~STRIKE;
+
+	/* フォント*/
+	if (BETWEEN(n, 10, 21))
+		fprintf(stderr, "font:%d\n", n - 10);
+
+	/* 文字色 */
+	if (BETWEEN(n, 30, 38))
+		term->fg = n - 30;
+	if (BETWEEN(n, 90, 98))
+		term->fg = n - 82;
+	if (n == 38) {
+		if (atoi(strtok(NULL, ";")) == 5)
+			term->fg = atoi(strtok(NULL, ";"));
+		else
+			fprintf(stderr, "color: %s\n", param);
+	}
+	if (n == 39)
+		term->fg = 256;
+
+	/* 背景色 */
+	if (BETWEEN(n, 40, 48))
+		term->bg = n - 40;
+	if (BETWEEN(n, 100, 108))
+		term->bg = n - 92;
+	if (n == 48) {
+		if (atoi(strtok(NULL, ";")) == 5)
+			term->bg = atoi(strtok(NULL, ";"));
+		else
+			fprintf(stderr, "color: %s\n", param);
+	}
+	if (n == 49)
+		term->bg = 257;
+
+	/* その他の効果 */
+	if (BETWEEN(n, 51, 70) && n != 65)
+		fprintf(stderr, "effect:%d\n", n);
+	if (n == 65)
+		fprintf(stderr, "cancel effect:%d\n", n);
 }
 
 void
