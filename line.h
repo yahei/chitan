@@ -1,5 +1,8 @@
 #include <stdint.h>
 
+extern int deffg;
+extern int defbg;
+
 typedef uint_least32_t char32_t;
 
 enum sgt_attribute {
@@ -17,7 +20,13 @@ enum sgt_attribute {
 
 typedef struct Line {
 	char32_t *str;
+	int *attr, *fg, *bg;
 } Line;
+
+typedef struct InsertLine {
+	const char32_t *str;
+	const int *attr, *fg, *bg;
+} InsertLine;
 
 typedef struct CharCnt {
 	int index;
@@ -27,7 +36,7 @@ typedef struct CharCnt {
 
 Line *allocLine(void);
 void freeLine(Line *);
-void insertU32(Line *, int, const char32_t *, int);
+void insertU32s(Line *, int, const InsertLine *, int);
 void deleteChars(Line *, int, int);
 int eraseInLine(Line *, int, int);
 int putU32s(Line *, int, const char32_t *, int, int, int, int);

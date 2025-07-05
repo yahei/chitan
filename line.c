@@ -11,12 +11,18 @@
  * ログ1行を管理する
  */
 
+int deffg = 256;
+int defbg = 257;
+
 Line *
 allocLine(void)
 {
 	Line *line = xmalloc(sizeof(Line));
 
 	line->str = xmalloc(sizeof(char32_t));
+	line->attr = xmalloc(0);
+	line->fg = xmalloc(0);
+	line->bg = xmalloc(0);
 	line->str[0] = L'\0';
 
 	return line;
@@ -29,47 +35,69 @@ freeLine(Line *line)
 		return;
 
 	free(line->str);
+	free(line->attr);
+	free(line->fg);
+	free(line->bg);
 	free(line);
 }
 
 void
-insertU32(Line *line, int head, const char32_t *str, int len)
+insertU32s(Line *line, int head, const InsertLine *ins, int len)
 {
 	const int oldlen = u32slen(line->str);
-	const int newlen = oldlen + len + 1;
-	const int movelen = MAX(oldlen - head, 0) + 1;
+	const int newlen = oldlen + len;
+	const int movelen = MAX(oldlen - head, 0);
 
 	if (head < 0 || len <= 0)
 		return;
 
-	line->str = xrealloc(line->str, newlen * sizeof(char32_t));
-	memmove(&line->str[head + len], &line->str[MIN(head, oldlen)],
-			movelen * sizeof(char32_t));
-	memcpy(&line->str[head], str, len * sizeof(char32_t));
+#define INSERT(dest, src, size, sent) do { \
+	dest = xrealloc(dest, (newlen + sent) * size); \
+	memmove(&dest[head + len], &dest[MIN(head, oldlen)], \
+			(movelen + sent) * size); \
+	memcpy(&dest[head], src, len * size); \
+} while (0);
+
+	INSERT(line->str, ins->str, sizeof(char32_t), 1);
+	INSERT(line->attr, ins->attr, sizeof(int), 0);
+	INSERT(line->fg, ins->fg, sizeof(int), 0);
+	INSERT(line->bg, ins->bg, sizeof(int), 0);
+
+#undef INSERT
 }
 
 void
 deleteChars(Line *line, int head, int len)
 {
 	const int oldlen = u32slen(line->str);
-	char32_t *newstr;
+	char32_t *strbuf;
+	int *buf;
 	int tail = MIN(head + len, oldlen);
 
 	if (head < 0 || tail <= head)
 		return;
 
-	newstr = xmalloc((oldlen - (tail - head) + 1) * sizeof(char32_t));
-	memcpy(newstr, line->str, head * sizeof(char32_t));
-	memcpy(&newstr[head], &line->str[tail],
-			(oldlen - tail + 1) * sizeof(char32_t));
+#define DELETE(target, buf, size, sent) do { \
+	buf = xmalloc((oldlen - (tail - head) + sent) * size); \
+	memcpy(buf, target, head * size); \
+	memcpy(&buf[head], &target[tail], (oldlen - tail + sent) * size); \
+	free(target); \
+	target = buf; \
+} while (0);
 
-	free(line->str);
-	line->str = newstr;
+	DELETE(line->str, strbuf, sizeof(char32_t), 1);
+	DELETE(line->attr, buf, sizeof(int), 0);
+	DELETE(line->fg, buf, sizeof(int), 0);
+	DELETE(line->bg, buf, sizeof(int), 0);
+
+#undef DELETE
 }
 
 int
 eraseInLine(Line *line, int col, int width)
 {
+	const int attr = 0;
+	const InsertLine space = {(char32_t *)L" ", &attr, &deffg, &defbg};
 	const int linelen = u32slen(line->str);
 	int head, tail;
 	int lpad, rpad;
@@ -94,7 +122,7 @@ eraseInLine(Line *line, int col, int width)
 	deleteChars(line, head, tail - head);
 
 	for (i = 0; i < rpad + lpad; i++)
-		insertU32(line, head, (char32_t *)L" ", 1);
+		insertU32s(line, head, &space, 1);
 
 	return head + lpad;
 }
@@ -103,13 +131,23 @@ int
 putU32s(Line *line, int col, const char32_t *str, int attr, int fg, int bg, int len)
 {
 	const int width = u32swidth(str, len);
+	int attrs[len], fgs[len], bgs[len];
 	int head;
+	InsertLine placed;
+	int i;
 
 	if (col < 0)
 		return 0;
 
+	for (i = 0; i < len; i++) {
+		attrs[i] = attr;
+		fgs[i] = fg;
+		bgs[i] = bg;
+	}
+	placed = (InsertLine){str, attrs, fgs, bgs};
+
 	head = eraseInLine(line, col, width);
-	insertU32(line, head, str, len);
+	insertU32s(line, head, &placed, len);
 
 	return width;
 }
