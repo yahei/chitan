@@ -49,7 +49,7 @@ openTerm(void)
 		.readbuf = NULL,
 		.rblen = 0,
 		.opt = {0}, .dec = {0},
-		.attr = 0, .fg = 256, .bg = 257
+		.attr = 0, .fg = deffg, .bg = defbg
 	};
 
 	term->ori = term->alt = (struct ScreenBuffer){
@@ -605,14 +605,13 @@ setWinSize(Term *term, int row, int col, int xpixel, int ypixel)
 void
 setSGR(Term *term, char *param)
 {
-	char *str1 = strtok(param, ";");
-	int n = atoi(str1);
+	int n = strlen(param) ? atoi(strtok(param, ";")) : 0;
 
 	/* すべての効果を取り消す */
 	if (n == 0) {
 		term->attr = 0;
-		term->fg = 256;
-		term->bg = 257;
+		term->fg = deffg;
+		term->bg = defbg;
 	}
 
 	/* 属性 */
@@ -651,7 +650,7 @@ setSGR(Term *term, char *param)
 			fprintf(stderr, "color: %s\n", param);
 	}
 	if (n == 39)
-		term->fg = 256;
+		term->fg = deffg;
 
 	/* 背景色 */
 	if (BETWEEN(n, 40, 48))
@@ -665,7 +664,7 @@ setSGR(Term *term, char *param)
 			fprintf(stderr, "color: %s\n", param);
 	}
 	if (n == 49)
-		term->bg = 257;
+		term->bg = defbg;
 
 	/* その他の効果 */
 	if (BETWEEN(n, 51, 70) && n != 65)
