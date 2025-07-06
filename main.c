@@ -20,7 +20,7 @@ Display *disp;
 Visual *visual;
 Colormap cmap;
 XftFont *font;
-XftColor color;
+XftColor color, color2;
 Win *win;
 XClassHint *hint;
 Term *term;
@@ -47,6 +47,7 @@ void
 init(void)
 {
 	XGlyphInfo ginfo;
+	XRenderColor xrc;
 
 	/* localeを設定 */
 	setlocale(LC_CTYPE, "");
@@ -67,7 +68,11 @@ init(void)
 			NULL);
 	if (font == NULL)
 		fatal("XftFontOpen failed.\n");
-	if (XftColorAllocName(disp, visual, cmap, "black", &color) == 0)
+	xrc = (XRenderColor){0x2000, 0x2000, 0x2000, 0xffff};
+	if (XftColorAllocValue(disp, visual, cmap, &xrc, &color) == 0)
+		fatal("XftColorAllocName failed.\n");
+	xrc = (XRenderColor){0xa000, 0xa000, 0xa000, 0xffff};
+	if (XftColorAllocValue(disp, visual, cmap, &xrc, &color2) == 0)
 		fatal("XftColorAllocName failed.\n");
 	
 	/* テキストの高さや横幅を取得 */
@@ -140,6 +145,7 @@ fin(void)
 	closeTerm(term);
 	term = NULL;
 	XftColorFree(disp, visual, cmap, &color);
+	XftColorFree(disp, visual, cmap, &color2);
 	XftFontClose(disp, font);
 	FcFini();
 	XCloseDisplay(disp);
@@ -184,23 +190,36 @@ redraw(void)
 	XGlyphInfo ginfo;
 	XWindowAttributes wattr;
 	Line *line;
+	int current, next;
 	int index;
 	int i;
-
-	/* カーソルの位置を取得 */
-	line = getLine(term, term->cy);
-	index = getCharCnt(line, term->cx).index;
-	XftTextExtents32(disp, font, line->str, index, &ginfo);
 
 	/* 画面をクリア */
 	XGetWindowAttributes(disp, win->window, &wattr);
 	XClearArea(disp, win->window, 0, 0, wattr.width, wattr.height, False);
 
 	/* 端末の内容をウィンドウに表示 */
-	for (i = 0; (line = getLine(term, i)); i++)
-		XftDrawString32(win->draw, &color, font, 10,
-				(i + 1) * chary,
-				line->str, u32slen(line->str));
+	for (i = 0; (line = getLine(term, i)); i++) {
+		/* 同じSGRの文字列ごとにまとめて書く */
+		for (current = 0; line->str[current] != L'\0'; current = next) {
+			next = findNextSGR(line, current);
+			XftTextExtents32(disp, font, line->str, current, &ginfo);
+			
+			if (line->attr[current] & BOLD) /* 太字 */
+			XftDrawString32(win->draw, &color2, font, ginfo.xOff + 10,
+					(i + 1) * chary, line->str + current,
+					next - current);
+			else /* 通常 */
+			XftDrawString32(win->draw, &color, font, ginfo.xOff + 10,
+					(i + 1) * chary, line->str + current,
+					next - current);
+		}
+	}
+
+	/* カーソルの位置を取得 */
+	line = getLine(term, term->cy);
+	index = getCharCnt(line, term->cx).index;
+	XftTextExtents32(disp, font, line->str, index, &ginfo);
 
 	/* カーソルを描く */
 	int x = ginfo.xOff + 10;
