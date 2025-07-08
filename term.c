@@ -104,7 +104,7 @@ openTerm(void)
 		setenv("TERM", "st-256color", 1);
 		if (setsid() < 0)
 			fatal("setsid failed.\n");
-		if (execlp("sh", "sh", NULL) < 0)
+		if (execlp("bash", "bash", NULL) < 0)
 			fatal("exec failed.\n");
 		break;
 	default: /* 本体側 */
@@ -451,8 +451,7 @@ procCSI(Term *term, const char *head, const char *tail)
 		break;
 
 	case 0x6d: /* SGR 表示様式選択 */
-		setSGR(term, param);
-		printf("SGR:%s   \tat:%d,\tfg:%d,\tbg:%d\n",param, term->attr, term->fg, term->bg);
+		setSGR(term, strlen(param) ? param : "0");
 		break;
 
 	case 0x72: /* DECSTBM スクロール範囲設定 */
@@ -655,72 +654,77 @@ setWinSize(Term *term, int row, int col, int xpixel, int ypixel)
 void
 setSGR(Term *term, char *param)
 {
-	int n = strlen(param) ? atoi(strtok(param, ";")) : 0;
+	char *buf;
+	int n;
 
-	/* すべての効果を取り消す */
-	if (n == 0) {
-		term->attr = 0;
-		term->fg = deffg;
-		term->bg = defbg;
+	for (buf = strtok(param, ";"); buf; buf = strtok(NULL, ";")) {
+		n = atoi(buf);
+
+		/* すべての効果を取り消す */
+		if (n == 0) {
+			term->attr = 0;
+			term->fg = deffg;
+			term->bg = defbg;
+		}
+
+		/* 属性 */
+		if (BETWEEN(n, 1, 10))
+			term->attr |= 1 << (n - 1);
+		if (n == 21)
+			term->attr |= DULINE;
+		if (n == 22)
+			term->attr &= ~(BOLD | FAINT);
+		if (n == 23)
+			term->attr &= ~ITALIC;
+		if (n == 24)
+			term->attr &= ~(ULINE | DULINE);
+		if (n == 25)
+			term->attr &= ~(BLINK | RAPID);
+		if (n == 27)
+			term->attr &= ~NEGA;
+		if (n == 28)
+			term->attr &= ~CONCEAL;
+		if (n == 29)
+			term->attr &= ~STRIKE;
+
+		/* フォント*/
+		if (BETWEEN(n, 10, 21))
+			fprintf(stderr, "font:%d\n", n - 10);
+
+		/* 文字色 */
+		if (BETWEEN(n, 30, 38))
+			term->fg = n - 30;
+		if (BETWEEN(n, 90, 98))
+			term->fg = n - 82;
+		if (n == 38) {
+			if (atoi(strtok(NULL, ";")) == 5)
+				term->fg = atoi(strtok(NULL, ";"));
+			else
+				fprintf(stderr, "Not Supported SGR: %s\n", param);
+		}
+		if (n == 39)
+			term->fg = deffg;
+
+		/* 背景色 */
+		if (BETWEEN(n, 40, 48))
+			term->bg = n - 40;
+		if (BETWEEN(n, 100, 108))
+			term->bg = n - 92;
+		if (n == 48) {
+			if (atoi(strtok(NULL, ";")) == 5)
+				term->bg = atoi(strtok(NULL, ";"));
+			else
+				fprintf(stderr, "Not Supported SGR: %s\n", param);
+		}
+		if (n == 49)
+			term->bg = defbg;
+
+		/* その他の効果 */
+		if (BETWEEN(n, 51, 70) && n != 65)
+			fprintf(stderr, "effect:%d\n", n);
+		if (n == 65)
+			fprintf(stderr, "cancel effect:%d\n", n);
 	}
-
-	/* 属性 */
-	if (BETWEEN(n, 1, 10))
-		term->attr |= 1 << (n - 1);
-	if (n == 21)
-		term->attr |= DULINE;
-	if (n == 22)
-		term->attr &= ~(BOLD | FAINT);
-	if (n == 23)
-		term->attr &= ~ITALIC;
-	if (n == 24)
-		term->attr &= ~(ULINE | DULINE);
-	if (n == 25)
-		term->attr &= ~(BLINK | RAPID);
-	if (n == 27)
-		term->attr &= ~NEGA;
-	if (n == 28)
-		term->attr &= ~CONCEAL;
-	if (n == 29)
-		term->attr &= ~STRIKE;
-
-	/* フォント*/
-	if (BETWEEN(n, 10, 21))
-		fprintf(stderr, "font:%d\n", n - 10);
-
-	/* 文字色 */
-	if (BETWEEN(n, 30, 38))
-		term->fg = n - 30;
-	if (BETWEEN(n, 90, 98))
-		term->fg = n - 82;
-	if (n == 38) {
-		if (atoi(strtok(NULL, ";")) == 5)
-			term->fg = atoi(strtok(NULL, ";"));
-		else
-			fprintf(stderr, "color: %s\n", param);
-	}
-	if (n == 39)
-		term->fg = deffg;
-
-	/* 背景色 */
-	if (BETWEEN(n, 40, 48))
-		term->bg = n - 40;
-	if (BETWEEN(n, 100, 108))
-		term->bg = n - 92;
-	if (n == 48) {
-		if (atoi(strtok(NULL, ";")) == 5)
-			term->bg = atoi(strtok(NULL, ";"));
-		else
-			fprintf(stderr, "color: %s\n", param);
-	}
-	if (n == 49)
-		term->bg = defbg;
-
-	/* その他の効果 */
-	if (BETWEEN(n, 51, 70) && n != 65)
-		fprintf(stderr, "effect:%d\n", n);
-	if (n == 65)
-		fprintf(stderr, "cancel effect:%d\n", n);
 }
 
 void
