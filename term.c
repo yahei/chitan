@@ -20,6 +20,7 @@
 #define PUT_NUL(l,x)    (putU32s(l, x, (char32_t *)L"\0", 0, deffg, defbg, 1))
 #define PUT_SPC(l,x)    (putU32s(l, x, (char32_t *)L" ", 0, deffg, defbg, 1))
 
+static void setDefaultPalette(Term *);
 static const char *procNCCs(Term *, const char *);
 static const char *procCC(Term *, const char *, const char *);
 static const char *procESC(Term *, const char *, const char *);
@@ -49,9 +50,11 @@ openTerm(void)
 		.readbuf = NULL,
 		.rblen = 0,
 		.opt = {0}, .dec = {0},
-		.attr = 0, .fg = deffg, .bg = defbg
+		.attr = 0, .fg = deffg, .bg = defbg,
+		.palette = NULL
 	};
 
+	/* スクリーンバッファの初期化 */
 	term->ori = term->alt = (struct ScreenBuffer){
 		.lastline = 24,
 		.maxlines = 256,
@@ -66,8 +69,13 @@ openTerm(void)
 	for (i = 0; i < term->alt.maxlines; i++)
 		term->alt.lines[i] = allocLine();
 
+	/* リードバッファの初期化 */
 	term->readbuf = xmalloc(1);
 	term->readbuf[0] = '\0';
+
+	/* カラーパレットの初期化 */
+	term->palette = xmalloc(258 * sizeof(Color));
+	setDefaultPalette(term);
 
 	/* 疑似端末を開く */
 	errno = -1;
@@ -111,6 +119,47 @@ FAIL:
 }
 
 void
+setDefaultPalette(Term *term)
+{
+	const int vals[6] = {0x00, 0x5f, 0x87, 0xaf, 0xd7, 0xff};
+	int i;
+
+	/* Selenized Black (https://github.com/jan-warchol/selenized) */
+	term->palette[  0] = 0x3b3b3b;
+	term->palette[  1] = 0xed4a46;
+	term->palette[  2] = 0x70b433;
+	term->palette[  3] = 0xdbb32d;
+	term->palette[  4] = 0x368aeb;
+	term->palette[  5] = 0xeb6eb7;
+	term->palette[  6] = 0x3fc5b7;
+	term->palette[  7] = 0xb9b9b9;
+
+	term->palette[  8] = 0x545454;
+	term->palette[  9] = 0xff5e56;
+	term->palette[ 10] = 0x83c746;
+	term->palette[ 11] = 0xefc541;
+	term->palette[ 12] = 0x4f9cfe;
+	term->palette[ 13] = 0xff81ca;
+	term->palette[ 14] = 0x56d8c9;
+	term->palette[ 15] = 0xdedede;
+
+	/* 216 colors */
+	for (i = 0; i < 216; i++)
+		term->palette[i + 16] =
+			(vals[(i / 36) % 6] << 16) +
+			(vals[(i /  6) % 6] <<  8) +
+			(vals[(i /  1) % 6] <<  0);
+
+	/* Grayscale colors */
+	for (i = 0; i < 24; i++)
+		term->palette[i + 232] = 0x0a0a0a * i + 0x080808;
+
+	/* fg bg */
+	term->palette[256] = 0xb9b9b9;
+	term->palette[257] = 0x181818;
+}
+
+void
 closeTerm(Term *term)
 {
 	int i;
@@ -129,6 +178,7 @@ closeTerm(Term *term)
 	free(term->ori.lines);
 	free(term->alt.lines);
 	free(term->readbuf);
+	free(term->palette);
 	free(term);
 }
 

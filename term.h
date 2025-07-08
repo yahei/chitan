@@ -1,5 +1,10 @@
 #include "line.h"
 
+typedef uint_least32_t Color;
+#define RED(c)   (c >> 16 & 0xff)
+#define GREEN(c) (c >>  8 & 0xff)
+#define BLUE(c)  (c >>  0 & 0xff)
+
 /* 端末 */
 typedef struct Term {
 	int master;     /* 疑似端末のファイルディスクリプタ */
@@ -17,6 +22,7 @@ typedef struct Term {
 	char opt[8];            /* オプション */
 	char dec[1100];         /* 拡張オプション */
 	int attr, fg, bg;       /* 現在のSGR */
+	Color *palette;         /* カラーパレット */
 } Term;
 
 Term *openTerm(void);

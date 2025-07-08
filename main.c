@@ -20,7 +20,6 @@ Display *disp;
 Visual *visual;
 Colormap cmap;
 XftFont *font;
-XftColor color, color2;
 Win *win;
 XClassHint *hint;
 Term *term;
@@ -47,7 +46,6 @@ void
 init(void)
 {
 	XGlyphInfo ginfo;
-	XRenderColor xrc;
 
 	/* localeを設定 */
 	setlocale(LC_CTYPE, "");
@@ -68,12 +66,6 @@ init(void)
 			NULL);
 	if (font == NULL)
 		fatal("XftFontOpen failed.\n");
-	xrc = (XRenderColor){0x2000, 0x2000, 0x2000, 0xffff};
-	if (XftColorAllocValue(disp, visual, cmap, &xrc, &color) == 0)
-		fatal("XftColorAllocName failed.\n");
-	xrc = (XRenderColor){0xa000, 0xa000, 0xa000, 0xffff};
-	if (XftColorAllocValue(disp, visual, cmap, &xrc, &color2) == 0)
-		fatal("XftColorAllocName failed.\n");
 	
 	/* テキストの高さや横幅を取得 */
 	XftTextExtents32(disp, font, (char32_t *)L"plmM", 4, &ginfo);
@@ -144,8 +136,6 @@ fin(void)
 	win = NULL;
 	closeTerm(term);
 	term = NULL;
-	XftColorFree(disp, visual, cmap, &color);
-	XftColorFree(disp, visual, cmap, &color2);
 	XftFontClose(disp, font);
 	FcFini();
 	XCloseDisplay(disp);
@@ -189,6 +179,8 @@ redraw(void)
 {
 	XGlyphInfo ginfo;
 	XWindowAttributes wattr;
+	XftColor xc;
+	Color c;
 	Line *line;
 	int current, next;
 	int index;
@@ -204,15 +196,28 @@ redraw(void)
 		for (current = 0; line->str[current] != L'\0'; current = next) {
 			next = findNextSGR(line, current);
 			XftTextExtents32(disp, font, line->str, current, &ginfo);
-			
-			if (line->attr[current] & BOLD) /* 太字 */
-			XftDrawString32(win->draw, &color2, font, ginfo.xOff + 10,
-					(i + 1) * chary, line->str + current,
-					next - current);
-			else /* 通常 */
-			XftDrawString32(win->draw, &color, font, ginfo.xOff + 10,
-					(i + 1) * chary, line->str + current,
-					next - current);
+
+			if (line->attr[current] & BOLD) { /* 太字 */
+				c = term->palette[line->fg[current] +
+					(line->fg[current] < 8 ? 8 : 0)];
+				xc.color.red   = RED(c)   << 8;
+				xc.color.green = GREEN(c) << 8;
+				xc.color.blue  = BLUE(c)  << 8;
+				xc.color.alpha = 0xffff;
+				XftDrawString32(win->draw, &xc, font, ginfo.xOff + 10,
+						(i + 1) * chary, line->str + current,
+						next - current);
+			}
+			else { /* 通常 */
+				c = term->palette[line->fg[current]];
+				xc.color.red   = RED(c)   << 8;
+				xc.color.green = GREEN(c) << 8;
+				xc.color.blue  = BLUE(c)  << 8;
+				xc.color.alpha = 0xffff;
+				XftDrawString32(win->draw, &xc, font, ginfo.xOff + 10,
+						(i + 1) * chary, line->str + current,
+						next - current);
+			}
 		}
 	}
 
@@ -239,8 +244,8 @@ openWindow(void)
 			disp,
 			DefaultRootWindow(disp),
 			10, 10, 800, 600, 1,
-			BlackPixel(disp, 0),
-			WhitePixel(disp, 0));
+			term->palette[deffg],
+			term->palette[defbg]);
 
 	/* プロパティ */
 	hint->res_name = "minty";
@@ -254,8 +259,8 @@ openWindow(void)
 	/* 描画の準備 */
 	win->gc = XCreateGC(disp, win->window, 0, NULL);
 	win->draw = XftDrawCreate(disp, win->window, visual, cmap);
-	XSetForeground(disp, win->gc, BlackPixel(disp,0));
-	XSetBackground(disp, win->gc, WhitePixel(disp,0));
+	XSetForeground(disp, win->gc, term->palette[deffg]);
+	XSetBackground(disp, win->gc, term->palette[defbg]);
 
 	/* ウィンドウを表示 */
 	XMapWindow(disp, win->window);
