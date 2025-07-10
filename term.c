@@ -15,7 +15,7 @@
  * 疑似端末とログを管理する
  */
 
-#define READ_SIZE       16
+#define READ_SIZE       1024
 #define LINE(a,b)       (a->lines[b % a->maxlines])
 #define PUT_NUL(l,x)    (putU32s(l, x, (char32_t *)L"\0", 0, deffg, defbg, 1))
 #define PUT_SPC(l,x)    (putU32s(l, x, (char32_t *)L" ", 0, deffg, defbg, 1))
@@ -27,11 +27,11 @@ static const char *procESC(Term *, const char *, const char *);
 static const char *procCSI(Term *, const char *, const char *);
 static const char *procCStr(Term *, const char *, const char *);
 static const char *procSOS(Term *, const char *, const char *);
-void areaScroll(Term *, int, int, int);
-void optset(Term *, unsigned int, int);
-void decset(Term *, unsigned int, int);
-void setSGR(Term *, char *);
-void setScrBufSize(Term *term, int, int);
+static void areaScroll(Term *, int, int, int);
+static void optset(Term *, unsigned int, int);
+static void decset(Term *, unsigned int, int);
+static void setScrBufSize(Term *term, int, int);
+static void setSGR(Term *, char *);
 
 Term *
 openTerm(void)
@@ -74,7 +74,7 @@ openTerm(void)
 	term->readbuf[0] = '\0';
 
 	/* カラーパレットの初期化 */
-	term->palette = xmalloc(258 * sizeof(Color));
+	term->palette = xmalloc(MAX(256, MAX(deffg, defbg) + 1) * sizeof(Color));
 	setDefaultPalette(term);
 
 	/* 疑似端末を開く */
@@ -155,8 +155,8 @@ setDefaultPalette(Term *term)
 		term->palette[i + 232] = 0x0a0a0a * i + 0x080808;
 
 	/* fg bg */
-	term->palette[256] = 0xb9b9b9;
-	term->palette[257] = 0x181818;
+	term->palette[deffg] = 0xb9b9b9;
+	term->palette[defbg] = 0x181818;
 }
 
 void
@@ -580,6 +580,8 @@ void
 decset(Term *term, unsigned int num, int flag)
 {
 	struct ScreenBuffer *oldsb;
+	Line *line;
+	int i;
 
 	switch (num) {
 	case 1049:  /* altscreen */
@@ -592,6 +594,9 @@ decset(Term *term, unsigned int num, int flag)
 		if (flag) {
 			term->svx = term->cx;
 			term->svy = term->cy;
+			for (i = 0; i < term->sb->rows; i++)
+				if ((line = getLine(term, i)))
+					PUT_NUL(line, 0);
 		} else {
 			term->cx = term->svx;
 			term->cy = term->svy;
@@ -649,6 +654,30 @@ setWinSize(Term *term, int row, int col, int xpixel, int ypixel)
 	setScrBufSize(term, row, col);
 
 	ioctl(term->master, TIOCSWINSZ, &ws);
+}
+
+void
+setScrBufSize(Term *term, int row, int col)
+{
+	struct ScreenBuffer *sb = term->sb;
+
+	while (sb->rows < row) {
+		sb->rows++;
+		if (sb->rows - 1 < sb->lastline)
+			term->cy++;
+		else
+			PUT_NUL(LINE(sb, sb->lastline++), 0);
+	}
+	while (row < sb->rows) {
+		sb->rows--;
+		if (sb->rows - 1 < term->cy ||
+				LINE(sb, sb->lastline)->str[0] != L'\0')
+			term->cy = MAX(term->cy - 1, 0);
+		else
+			sb->lastline--;
+	}
+	sb->scrs = 0;
+	sb->scre = row - 1;
 }
 
 void
@@ -725,28 +754,4 @@ setSGR(Term *term, char *param)
 		if (n == 65)
 			fprintf(stderr, "cancel effect:%d\n", n);
 	}
-}
-
-void
-setScrBufSize(Term *term, int row, int col)
-{
-	struct ScreenBuffer *sb = term->sb;
-
-	while (sb->rows < row) {
-		sb->rows++;
-		if (sb->rows - 1 < sb->lastline)
-			term->cy++;
-		else
-			PUT_NUL(LINE(sb, sb->lastline++), 0);
-	}
-	while (row < sb->rows) {
-		sb->rows--;
-		if (sb->rows - 1 < term->cy ||
-				LINE(sb, sb->lastline)->str[0] != L'\0')
-			term->cy = MAX(term->cy - 1, 0);
-		else
-			sb->lastline--;
-	}
-	sb->scrs = 0;
-	sb->scre = row - 1;
 }
