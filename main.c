@@ -30,6 +30,7 @@ static void run(void);
 static void fin(void);
 static void procXEvent(void);
 static void redraw(void);
+static void drawLine(Line *line, int, int);
 static Win *openWindow(void);
 static void closeWindow(Win *);
 
@@ -180,13 +181,7 @@ redraw(void)
 	XGlyphInfo ginfo;
 	XWindowAttributes wattr;
 	Line *line;
-	int current, next;
-	int fg, bg;
-	XftColor xc;
-	Color c;
 	int x, y;
-	const char32_t *str;
-	int len;
 	int index;
 	int i;
 
@@ -195,51 +190,8 @@ redraw(void)
 	XClearArea(disp, win->window, 0, 0, wattr.width, wattr.height, False);
 
 	/* 端末の内容をウィンドウに表示 */
-	for (i = 0; (line = getLine(term, i)); i++) {
-		/* 同じSGRの文字列ごとにまとめて書く */
-		for (current = 0; line->str[current] != L'\0'; current = next) {
-			/* 描画する文字列 */
-			next = findNextSGR(line, current);
-			XftTextExtents32(disp, font, line->str, current, &ginfo);
-
-			/* 色や座標 */
-			fg = line->fg[current];
-			bg = line->bg[current];
-			x = ginfo.xOff + 10;
-			y = (i + 1) * chary;
-			str = line->str + current;
-			len = next - current;
-
-			/* 前処理 */
-			if (line->attr[current] & BOLD) { /* 太字 */
-				fg = fg < 8 ? fg + 8 : fg;
-				bg = bg < 8 ? bg + 8 : bg;
-			}
-			if (line->attr[current] & NEGA) { /* 反転 */
-				fg = fg ^ bg;
-				bg = fg ^ bg;
-				fg = fg ^ bg;
-			}
-
-			/* 描画 */
-			if (bg != defbg) {
-				/* 背景 */
-				XftTextExtents32(disp, font, str, len, &ginfo);
-				XSetForeground(disp, win->gc, term->palette[bg]);
-				XFillRectangle(disp, win->window, win->gc, x,
-						(i + 0.2) * chary, ginfo.xOff, chary);
-			}
-			/* 文字 */
-			c = term->palette[fg];
-			xc.color.red   =   RED(c) << 8;
-			xc.color.green = GREEN(c) << 8;
-			xc.color.blue  =  BLUE(c) << 8;
-			xc.color.alpha = 0xffff;
-			XftDrawString32(win->draw, &xc, font, x, y, str, len);
-
-			/* 後処理 */
-		}
-	}
+	for (i = 0; (line = getLine(term, i)); i++)
+		drawLine(line, 10, (i + 1) * chary);
 
 	/* カーソルの位置を取得 */
 	line = getLine(term, term->cy);
@@ -253,6 +205,63 @@ redraw(void)
 	XDrawRectangle(disp, win->window, win->gc, x, y + chary/4, charx, chary);
 
 	XFlush(disp);
+}
+
+void
+drawLine(Line *line, int xoff, int yoff)
+{
+	XGlyphInfo ginfo;
+	int current, next;
+	int fg, bg;
+	XftColor xc;
+	Color c;
+	int x, y;
+	const char32_t *str;
+	int len;
+
+	/* 同じSGRの文字列ごとにまとめて書く */
+	for (current = 0; line->str[current] != L'\0'; current = next) {
+		/* 描画する文字列 */
+		next = findNextSGR(line, current);
+		XftTextExtents32(disp, font, line->str, current, &ginfo);
+
+		/* 色や座標 */
+		fg = line->fg[current];
+		bg = line->bg[current];
+		x = ginfo.xOff + xoff;
+		y = yoff;
+		str = line->str + current;
+		len = next - current;
+
+		/* 前処理 */
+		if (line->attr[current] & BOLD) { /* 太字 */
+			fg = fg < 8 ? fg + 8 : fg;
+			bg = bg < 8 ? bg + 8 : bg;
+		}
+		if (line->attr[current] & NEGA) { /* 反転 */
+			fg = fg ^ bg;
+			bg = fg ^ bg;
+			fg = fg ^ bg;
+		}
+
+		/* 描画 */
+		if (bg != defbg) {
+			/* 背景 */
+			XftTextExtents32(disp, font, str, len, &ginfo);
+			XSetForeground(disp, win->gc, term->palette[bg]);
+			XFillRectangle(disp, win->window, win->gc, x,
+					yoff - chary * 0.8, ginfo.xOff, chary);
+		}
+		/* 文字 */
+		c = term->palette[fg];
+		xc.color.red   =   RED(c) << 8;
+		xc.color.green = GREEN(c) << 8;
+		xc.color.blue  =  BLUE(c) << 8;
+		xc.color.alpha = 0xffff;
+		XftDrawString32(win->draw, &xc, font, x, y, str, len);
+
+		/* 後処理 */
+	}
 }
 
 Win *
