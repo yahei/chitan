@@ -215,7 +215,7 @@ drawLine(Line *line, int xoff, int yoff)
 	int fg, bg;
 	XftColor xc;
 	Color c;
-	int x, y;
+	int x, y, width;
 	const char32_t *str;
 	int len;
 
@@ -223,15 +223,15 @@ drawLine(Line *line, int xoff, int yoff)
 	for (current = 0; line->str[current] != L'\0'; current = next) {
 		/* 描画する文字列 */
 		next = findNextSGR(line, current);
-		XftTextExtents32(disp, font, line->str, current, &ginfo);
-
-		/* 色や座標 */
 		fg = line->fg[current];
 		bg = line->bg[current];
-		x = ginfo.xOff + xoff;
-		y = yoff;
 		str = line->str + current;
 		len = next - current;
+		XftTextExtents32(disp, font, line->str, current, &ginfo);
+		x = ginfo.xOff + xoff;
+		y = yoff;
+		XftTextExtents32(disp, font, str, len, &ginfo);
+		width = ginfo.xOff;
 
 		/* 前処理 */
 		if (line->attr[current] & BOLD) { /* 太字 */
@@ -244,14 +244,13 @@ drawLine(Line *line, int xoff, int yoff)
 			fg = fg ^ bg;
 		}
 
-		/* 描画 */
+		/* 背景 */
 		if (bg != defbg) {
-			/* 背景 */
-			XftTextExtents32(disp, font, str, len, &ginfo);
 			XSetForeground(disp, win->gc, term->palette[bg]);
-			XFillRectangle(disp, win->window, win->gc, x,
-					yoff - chary * 0.8, ginfo.xOff, chary);
+			XFillRectangle(disp, win->window, win->gc,
+					x, yoff - chary * 0.8, width, chary);
 		}
+
 		/* 文字 */
 		c = term->palette[fg];
 		xc.color.red   =   RED(c) << 8;
@@ -261,6 +260,10 @@ drawLine(Line *line, int xoff, int yoff)
 		XftDrawString32(win->draw, &xc, font, x, y, str, len);
 
 		/* 後処理 */
+		if (line->attr[current] & ULINE) { /* 下線 */
+			XSetForeground(disp, win->gc, term->palette[fg]);
+			XDrawLine(disp, win->window, win->gc, x, yoff, x + width, yoff);
+		}
 	}
 }
 
