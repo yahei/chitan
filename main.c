@@ -179,10 +179,14 @@ redraw(void)
 {
 	XGlyphInfo ginfo;
 	XWindowAttributes wattr;
-	XftColor xc;
-	Color c;
 	Line *line;
 	int current, next;
+	int fg, bg;
+	XftColor xc;
+	Color c;
+	int x, y;
+	const char32_t *str;
+	int len;
 	int index;
 	int i;
 
@@ -194,30 +198,46 @@ redraw(void)
 	for (i = 0; (line = getLine(term, i)); i++) {
 		/* 同じSGRの文字列ごとにまとめて書く */
 		for (current = 0; line->str[current] != L'\0'; current = next) {
+			/* 描画する文字列 */
 			next = findNextSGR(line, current);
 			XftTextExtents32(disp, font, line->str, current, &ginfo);
 
+			/* 色や座標 */
+			fg = line->fg[current];
+			bg = line->bg[current];
+			x = ginfo.xOff + 10;
+			y = (i + 1) * chary;
+			str = line->str + current;
+			len = next - current;
+
+			/* 前処理 */
 			if (line->attr[current] & BOLD) { /* 太字 */
-				c = term->palette[line->fg[current] +
-					(line->fg[current] < 8 ? 8 : 0)];
-				xc.color.red   = RED(c)   << 8;
-				xc.color.green = GREEN(c) << 8;
-				xc.color.blue  = BLUE(c)  << 8;
-				xc.color.alpha = 0xffff;
-				XftDrawString32(win->draw, &xc, font, ginfo.xOff + 10,
-						(i + 1) * chary, line->str + current,
-						next - current);
+				fg = fg < 8 ? fg + 8 : fg;
+				bg = bg < 8 ? bg + 8 : bg;
 			}
-			else { /* 通常 */
-				c = term->palette[line->fg[current]];
-				xc.color.red   = RED(c)   << 8;
-				xc.color.green = GREEN(c) << 8;
-				xc.color.blue  = BLUE(c)  << 8;
-				xc.color.alpha = 0xffff;
-				XftDrawString32(win->draw, &xc, font, ginfo.xOff + 10,
-						(i + 1) * chary, line->str + current,
-						next - current);
+			if (line->attr[current] & NEGA) { /* 反転 */
+				fg = fg ^ bg;
+				bg = fg ^ bg;
+				fg = fg ^ bg;
 			}
+
+			/* 描画 */
+			if (bg != defbg) {
+				/* 背景 */
+				XftTextExtents32(disp, font, str, len, &ginfo);
+				XSetForeground(disp, win->gc, term->palette[bg]);
+				XFillRectangle(disp, win->window, win->gc, x,
+						(i + 0.2) * chary, ginfo.xOff, chary);
+			}
+			/* 文字 */
+			c = term->palette[fg];
+			xc.color.red   =   RED(c) << 8;
+			xc.color.green = GREEN(c) << 8;
+			xc.color.blue  =  BLUE(c) << 8;
+			xc.color.alpha = 0xffff;
+			XftDrawString32(win->draw, &xc, font, x, y, str, len);
+
+			/* 後処理 */
 		}
 	}
 
@@ -227,8 +247,9 @@ redraw(void)
 	XftTextExtents32(disp, font, line->str, index, &ginfo);
 
 	/* カーソルを描く */
-	int x = ginfo.xOff + 10;
-	int y = term->cy * chary;
+	x = ginfo.xOff + 10;
+	y = term->cy * chary;
+	XSetForeground(disp, win->gc, term->palette[deffg]);
 	XDrawRectangle(disp, win->window, win->gc, x, y + chary/4, charx, chary);
 
 	XFlush(disp);
