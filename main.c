@@ -15,6 +15,8 @@ typedef struct Win {
 	GC gc;
 	XftDraw *draw;
 	XIC xic;
+	XPoint spot;
+	XVaNestedList spotlist;
 } Win;
 
 Display *disp;
@@ -268,6 +270,11 @@ redraw(void)
 	XSetForeground(disp, win->gc, term->palette[deffg]);
 	XDrawRectangle(disp, win->window, win->gc, x, y + chary/4, charx, chary);
 
+	/* スポット位置 */
+	win->spot.x = x;
+	win->spot.y = y + chary;
+	XSetICValues(win->xic, XNPreeditAttributes, win->spotlist, NULL);
+
 	XFlush(disp);
 }
 
@@ -361,6 +368,9 @@ openWindow(void)
 
 	/* XIC */
 	win->xic = xim ? xicOpen(win) : NULL;
+	win->spotlist = XVaCreateNestedList(0,
+			XNSpotLocation, &win->spot,
+			NULL);
 
 	/* ウィンドウを表示 */
 	XMapWindow(disp, win->window);
@@ -372,6 +382,7 @@ openWindow(void)
 void
 closeWindow(Win *win)
 {
+	XFree(win->spotlist);
 	if (win->xic)
 		XDestroyIC(win->xic);
 	XftDrawDestroy(win->draw);
