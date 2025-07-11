@@ -14,6 +14,7 @@ typedef struct Win {
 	Window window;
 	GC gc;
 	XftDraw *draw;
+	XIC xic;
 } Win;
 
 Display *disp;
@@ -22,6 +23,7 @@ Colormap cmap;
 XftFont *font;
 Win *win;
 XClassHint *hint;
+XIM xim;
 Term *term;
 int charx, chary;
 
@@ -50,6 +52,7 @@ init(void)
 
 	/* localeを設定 */
 	setlocale(LC_CTYPE, "");
+	XSetLocaleModifiers("");
 
 	/* Xサーバーに接続 */
 	disp= XOpenDisplay(NULL);
@@ -57,6 +60,10 @@ init(void)
 		fatal("XOpenDisplay failed.\n");
 	visual = DefaultVisual(disp, 0);
 	cmap = DefaultColormap(disp, 0);
+
+	/* XIM */
+	/* openできなかった場合はNULLを返す */
+	xim = XOpenIM(disp, NULL, NULL, NULL);
 
 	/* 文字描画の準備 */
 	FcInit();
@@ -139,6 +146,9 @@ fin(void)
 	term = NULL;
 	XftFontClose(disp, font);
 	FcFini();
+	if (xim)
+		XCloseIM(xim);
+	xim = NULL;
 	XCloseDisplay(disp);
 }
 
@@ -152,18 +162,31 @@ procXEvent(void)
 
 	while (0 < XPending(disp)) {
 		XNextEvent(disp, &event);
+
+		/* IMEのイベントをフィルタリング */
+		if (XFilterEvent(&event, None) == True)
+			continue;
+
 		switch (event.type) {
 		case KeyPress:
 			/* 端末に文字を送る */
-			len = XLookupString(&event.xkey, buf, sizeof(buf), NULL, NULL);
+			if (win->xic)
+				len = Xutf8LookupString(win->xic, &event.xkey, buf,
+						sizeof(buf) - 1, NULL, NULL);
+			else
+				len = XLookupString(&event.xkey, buf,
+						sizeof(buf) - 1, NULL, NULL);
+
 			if (event.xkey.state & Mod1Mask)
 				writePty(term, "\e", 1);
 			writePty(term, buf, len);
 			break;
+
 		case Expose:
 			/* 画面を再描画する */
 			redraw();
 			break;
+
 		case ConfigureNotify:
 			/* ウィンドウサイズ変更 */
 			e = (XConfigureEvent *)&event;
@@ -287,13 +310,27 @@ openWindow(void)
 
 	/* イベントマスク */
 	XSelectInput(disp, win->window,
-			ExposureMask | KeyPressMask | StructureNotifyMask);
+			ExposureMask | KeyPressMask | KeyReleaseMask | StructureNotifyMask);
 
 	/* 描画の準備 */
 	win->gc = XCreateGC(disp, win->window, 0, NULL);
 	win->draw = XftDrawCreate(disp, win->window, visual, cmap);
 	XSetForeground(disp, win->gc, term->palette[deffg]);
 	XSetBackground(disp, win->gc, term->palette[defbg]);
+
+	/* XIC */
+	if (xim) {
+		/* 生成できなかった場合はNULLを返す */
+		win->xic = XCreateIC(xim,
+				XNInputStyle, XIMPreeditNothing | XIMStatusNothing,
+				XNClientWindow, win->window,
+				XNFocusWindow, win->window,
+				NULL);
+	} else {
+		win->xic = NULL;
+	}
+	if (win->xic)
+		XSetICFocus(win->xic);
 
 	/* ウィンドウを表示 */
 	XMapWindow(disp, win->window);
@@ -305,6 +342,8 @@ openWindow(void)
 void
 closeWindow(Win *win)
 {
+	if (win->xic)
+		XDestroyIC(win->xic);
 	XftDrawDestroy(win->draw);
 	XFreeGC(disp, win->gc);
 	XDestroyWindow(disp, win->window);
