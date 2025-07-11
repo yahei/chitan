@@ -36,6 +36,7 @@ static XIC xicOpen(const Win *);
 static void run(void);
 static void fin(void);
 static void procXEvent(void);
+static void procKeyPress(XEvent, int);
 static void redraw(void);
 static void drawLine(Line *line, int, int);
 static Win *openWindow(void);
@@ -198,8 +199,6 @@ procXEvent(void)
 {
 	XEvent event;
 	XConfigureEvent *e;
-	char buf[256];
-	int len;
 
 	while (0 < XPending(disp)) {
 		XNextEvent(disp, &event);
@@ -213,16 +212,7 @@ procXEvent(void)
 		switch (event.type) {
 		case KeyPress:
 			/* 端末に文字を送る */
-			if (win->xic)
-				len = Xutf8LookupString(win->xic, &event.xkey, buf,
-						sizeof(buf) - 1, NULL, NULL);
-			else
-				len = XLookupString(&event.xkey, buf,
-						sizeof(buf) - 1, NULL, NULL);
-
-			if (event.xkey.state & Mod1Mask)
-				writePty(term, "\e", 1);
-			writePty(term, buf, len);
+			procKeyPress(event, 64);
 			break;
 
 		case Expose:
@@ -239,6 +229,28 @@ procXEvent(void)
 			break;
 		}
 	}
+}
+
+void
+procKeyPress(XEvent event, int bufsize)
+{
+	char buf[bufsize];
+	int len;
+	Status status;
+
+	if (win->xic) {
+		len = Xutf8LookupString(win->xic, &event.xkey, buf, sizeof(buf), NULL, &status);
+		if (status == XBufferOverflow)
+			return procKeyPress(event, len);
+	} else {
+		len = XLookupString(&event.xkey, buf, sizeof(buf), NULL, NULL);
+	}
+
+	/* Alt */
+	if (event.xkey.state & Mod1Mask)
+		writePty(term, "\e", 1);
+
+	writePty(term, buf, len);
 }
 
 void
