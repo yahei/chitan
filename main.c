@@ -28,6 +28,9 @@ Term *term;
 int charx, chary;
 
 static void init(void);
+static void imInstantiateCallback(Display *, XPointer, XPointer);
+static void imDestroyCallback(XIM, XPointer, XPointer);
+static XIC xicOpen(const Win *);
 static void run(void);
 static void fin(void);
 static void procXEvent(void);
@@ -62,8 +65,8 @@ init(void)
 	cmap = DefaultColormap(disp, 0);
 
 	/* XIM */
-	/* openできなかった場合はNULLを返す */
-	xim = XOpenIM(disp, NULL, NULL, NULL);
+	XRegisterIMInstantiateCallback(disp, NULL, NULL, NULL,
+			imInstantiateCallback, NULL);
 
 	/* 文字描画の準備 */
 	FcInit();
@@ -88,6 +91,39 @@ init(void)
 	/* ウィンドウの作成 */
 	hint = XAllocClassHint();
 	win = openWindow();
+}
+
+void
+imInstantiateCallback(Display *disp, XPointer, XPointer)
+{
+	static XIMCallback destroyCB = {NULL, imDestroyCallback};
+
+	xim = XOpenIM(disp, NULL, NULL, NULL);
+	if (!xim)
+		return;
+
+	XSetIMValues(xim, XNDestroyCallback, &destroyCB, NULL);
+
+	if (win)
+		win->xic = xicOpen(win);
+}
+
+void
+imDestroyCallback(XIM, XPointer, XPointer)
+{
+	xim = NULL;
+	win->xic = NULL;
+}
+
+XIC
+xicOpen(const Win *win)
+{
+	XIC xic = XCreateIC(xim,
+			XNInputStyle, XIMPreeditNothing | XIMStatusNothing,
+			XNClientWindow, win->window,
+			XNFocusWindow, win->window,
+			NULL);
+	return xic;
 }
 
 void
@@ -138,6 +174,9 @@ run(void)
 void
 fin(void)
 {
+	if (win->xic)
+		XDestroyIC(win->xic);
+	win->xic = NULL;
 	XFree(hint);
 	hint = NULL;
 	closeWindow(win);
@@ -164,7 +203,9 @@ procXEvent(void)
 		XNextEvent(disp, &event);
 
 		/* IMEのイベントをフィルタリング */
-		if (XFilterEvent(&event, None) == True)
+		if (!xim)
+			imInstantiateCallback(disp, NULL, NULL);
+		if (xim && XFilterEvent(&event, None) == True)
 			continue;
 
 		switch (event.type) {
@@ -319,18 +360,7 @@ openWindow(void)
 	XSetBackground(disp, win->gc, term->palette[defbg]);
 
 	/* XIC */
-	if (xim) {
-		/* 生成できなかった場合はNULLを返す */
-		win->xic = XCreateIC(xim,
-				XNInputStyle, XIMPreeditNothing | XIMStatusNothing,
-				XNClientWindow, win->window,
-				XNFocusWindow, win->window,
-				NULL);
-	} else {
-		win->xic = NULL;
-	}
-	if (win->xic)
-		XSetICFocus(win->xic);
+	win->xic = xim ? xicOpen(win) : NULL;
 
 	/* ウィンドウを表示 */
 	XMapWindow(disp, win->window);
