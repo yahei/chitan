@@ -17,6 +17,7 @@ typedef struct Win {
 	XIC xic;
 	XPoint spot;
 	XVaNestedList spotlist;
+	XVaNestedList preeditAttrs;
 } Win;
 
 Display *disp;
@@ -32,7 +33,12 @@ int charx, chary;
 static void init(void);
 static void imInstantiateCallback(Display *, XPointer, XPointer);
 static void imDestroyCallback(XIM, XPointer, XPointer);
-static XIC xicOpen(const Win *);
+static int xicDestroyCallback(XIC, XPointer, XPointer);
+static void xicOpen(Win *);
+static void xPreeditStart(XIM , XPointer, XPointer);
+static void xPreeditDone(XIM, XPointer, XPointer);
+static void xPreeditDraw(XIM, XPointer, XIMPreeditDrawCallbackStruct *);
+static void xPreeditCaret(XIM, XPointer, XIMPreeditCaretCallbackStruct *);
 static void run(void);
 static void fin(void);
 static void procXEvent(void);
@@ -99,16 +105,17 @@ init(void)
 void
 imInstantiateCallback(Display *disp, XPointer, XPointer)
 {
-	static XIMCallback destroyCB = {NULL, imDestroyCallback};
+	static XIMCallback destroyCB = { NULL, imDestroyCallback };
 
 	xim = XOpenIM(disp, NULL, NULL, NULL);
 	if (!xim)
 		return;
 
-	XSetIMValues(xim, XNDestroyCallback, &destroyCB, NULL);
+	if (XSetIMValues(xim, XNDestroyCallback, &destroyCB, NULL))
+		fprintf(stderr, "Could not set XNDestroyCallback.\n");
 
 	if (win)
-		win->xic = xicOpen(win);
+		xicOpen(win);
 }
 
 void
@@ -118,15 +125,88 @@ imDestroyCallback(XIM, XPointer, XPointer)
 	win->xic = NULL;
 }
 
-XIC
-xicOpen(const Win *win)
+int
+xicDestroyCallback(XIC xic, XPointer client, XPointer call)
 {
-	XIC xic = XCreateIC(xim,
-			XNInputStyle, XIMPreeditNothing | XIMStatusNothing,
+	win->xic = NULL;
+	XFree(win->preeditAttrs);
+	win->preeditAttrs = NULL;
+	return 1;
+}
+
+void
+xicOpen(Win *win)
+{
+	static XICCallback icdestroy = { NULL, xicDestroyCallback };
+	static XIMCallback pestart   = { NULL, xPreeditStart };
+	static XIMCallback pedone    = { NULL, xPreeditDone };
+	static XIMCallback pedraw    = { NULL, (XIMProc)xPreeditDraw };
+	static XIMCallback pecaret   = { NULL, (XIMProc)xPreeditCaret };
+	XIMStyles *styles;
+	XIMStyle candidates[] = {
+		XIMPreeditCallbacks | XIMStatusNothing,
+		XIMPreeditNothing | XIMStatusNothing
+	};
+	int i, j;
+
+	/* 利用可能なスタイルを調べて選ぶ */
+	if (XGetIMValues(xim, XNQueryInputStyle, &styles, NULL)) {
+		fprintf(stderr, "Could not get XNQueryInputStyle.\n");
+		return;
+	}
+	for (i = 0; i < sizeof(candidates) / sizeof(XIMStyle); i++)
+		for (j = 0; j < styles->count_styles; j++)
+			if (candidates[i] == styles->supported_styles[j])
+				goto match;
+	fprintf(stderr, "None of the candidates styles matched.\n");
+	XFree(styles);
+	return;
+match:
+	XFree(styles);
+
+	/* コンテキスト作成 */
+	win->xic = XCreateIC(xim,
+			XNInputStyle, candidates[i],
 			XNClientWindow, win->window,
 			XNFocusWindow, win->window,
+			XNDestroyCallback, &icdestroy,
 			NULL);
-	return xic;
+	if (win->xic && candidates[i] & XIMPreeditCallbacks) {
+		win->preeditAttrs = XVaCreateNestedList(0,
+				XNPreeditStartCallback, &pestart,
+				XNPreeditDoneCallback,  &pedone,
+				XNPreeditDrawCallback,  &pedraw,
+				XNPreeditCaretCallback, &pecaret,
+				NULL);
+		XSetICValues(win->xic, XNPreeditAttributes,
+				win->preeditAttrs, NULL);
+	} else {
+		win->preeditAttrs = NULL;
+	}
+}
+
+void
+xPreeditStart(XIM xim, XPointer client, XPointer call)
+{
+	puts("start");
+}
+
+void
+xPreeditDone(XIM xim, XPointer client, XPointer call)
+{
+	puts("done");
+}
+
+void
+xPreeditDraw(XIM xim, XPointer client, XIMPreeditDrawCallbackStruct *call)
+{
+	puts("draw");
+}
+
+void
+xPreeditCaret(XIM xim, XPointer client, XIMPreeditCaretCallbackStruct *call)
+{
+	puts("caret");
 }
 
 void
@@ -283,9 +363,11 @@ redraw(void)
 	XDrawRectangle(disp, win->window, win->gc, x, y + chary/4, charx, chary);
 
 	/* スポット位置 */
-	win->spot.x = x;
-	win->spot.y = y + chary;
-	XSetICValues(win->xic, XNPreeditAttributes, win->spotlist, NULL);
+	if (win->xic) {
+		win->spot.x = x;
+		win->spot.y = y + chary;
+		XSetICValues(win->xic, XNPreeditAttributes, win->spotlist, NULL);
+	}
 
 	XFlush(disp);
 }
@@ -379,7 +461,8 @@ openWindow(void)
 	XSetBackground(disp, win->gc, term->palette[defbg]);
 
 	/* XIC */
-	win->xic = xim ? xicOpen(win) : NULL;
+	if (xim)
+		xicOpen(win);
 	win->spotlist = XVaCreateNestedList(0,
 			XNSpotLocation, &win->spot,
 			NULL);
