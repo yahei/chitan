@@ -6,6 +6,7 @@ extern int defbg;
 typedef uint_least32_t char32_t;
 
 enum sgt_attribute {
+	NONE    = 0,
 	BOLD    = 1 << 0,   /* 太字 */
 	FAINT   = 1 << 1,   /* 細字 */
 	ITALIC  = 1 << 2,   /* 斜体 */

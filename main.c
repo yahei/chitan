@@ -18,6 +18,7 @@ typedef struct Win {
 	XPoint spot;
 	XVaNestedList spotlist;
 	XVaNestedList preeditAttrs;
+	Line *preedit;
 } Win;
 
 Display *disp;
@@ -194,13 +195,66 @@ xPreeditStart(XIM xim, XPointer client, XPointer call)
 void
 xPreeditDone(XIM xim, XPointer client, XPointer call)
 {
-	puts("done");
+	putU32s(win->preedit, 0, (char32_t *)L"\0", 0, deffg, defbg, 1);
+	redraw();
 }
 
 void
 xPreeditDraw(XIM xim, XPointer client, XIMPreeditDrawCallbackStruct *call)
 {
-	puts("draw");
+	char32_t *str;
+	int *attr, *fg, *bg;
+	int length;
+	XIMFeedback fb;
+	InsertLine newline;
+	int i;
+
+	if (!win)
+		return;
+
+	/* 削除の処理 */
+	putU32s(win->preedit, 0, (char32_t *)L"\0", 0, deffg, defbg, 1);
+
+	if (call->text == NULL)
+		return;
+
+	/* 挿入の処理 */
+	length = call->text->length;
+	str  = xmalloc(length * sizeof(char32_t));
+	attr = xmalloc(length * sizeof(int));
+	fg   = xmalloc(length * sizeof(int));
+	bg   = xmalloc(length * sizeof(int));
+
+	/* 文字列 */
+	u8sToU32s(str, call->text->string.multi_byte, length);
+
+	/* 属性 */
+	for (i = 0; i < length; i++) {
+		attr[i] = ULINE;
+		fg[i]   = deffg;
+		bg[i]   = defbg;
+	}
+	if (call->text->feedback) {
+		for (i = 0; i < length; i++) {
+			fb = call->text->feedback[i];
+			attr[i] = NONE;
+			attr[i] |= fb & XIMReverse   ? NEGA    : NONE;
+			attr[i] |= fb & XIMUnderline ? ULINE   : NONE;
+			attr[i] |= fb & XIMHighlight ? BOLD    : NONE;
+		}
+	}
+
+	/* 挿入を実行 */
+	newline = (InsertLine){ str, attr, fg, bg };
+	insertU32s(win->preedit, 0, &newline, length);
+
+	/* 終了 */
+	free(str);
+	free(attr);
+	free(fg);
+	free(bg);
+
+	redraw();
 }
 
 void
@@ -355,12 +409,16 @@ redraw(void)
 	line = getLine(term, term->cy);
 	index = getCharCnt(line, term->cx).index;
 	XftTextExtents32(disp, font, line->str, index, &ginfo);
-
-	/* カーソルを描く */
 	x = ginfo.xOff + 10;
 	y = term->cy * chary;
-	XSetForeground(disp, win->gc, term->palette[deffg]);
-	XDrawRectangle(disp, win->window, win->gc, x, y + chary/4, charx, chary);
+
+	/* カーソルかPreeditを表示 */
+	if (u32slen(win->preedit->str)) {
+		drawLine(win->preedit, x, y + chary);
+	} else {
+		XSetForeground(disp, win->gc, term->palette[deffg]);
+		XDrawRectangle(disp, win->window, win->gc, x, y + chary/4, charx, chary);
+	}
 
 	/* スポット位置 */
 	if (win->xic) {
@@ -460,12 +518,13 @@ openWindow(void)
 	XSetForeground(disp, win->gc, term->palette[deffg]);
 	XSetBackground(disp, win->gc, term->palette[defbg]);
 
-	/* XIC */
+	/* IME */
 	if (xim)
 		xicOpen(win);
 	win->spotlist = XVaCreateNestedList(0,
 			XNSpotLocation, &win->spot,
 			NULL);
+	win->preedit = allocLine();
 
 	/* ウィンドウを表示 */
 	XMapWindow(disp, win->window);
@@ -477,7 +536,9 @@ openWindow(void)
 void
 closeWindow(Win *win)
 {
+	freeLine(win->preedit);
 	XFree(win->spotlist);
+	XFree(win->preeditAttrs);
 	if (win->xic)
 		XDestroyIC(win->xic);
 	XftDrawDestroy(win->draw);
