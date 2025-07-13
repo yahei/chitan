@@ -14,40 +14,50 @@ typedef struct Win {
 	Window window;
 	GC gc;
 	XftDraw *draw;
-	XIC xic;
-	XPoint spot;
-	XVaNestedList spotlist;
-	XVaNestedList preeditAttrs;
-	Line *preedit;
-	int pecaret;
+	XClassHint *hint;
 	int width, height;
+	struct {
+		XIC xic;
+		XICCallback icdestroy;
+		XIMCallback pestart;
+		XIMCallback pedone;
+		XIMCallback pedraw;
+		XIMCallback pecaret;
+		XPoint spot;
+		XVaNestedList spotlist;
+		XVaNestedList preeditAttrs;
+		Line *preedit;
+		int caret;
+	} ime;
+	Term *term;
 } Win;
 
 Display *disp;
 Visual *visual;
 Colormap cmap;
 XftFont *font;
-Win *win;
-XClassHint *hint;
-XIM xim;
-Term *term;
 int charx, chary;
+XIM xim;
+Win *win;
 
 static void init(void);
 static void imInstantiateCallback(Display *, XPointer, XPointer);
 static void imDestroyCallback(XIM, XPointer, XPointer);
-static int xicDestroyCallback(XIC, XPointer, XPointer);
+
+static int xicDestroyCallback(XIC, Win *, XPointer);
 static void xicOpen(Win *);
-static void xPreeditStart(XIM , XPointer, XPointer);
-static void xPreeditDone(XIM, XPointer, XPointer);
-static void xPreeditDraw(XIM, XPointer, XIMPreeditDrawCallbackStruct *);
-static void xPreeditCaret(XIM, XPointer, XIMPreeditCaretCallbackStruct *);
+static void xPreeditStart(XIM, Win *, XPointer);
+static void xPreeditDone(XIM, Win *, XPointer);
+static void xPreeditDraw(XIM, Win *, XIMPreeditDrawCallbackStruct *);
+static void xPreeditCaret(XIM, Win *, XIMPreeditCaretCallbackStruct *);
+
 static void run(void);
 static void fin(void);
 static void procXEvent(void);
 static void procKeyPress(XEvent, int);
-static void redraw(void);
-static void drawLine(Line *line, int, int);
+
+static void redraw(Win *);
+static void drawLine(Win *, Line *, int, int);
 static Win *openWindow(void);
 static void closeWindow(Win *);
 
@@ -95,13 +105,7 @@ init(void)
 	chary = ginfo.height * 1.25;
 	charx = ginfo.width / 4;
 
-	/* 端末をオープン */
-	term = openTerm();
-	if (!term)
-		errExit("newTerm failed.\n");
-	
 	/* ウィンドウの作成 */
-	hint = XAllocClassHint();
 	win = openWindow();
 }
 
@@ -122,35 +126,36 @@ imInstantiateCallback(Display *disp, XPointer, XPointer)
 }
 
 void
-imDestroyCallback(XIM, XPointer, XPointer)
+imDestroyCallback(XIM xim, XPointer client, XPointer call)
 {
 	xim = NULL;
-	win->xic = NULL;
 }
 
 int
-xicDestroyCallback(XIC xic, XPointer client, XPointer call)
+xicDestroyCallback(XIC xic, Win *win, XPointer call)
 {
-	win->xic = NULL;
-	XFree(win->preeditAttrs);
-	win->preeditAttrs = NULL;
+	win->ime.xic = NULL;
+	XFree(win->ime.preeditAttrs);
+	win->ime.preeditAttrs = NULL;
 	return 1;
 }
 
 void
 xicOpen(Win *win)
 {
-	static XICCallback icdestroy = { NULL, xicDestroyCallback };
-	static XIMCallback pestart   = { NULL, xPreeditStart };
-	static XIMCallback pedone    = { NULL, xPreeditDone };
-	static XIMCallback pedraw    = { NULL, (XIMProc)xPreeditDraw };
-	static XIMCallback pecaret   = { NULL, (XIMProc)xPreeditCaret };
 	XIMStyles *styles;
 	XIMStyle candidates[] = {
 		XIMPreeditCallbacks | XIMStatusNothing,
 		XIMPreeditNothing | XIMStatusNothing
 	};
 	int i, j;
+
+	/* コールバック */
+	win->ime.icdestroy = (XICCallback){ (XPointer)win, (XICProc)xicDestroyCallback };
+	win->ime.pestart   = (XIMCallback){ (XPointer)win, (XIMProc)xPreeditStart };
+	win->ime.pedone    = (XIMCallback){ (XPointer)win, (XIMProc)xPreeditDone };
+	win->ime.pedraw    = (XIMCallback){ (XPointer)win, (XIMProc)xPreeditDraw };
+	win->ime.pecaret   = (XIMCallback){ (XPointer)win, (XIMProc)xPreeditCaret };
 
 	/* 利用可能なスタイルを調べて選ぶ */
 	if (XGetIMValues(xim, XNQueryInputStyle, &styles, NULL)) {
@@ -168,41 +173,41 @@ match:
 	XFree(styles);
 
 	/* コンテキスト作成 */
-	win->xic = XCreateIC(xim,
+	win->ime.xic = XCreateIC(xim,
 			XNInputStyle, candidates[i],
 			XNClientWindow, win->window,
 			XNFocusWindow, win->window,
-			XNDestroyCallback, &icdestroy,
+			XNDestroyCallback, &win->ime.icdestroy,
 			NULL);
-	if (win->xic && candidates[i] & XIMPreeditCallbacks) {
-		win->preeditAttrs = XVaCreateNestedList(0,
-				XNPreeditStartCallback, &pestart,
-				XNPreeditDoneCallback,  &pedone,
-				XNPreeditDrawCallback,  &pedraw,
-				XNPreeditCaretCallback, &pecaret,
+	if (win->ime.xic && candidates[i] & XIMPreeditCallbacks) {
+		win->ime.preeditAttrs = XVaCreateNestedList(0,
+				XNPreeditStartCallback, &win->ime.pestart,
+				XNPreeditDoneCallback,  &win->ime.pedone,
+				XNPreeditDrawCallback,  &win->ime.pedraw,
+				XNPreeditCaretCallback, &win->ime.pecaret,
 				NULL);
-		XSetICValues(win->xic, XNPreeditAttributes,
-				win->preeditAttrs, NULL);
+		XSetICValues(win->ime.xic, XNPreeditAttributes,
+				win->ime.preeditAttrs, NULL);
 	} else {
-		win->preeditAttrs = NULL;
+		win->ime.preeditAttrs = NULL;
 	}
 }
 
 void
-xPreeditStart(XIM xim, XPointer client, XPointer call)
+xPreeditStart(XIM xim, Win *win, XPointer call)
 {
-	puts("start");
+	putU32s(win->ime.preedit, 0, (char32_t *)L"\0", 0, deffg, defbg, 1);
 }
 
 void
-xPreeditDone(XIM xim, XPointer client, XPointer call)
+xPreeditDone(XIM xim, Win *win, XPointer call)
 {
-	putU32s(win->preedit, 0, (char32_t *)L"\0", 0, deffg, defbg, 1);
-	redraw();
+	putU32s(win->ime.preedit, 0, (char32_t *)L"\0", 0, deffg, defbg, 1);
+	redraw(win);
 }
 
 void
-xPreeditDraw(XIM xim, XPointer client, XIMPreeditDrawCallbackStruct *call)
+xPreeditDraw(XIM xim, Win *win, XIMPreeditDrawCallbackStruct *call)
 {
 	char32_t *str;
 	int *attr, *fg, *bg, defAttr;
@@ -215,10 +220,10 @@ xPreeditDraw(XIM xim, XPointer client, XIMPreeditDrawCallbackStruct *call)
 		return;
 
 	/* カーソル位置 */
-	win->pecaret = call->caret;
+	win->ime.caret = call->caret;
 
 	/* 削除の処理 */
-	deleteChars(win->preedit, call->chg_first, call->chg_length);
+	deleteChars(win->ime.preedit, call->chg_first, call->chg_length);
 
 	if (call->text == NULL)
 		return;
@@ -235,9 +240,9 @@ xPreeditDraw(XIM xim, XPointer client, XIMPreeditDrawCallbackStruct *call)
 
 	/* 属性 */
 	defAttr = ULINE;
-	if (0 < u32slen(win->preedit->str))
-		defAttr = win->preedit->attr[
-			MIN(call->chg_first, u32slen(win->preedit->str) - 1)
+	if (0 < u32slen(win->ime.preedit->str))
+		defAttr = win->ime.preedit->attr[
+			MIN(call->chg_first, u32slen(win->ime.preedit->str) - 1)
 		];
 	for (i = 0; i < length; i++) {
 		attr[i] = defAttr;
@@ -256,7 +261,7 @@ xPreeditDraw(XIM xim, XPointer client, XIMPreeditDrawCallbackStruct *call)
 
 	/* 挿入を実行 */
 	newline = (InsertLine){ str, attr, fg, bg };
-	insertU32s(win->preedit, 0, &newline, length);
+	insertU32s(win->ime.preedit, call->chg_first, &newline, length);
 
 	/* 終了 */
 	free(str);
@@ -264,13 +269,14 @@ xPreeditDraw(XIM xim, XPointer client, XIMPreeditDrawCallbackStruct *call)
 	free(fg);
 	free(bg);
 
-	redraw();
+	redraw(win);
 }
 
 void
-xPreeditCaret(XIM xim, XPointer client, XIMPreeditCaretCallbackStruct *call)
+xPreeditCaret(XIM xim, Win *win, XIMPreeditCaretCallbackStruct *call)
 {
-	puts("caret");
+	win->ime.caret = call->position;
+	redraw(win);
 }
 
 void
@@ -278,7 +284,7 @@ run(void)
 {
 	fd_set rfds;
 	struct timespec timeout, *ptimeout;
-	int tfd = term->master;
+	int tfd = win->term->master;
 	int xfd = XConnectionNumber(disp);
 
 	while (1) {
@@ -303,12 +309,12 @@ run(void)
 
 		/* 端末のread */
 		if (FD_ISSET(tfd, &rfds)) {
-			if (readPty(term) < 0) {
+			if (readPty(win->term) < 0) {
 				/* 終了 */
 				printf("exit.\n");
 				return;
 			}
-			redraw();
+			redraw(win);
 		}
 
 		/* ウィンドウのイベント処理 */
@@ -321,15 +327,11 @@ run(void)
 void
 fin(void)
 {
-	if (win->xic)
-		XDestroyIC(win->xic);
-	win->xic = NULL;
-	XFree(hint);
-	hint = NULL;
+	if (win->ime.xic)
+		XDestroyIC(win->ime.xic);
+	win->ime.xic = NULL;
 	closeWindow(win);
 	win = NULL;
-	closeTerm(term);
-	term = NULL;
 	XftFontClose(disp, font);
 	FcFini();
 	if (xim)
@@ -361,7 +363,7 @@ procXEvent(void)
 
 		case Expose:
 			/* 画面を再描画する */
-			redraw();
+			redraw(win);
 			break;
 
 		case ConfigureNotify:
@@ -369,7 +371,7 @@ procXEvent(void)
 			e = (XConfigureEvent *)&event;
 			win->width = e->width;
 			win->height = e->height;
-			setWinSize(term, (e->height - 10) / chary,
+			setWinSize(win->term, (e->height - 10) / chary,
 					(e->width - 20) / charx,
 					e->width, e->height);
 			break;
@@ -384,8 +386,8 @@ procKeyPress(XEvent event, int bufsize)
 	int len;
 	Status status;
 
-	if (win->xic) {
-		len = Xutf8LookupString(win->xic, &event.xkey, buf, sizeof(buf), NULL, &status);
+	if (win->ime.xic) {
+		len = Xutf8LookupString(win->ime.xic, &event.xkey, buf, sizeof(buf), NULL, &status);
 		if (status == XBufferOverflow)
 			return procKeyPress(event, len);
 	} else {
@@ -394,13 +396,13 @@ procKeyPress(XEvent event, int bufsize)
 
 	/* Alt */
 	if (event.xkey.state & Mod1Mask)
-		writePty(term, "\e", 1);
+		writePty(win->term, "\e", 1);
 
-	writePty(term, buf, len);
+	writePty(win->term, buf, len);
 }
 
 void
-redraw(void)
+redraw(Win *win)
 {
 	XGlyphInfo ginfo;
 	XWindowAttributes wattr;
@@ -414,23 +416,23 @@ redraw(void)
 	XClearArea(disp, win->window, 0, 0, wattr.width, wattr.height, False);
 
 	/* 端末の内容をウィンドウに表示 */
-	for (i = 0; (line = getLine(term, i)); i++)
-		drawLine(line, 10, (i + 1) * chary);
+	for (i = 0; (line = getLine(win->term, i)); i++)
+		drawLine(win, line, 10, (i + 1) * chary);
 
 	/* カーソルの位置を取得 */
-	line = getLine(term, term->cy);
-	index = getCharCnt(line, term->cx).index;
+	line = getLine(win->term, win->term->cy);
+	index = getCharCnt(line, win->term->cx).index;
 	XftTextExtents32(disp, font, line->str, index, &ginfo);
 	x = ginfo.xOff + 10;
-	y = term->cy * chary;
+	y = win->term->cy * chary;
 
 	/* カーソルかPreeditを表示 */
-	XSetForeground(disp, win->gc, term->palette[deffg]);
-	if (u32slen(win->preedit->str)) {
+	XSetForeground(disp, win->gc, win->term->palette[deffg]);
+	if (u32slen(win->ime.preedit->str)) {
 		/* Preeditの幅とキャレットのPreedit内での座標を取得 */
-		XftTextExtents32(disp, font, win->preedit->str, u32slen(win->preedit->str), &ginfo);
+		XftTextExtents32(disp, font, win->ime.preedit->str, u32slen(win->ime.preedit->str), &ginfo);
 		pewidth = ginfo.xOff;
-		XftTextExtents32(disp, font, win->preedit->str, win->pecaret, &ginfo);
+		XftTextExtents32(disp, font, win->ime.preedit->str, win->ime.caret, &ginfo);
 
 		/* Preeditの画面上での描画位置を決める */
 		pepos = x - ginfo.xOff;
@@ -439,7 +441,7 @@ redraw(void)
 		pepos = MIN(pepos, x);
 
 		/* Preeditとカーソルの描画 */
-		drawLine(win->preedit, pepos, y + chary);
+		drawLine(win, win->ime.preedit, pepos, y + chary);
 		XDrawRectangle(disp, win->window, win->gc, pepos + ginfo.xOff, y + chary/4, charx, chary);
 	} else {
 		/* カーソルの描画 */
@@ -447,17 +449,17 @@ redraw(void)
 	}
 
 	/* スポット位置 */
-	if (win->xic) {
-		win->spot.x = x;
-		win->spot.y = y + chary;
-		XSetICValues(win->xic, XNPreeditAttributes, win->spotlist, NULL);
+	if (win->ime.xic) {
+		win->ime.spot.x = x;
+		win->ime.spot.y = y + chary;
+		XSetICValues(win->ime.xic, XNPreeditAttributes, win->ime.spotlist, NULL);
 	}
 
 	XFlush(disp);
 }
 
 void
-drawLine(Line *line, int xoff, int yoff)
+drawLine(Win *win, Line *line, int xoff, int yoff)
 {
 	XGlyphInfo ginfo;
 	int current, next;
@@ -494,12 +496,12 @@ drawLine(Line *line, int xoff, int yoff)
 		}
 
 		/* 背景 */
-		XSetForeground(disp, win->gc, term->palette[bg]);
+		XSetForeground(disp, win->gc, win->term->palette[bg]);
 		XFillRectangle(disp, win->window, win->gc,
 				x, yoff - chary * 0.8, width, chary);
 
 		/* 文字 */
-		c = term->palette[fg];
+		c = win->term->palette[fg];
 		xc.color.red   =   RED(c) << 8;
 		xc.color.green = GREEN(c) << 8;
 		xc.color.blue  =  BLUE(c) << 8;
@@ -508,7 +510,7 @@ drawLine(Line *line, int xoff, int yoff)
 
 		/* 後処理 */
 		if (line->attr[current] & ULINE) { /* 下線 */
-			XSetForeground(disp, win->gc, term->palette[fg]);
+			XSetForeground(disp, win->gc, win->term->palette[fg]);
 			XDrawLine(disp, win->window, win->gc, x, yoff, x + width, yoff);
 		}
 	}
@@ -519,6 +521,11 @@ openWindow(void)
 {
 	Win *win = xmalloc(sizeof(Win));
 
+	/* 端末をオープン */
+	win->term = openTerm();
+	if (!win->term)
+		errExit("newTerm failed.\n");
+
 	/* ウィンドウ作成 */
 	win->width = 800;
 	win->height = 600;
@@ -526,13 +533,14 @@ openWindow(void)
 			disp,
 			DefaultRootWindow(disp),
 			10, 10, win->width, win->height, 1,
-			term->palette[deffg],
-			term->palette[defbg]);
+			win->term->palette[deffg],
+			win->term->palette[defbg]);
 
 	/* プロパティ */
-	hint->res_name = "minty";
-	hint->res_class = "minty";
-	XSetClassHint(disp, win->window, hint);
+	win->hint = XAllocClassHint();
+	win->hint->res_name = "minty";
+	win->hint->res_class = "minty";
+	XSetClassHint(disp, win->window, win->hint);
 
 	/* イベントマスク */
 	XSelectInput(disp, win->window,
@@ -541,16 +549,16 @@ openWindow(void)
 	/* 描画の準備 */
 	win->gc = XCreateGC(disp, win->window, 0, NULL);
 	win->draw = XftDrawCreate(disp, win->window, visual, cmap);
-	XSetForeground(disp, win->gc, term->palette[deffg]);
-	XSetBackground(disp, win->gc, term->palette[defbg]);
+	XSetForeground(disp, win->gc, win->term->palette[deffg]);
+	XSetBackground(disp, win->gc, win->term->palette[defbg]);
 
 	/* IME */
 	if (xim)
 		xicOpen(win);
-	win->spotlist = XVaCreateNestedList(0,
-			XNSpotLocation, &win->spot,
+	win->ime.spotlist = XVaCreateNestedList(0,
+			XNSpotLocation, &win->ime.spot,
 			NULL);
-	win->preedit = allocLine();
+	win->ime.preedit = allocLine();
 
 	/* ウィンドウを表示 */
 	XMapWindow(disp, win->window);
@@ -562,13 +570,15 @@ openWindow(void)
 void
 closeWindow(Win *win)
 {
-	freeLine(win->preedit);
-	XFree(win->spotlist);
-	XFree(win->preeditAttrs);
-	if (win->xic)
-		XDestroyIC(win->xic);
+	freeLine(win->ime.preedit);
+	XFree(win->ime.spotlist);
+	XFree(win->ime.preeditAttrs);
+	if (win->ime.xic)
+		XDestroyIC(win->ime.xic);
 	XftDrawDestroy(win->draw);
 	XFreeGC(disp, win->gc);
+	XFree(win->hint);
 	XDestroyWindow(disp, win->window);
+	closeTerm(win->term);
 	free(win);
 }
