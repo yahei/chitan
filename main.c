@@ -19,6 +19,7 @@ typedef struct Win {
 	XVaNestedList spotlist;
 	XVaNestedList preeditAttrs;
 	Line *preedit;
+	int pecaret;
 } Win;
 
 Display *disp;
@@ -203,7 +204,7 @@ void
 xPreeditDraw(XIM xim, XPointer client, XIMPreeditDrawCallbackStruct *call)
 {
 	char32_t *str;
-	int *attr, *fg, *bg;
+	int *attr, *fg, *bg, defAttr;
 	int length;
 	XIMFeedback fb;
 	InsertLine newline;
@@ -212,8 +213,11 @@ xPreeditDraw(XIM xim, XPointer client, XIMPreeditDrawCallbackStruct *call)
 	if (!win)
 		return;
 
+	/* カーソル位置 */
+	win->pecaret = call->caret;
+
 	/* 削除の処理 */
-	putU32s(win->preedit, 0, (char32_t *)L"\0", 0, deffg, defbg, 1);
+	deleteChars(win->preedit, call->chg_first, call->chg_length);
 
 	if (call->text == NULL)
 		return;
@@ -229,8 +233,13 @@ xPreeditDraw(XIM xim, XPointer client, XIMPreeditDrawCallbackStruct *call)
 	u8sToU32s(str, call->text->string.multi_byte, length);
 
 	/* 属性 */
+	defAttr = ULINE;
+	if (0 < u32slen(win->preedit->str))
+		defAttr = win->preedit->attr[
+			MIN(call->chg_first, u32slen(win->preedit->str) - 1)
+		];
 	for (i = 0; i < length; i++) {
-		attr[i] = ULINE;
+		attr[i] = defAttr;
 		fg[i]   = deffg;
 		bg[i]   = defbg;
 	}
@@ -393,7 +402,7 @@ redraw(void)
 	XGlyphInfo ginfo;
 	XWindowAttributes wattr;
 	Line *line;
-	int x, y;
+	int x, y, pex;
 	int index;
 	int i;
 
@@ -413,10 +422,12 @@ redraw(void)
 	y = term->cy * chary;
 
 	/* カーソルかPreeditを表示 */
+	XSetForeground(disp, win->gc, term->palette[deffg]);
 	if (u32slen(win->preedit->str)) {
+		pex = x + u32swidth(win->preedit->str, win->pecaret) * charx;
 		drawLine(win->preedit, x, y + chary);
+		XDrawRectangle(disp, win->window, win->gc, pex, y + chary/4, charx, chary);
 	} else {
-		XSetForeground(disp, win->gc, term->palette[deffg]);
 		XDrawRectangle(disp, win->window, win->gc, x, y + chary/4, charx, chary);
 	}
 
