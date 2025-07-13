@@ -20,6 +20,7 @@ typedef struct Win {
 	XVaNestedList preeditAttrs;
 	Line *preedit;
 	int pecaret;
+	int width, height;
 } Win;
 
 Display *disp;
@@ -366,6 +367,8 @@ procXEvent(void)
 		case ConfigureNotify:
 			/* ウィンドウサイズ変更 */
 			e = (XConfigureEvent *)&event;
+			win->width = e->width;
+			win->height = e->height;
 			setWinSize(term, (e->height - 10) / chary,
 					(e->width - 20) / charx,
 					e->width, e->height);
@@ -402,7 +405,7 @@ redraw(void)
 	XGlyphInfo ginfo;
 	XWindowAttributes wattr;
 	Line *line;
-	int x, y, pex;
+	int x, y, pepos, pewidth;
 	int index;
 	int i;
 
@@ -424,10 +427,22 @@ redraw(void)
 	/* カーソルかPreeditを表示 */
 	XSetForeground(disp, win->gc, term->palette[deffg]);
 	if (u32slen(win->preedit->str)) {
-		pex = x + u32swidth(win->preedit->str, win->pecaret) * charx;
-		drawLine(win->preedit, x, y + chary);
-		XDrawRectangle(disp, win->window, win->gc, pex, y + chary/4, charx, chary);
+		/* Preeditの幅とキャレットのPreedit内での座標を取得 */
+		XftTextExtents32(disp, font, win->preedit->str, u32slen(win->preedit->str), &ginfo);
+		pewidth = ginfo.xOff;
+		XftTextExtents32(disp, font, win->preedit->str, win->pecaret, &ginfo);
+
+		/* Preeditの画面上での描画位置を決める */
+		pepos = x - ginfo.xOff;
+		pepos = MIN(pepos, 10);
+		pepos = MAX(pepos, win->width - pewidth - 10);
+		pepos = MIN(pepos, x);
+
+		/* Preeditとカーソルの描画 */
+		drawLine(win->preedit, pepos, y + chary);
+		XDrawRectangle(disp, win->window, win->gc, pepos + ginfo.xOff, y + chary/4, charx, chary);
 	} else {
+		/* カーソルの描画 */
 		XDrawRectangle(disp, win->window, win->gc, x, y + chary/4, charx, chary);
 	}
 
@@ -479,11 +494,9 @@ drawLine(Line *line, int xoff, int yoff)
 		}
 
 		/* 背景 */
-		if (bg != defbg) {
-			XSetForeground(disp, win->gc, term->palette[bg]);
-			XFillRectangle(disp, win->window, win->gc,
-					x, yoff - chary * 0.8, width, chary);
-		}
+		XSetForeground(disp, win->gc, term->palette[bg]);
+		XFillRectangle(disp, win->window, win->gc,
+				x, yoff - chary * 0.8, width, chary);
 
 		/* 文字 */
 		c = term->palette[fg];
@@ -507,10 +520,12 @@ openWindow(void)
 	Win *win = xmalloc(sizeof(Win));
 
 	/* ウィンドウ作成 */
+	win->width = 800;
+	win->height = 600;
 	win->window = XCreateSimpleWindow(
 			disp,
 			DefaultRootWindow(disp),
-			10, 10, 800, 600, 1,
+			10, 10, win->width, win->height, 1,
 			term->palette[deffg],
 			term->palette[defbg]);
 
