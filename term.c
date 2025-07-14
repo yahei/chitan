@@ -367,30 +367,26 @@ procCSI(Term *term, const char *head, const char *tail)
 	/* 終端バイト */
 	switch (*head) {
 	case 0x41: /* CUU */
-		term->cy = MAX(term->cy - atoi(param), sb->scrs);
+		term->cy = MAX(term->cy - MAX(atoi(param), 1), sb->scrs);
 		break;
 
 	case 0x42: /* CUD */
-		term->cy = MIN(term->cy + atoi(param), sb->scre);
+		term->cy = MIN(term->cy + MAX(atoi(param), 1), sb->scre);
 		break;
 
 	case 0x43: /* CUF */
-		term->cx = MIN(term->cx + atoi(param), sb->cols - 1);
+		term->cx = MIN(term->cx + MAX(atoi(param), 1), sb->cols - 1);
 		break;
 
 	case 0x44: /* CUB */
-		term->cx = MAX(term->cx - atoi(param), 0);
+		term->cx = MAX(term->cx - MAX(atoi(param), 1), 0);
 		break;
 
 	case 0x48: /* CUP カーソル位置決め */
 		str1 = strtok2(param, ";:");
 		str2 = strtok2(NULL, ";:");
-		str1 = (str1 && strlen(str1)) ? str1 : "1";
-		str2 = (str2 && strlen(str2)) ? str2 : "1";
-		if (str1 && str2) {
-			term->cy = MIN(atoi(str1), sb->rows) - 1;
-			term->cx = MIN(atoi(str2), sb->cols) - 1;
-		}
+		term->cy = CLIP(atoi(str1 ? str1 : "1"), 1, sb->rows) - 1;
+		term->cx = CLIP(atoi(str2 ? str2 : "1"), 1, sb->cols) - 1;
 		break;
 
 	case 0x4a: /* ED ページ内消去 */
@@ -689,6 +685,7 @@ setScrBufSize(Term *term, int row, int col)
 		else
 			sb->lastline--;
 	}
+	sb->cols = col;
 	sb->scrs = 0;
 	sb->scre = row - 1;
 }

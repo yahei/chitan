@@ -104,7 +104,7 @@ init(void)
 	/* テキストの高さや横幅を取得 */
 	XftTextExtents32(disp, font, (char32_t *)L"plmM", 4, &ginfo);
 	chary = ginfo.height * 1.25;
-	charx = ginfo.width / 4;
+	charx = ginfo.width / 4 + 1;
 
 	/* ウィンドウの作成 */
 	win = openWindow();
