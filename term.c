@@ -17,8 +17,6 @@
 
 #define READ_SIZE       1024
 #define LINE(a,b)       (a->lines[b % a->maxlines])
-#define PUT_NUL(l,x)    (putU32s(l, x, (char32_t *)L"\0", 0, deffg, defbg, 1))
-#define PUT_SPC(l,x)    (putU32s(l, x, (char32_t *)L" ", 0, deffg, defbg, 1))
 
 static void setDefaultPalette(Term *);
 static const char *procNCCs(Term *, const char *);
