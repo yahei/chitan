@@ -336,7 +336,7 @@ redraw(Win *win)
 		/* Preeditとカーソルの描画 */
 		drawLine(win, win->ime.peline, pepos, y + chary);
 		XDrawRectangle(disp, win->window, win->gc, pepos + ginfo.xOff, y + chary/4, charx, chary);
-	} else {
+	} else if (GETOPT(win->term->dec, 25)) {
 		/* カーソルの描画 */
 		XDrawRectangle(disp, win->window, win->gc, x, y + chary/4, charx, chary);
 	}

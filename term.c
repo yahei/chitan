@@ -71,6 +71,9 @@ openTerm(void)
 	term->readbuf = xmalloc(1);
 	term->readbuf[0] = '\0';
 
+	/* オプション*/
+	term->dec[25 / 8] |=  1 << (25 % 8);
+
 	/* カラーパレットの初期化 */
 	term->palette = xmalloc(MAX(256, MAX(deffg, defbg) + 1) * sizeof(Color));
 	setDefaultPalette(term);
@@ -581,7 +584,7 @@ void
 optset(Term *term, unsigned int num, int flag)
 {
 	if (sizeof(term->opt) * 8 <= num) {
-		fprintf(stderr, "Option: %d\n", num);
+		fprintf(stderr, "Option: %d %s\n", num, flag ? "set" : "rst");
 		return;
 	}
 
@@ -599,6 +602,9 @@ decset(Term *term, unsigned int num, int flag)
 	int i;
 
 	switch (num) {
+	case 25:  /* カーソル表示 */
+		break;
+
 	case 1049:  /* altscreen */
 		oldsb = term->sb;
 		term->sb = flag ? &term->alt : &term->ori;
@@ -621,7 +627,7 @@ decset(Term *term, unsigned int num, int flag)
 		break;
 
 	default:
-		fprintf(stderr, "Not Supported DEC Option: %d\n", num);
+		fprintf(stderr, "DEC Option: %d %s\n", num, flag ? "set" : "rst");
 		if (sizeof(term->dec) * 8 <= num)
 			return;
 	}

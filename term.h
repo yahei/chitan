@@ -5,6 +5,8 @@ typedef uint_least32_t Color;
 #define GREEN(c) (c >>  8 & 0xff)
 #define BLUE(c)  (c >>  0 & 0xff)
 
+#define GETOPT(a,n)     (a[n / 8] &   1 << (n % 8))
+
 /* 端末 */
 typedef struct Term {
 	int master;     /* 疑似端末のファイルディスクリプタ */
