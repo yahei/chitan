@@ -292,10 +292,19 @@ procCC(Term *term, const char *head, const char *tail)
 const char *
 procESC(Term *term, const char *head, const char *tail)
 {
+	struct ScreenBuffer *sb = term->sb;
+
 	if (head >= tail)
 		return NULL;
 
 	switch (*head) {
+	case 0x4d: /* RI */
+		if (sb->scrs < term->cy)
+			term->cy--;
+		else
+			areaScroll(term, sb->scrs, sb->scre, -1);
+		break;
+
 	case 0x5b: /* CSI */
 		return procCSI(term, head + 1, tail);
 
@@ -374,8 +383,10 @@ procCSI(Term *term, const char *head, const char *tail)
 		break;
 
 	case 0x48: /* CUP カーソル位置決め */
-		str1 = strtok(param, ";");
-		str2 = strtok(NULL, ";");
+		str1 = strtok2(param, ";:");
+		str2 = strtok2(NULL, ";:");
+		str1 = (str1 && strlen(str1)) ? str1 : "1";
+		str2 = (str2 && strlen(str2)) ? str2 : "1";
 		if (str1 && str2) {
 			term->cy = MIN(atoi(str1), sb->rows) - 1;
 			term->cx = MIN(atoi(str2), sb->cols) - 1;

@@ -8,6 +8,7 @@
 void errExit(const char *);
 void fatal(const char *);
 void *xmalloc(size_t);
-void *xrealloc(void *p, size_t);
+void *xrealloc(void *, size_t);
+char *strtok2(char *, char *);
 
 #endif

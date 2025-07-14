@@ -40,3 +40,19 @@ xrealloc(void *p, size_t size)
 		errExit("realloc failed.\n");
 	return p2;
 }
+
+char *
+strtok2(char *str, char *delim)
+{
+	static char *last;
+
+	if (str == NULL)
+		str = last;
+
+	if (str && (last = strpbrk(str, delim))) {
+		*last = '\0';
+		last++;
+	}
+
+	return str;
+}
