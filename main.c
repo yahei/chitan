@@ -32,13 +32,13 @@ typedef struct Win {
 	} ime;
 } Win;
 
-Display *disp;
-Visual *visual;
-Colormap cmap;
-XftFont *font;
-int charx, chary;
-XIM xim;
-Win *win;
+static Display *disp;
+static Visual *visual;
+static Colormap cmap;
+static XftFont *font;
+static int charx, chary;
+static XIM xim;
+static Win *win;
 
 static void init(void);
 static void run(void);
