@@ -196,18 +196,18 @@ readPty(Term *term)
 		return size;
 
 	for (reading = term->readbuf; reading < tail;) {
-		rest = procNCCs(term, reading);
-		if (reading != rest) {
+		rest = procCC(term, reading, tail);
+		if (rest == NULL) {
+			break;
+		} else if (reading != rest) {
 			memmove(term->readbuf, rest, tail - rest + 1);
 			tail -= rest - term->readbuf;
 			reading = term->readbuf;
 			continue;
 		}
 
-		rest = procCC(term, reading, tail);
-		if (rest == NULL) {
-			break;
-		} else if (reading != rest) {
+		rest = procNCCs(term, reading);
+		if (reading != rest) {
 			memmove(term->readbuf, rest, tail - rest + 1);
 			tail -= rest - term->readbuf;
 			reading = term->readbuf;
