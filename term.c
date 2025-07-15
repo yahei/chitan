@@ -344,9 +344,10 @@ procESC(Term *term, const char *head, const char *tail)
 		 * 0x60-0x7e   Fs型     標準単独制御機能
 		 */
 		if (BETWEEN(*head, 0x20, 0x7f))
-			fprintf(stderr, "Not Supported ESC Seq: ESC %c\n", *head);
+			fprintf(stderr, "Not Supported ESC Seq: ESC %c(%#x)\n",
+					*head, *head);
 		else
-			fprintf(stderr, "Invalid ESC Seq: ESC(%#x)\n", *head);
+			fprintf(stderr, "Invalid ESC Seq: ESC (%#x)\n", *head);
 	}
 
 	return head + 1;
@@ -512,10 +513,10 @@ procCSI(Term *term, const char *head, const char *tail)
 
 	default: /* 未対応 */
 		if (BETWEEN(*head, 0x40, 0x7f))
-			fprintf(stderr, "Not Supported CSI: CSI(%s)%s%c\n",
-					param, inter, *head);
+			fprintf(stderr, "Not Supported CSI: CSI [%s][%s]%c(%#x)\n",
+					param, inter, *head, *head);
 		else
-			fprintf(stderr, "Invalid CSI: CSI(%s)%s(%#x)\n",
+			fprintf(stderr, "Invalid CSI: CSI [%s][%s](%#x)\n",
 					param, inter, *head);
 	}
 
@@ -800,6 +801,6 @@ setSGR(Term *term, char *param)
 		if (BETWEEN(n, 51, 70) && n != 65)
 			fprintf(stderr, "effect:%d\n", n);
 		if (n == 65)
-			fprintf(stderr, "cancel effect:%d\n", n);
+			fprintf(stderr, "cancel effect: %d\n", n);
 	}
 }
