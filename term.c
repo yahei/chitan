@@ -629,7 +629,8 @@ decset(Term *term, unsigned int num, int flag)
 	int i;
 
 	switch (num) {
-	case 25:  /* カーソル表示 */
+	case 25:   /* カーソル表示切替 */
+	case 1006: /* マウス(SGR) */
 		break;
 
 	case 1049:  /* altscreen */
@@ -702,6 +703,36 @@ setWinSize(Term *term, int row, int col, int xpixel, int ypixel)
 	setScrBufSize(term, row, col);
 
 	ioctl(term->master, TIOCSWINSZ, &ws);
+}
+
+void
+reportMouse(Term *term, int btn, int type, int mx, int my)
+{
+	char buf[40], finc;
+	int len;
+
+	/* 現状はSGRのみ対応 */
+	if (!GETOPT(term->dec, 1006))
+		return;
+
+	/* MOVEは別のセルに移動したときだけ報告 */
+	if (type == MOVE && term->oldmx == mx && term->oldmy == my)
+		return;
+	term->oldmx = mx;
+	term->oldmy = my;
+
+	/* 報告を実行 */
+	btn += type == MOVE ? 32 : 0;
+	finc = type == RELEASE ? 'm' : 'M';
+	len = snprintf(buf, sizeof(buf), "\e[<%d;%d;%d%c", btn, mx, my, finc);
+	writePty(term, buf, len);
+
+	/* 確認用の表示 */
+	printf("(nomal, hilight, button, any) = (%d,%d,%d,%d)\n",
+			GETOPT(term->dec, 1000),
+			GETOPT(term->dec, 1001),
+			GETOPT(term->dec, 1002),
+			GETOPT(term->dec, 1003));
 }
 
 void

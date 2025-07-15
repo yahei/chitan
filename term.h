@@ -5,7 +5,13 @@ typedef uint_least32_t Color;
 #define GREEN(c) (c >>  8 & 0xff)
 #define BLUE(c)  (c >>  0 & 0xff)
 
-#define GETOPT(a,n)     (a[n / 8] &   1 << (n % 8))
+#define GETOPT(a,n)     (0 < (a[n / 8] & 1 << (n % 8)))
+
+enum mouse_event_type {
+	PRESS   = 0,
+	RELEASE = 1,
+	MOVE    = 2
+};
 
 /* 端末 */
 typedef struct Term {
@@ -25,6 +31,7 @@ typedef struct Term {
 	char dec[1100];         /* 拡張オプション */
 	int attr, fg, bg;       /* 現在のSGR */
 	Color *palette;         /* カラーパレット */
+	int oldmx, oldmy;       /* 前回のマウス座標 */
 } Term;
 
 Term *openTerm(void);
@@ -33,3 +40,4 @@ ssize_t readPty(Term *);
 ssize_t writePty(Term *, const char *, ssize_t);
 Line *getLine(Term *, int);
 void setWinSize(Term *, int, int, int, int);
+void reportMouse(Term *, int, int, int, int);

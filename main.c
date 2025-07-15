@@ -194,7 +194,9 @@ openWindow(void)
 
 	/* イベントマスク */
 	XSelectInput(disp, win->window,
-			ExposureMask | KeyPressMask | KeyReleaseMask | StructureNotifyMask);
+			ExposureMask | StructureNotifyMask |
+			KeyPressMask | KeyReleaseMask |
+			ButtonPressMask | ButtonReleaseMask | ButtonMotionMask);
 
 	/* 描画の準備 */
 	win->gc = XCreateGC(disp, win->window, 0, NULL);
@@ -251,6 +253,22 @@ procXEvent(Win *win)
 		case KeyPress:
 			/* 端末に文字を送る */
 			procKeyPress(win, event, 64);
+			break;
+
+		case ButtonPress:
+		case ButtonRelease:
+			/* マウスボタン */
+			reportMouse(win->term, event.xbutton.button - 1,
+					event.type == ButtonPress ? PRESS : RELEASE,
+					(event.xbutton.x - 10) / charx + 1,
+					(event.xbutton.y - 10) / chary + 1);
+			break;
+
+		case MotionNotify:
+			/* マウス移動 */
+			reportMouse(win->term, 0, MOVE,
+					(event.xmotion.x - 10) / charx + 1,
+					(event.xmotion.y - 10) / chary + 1);
 			break;
 
 		case Expose:
