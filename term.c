@@ -399,6 +399,10 @@ procCSI(Term *term, const char *head, const char *tail)
 		term->cx = MAX(term->cx - MAX(atoi(param), 1), 0);
 		break;
 
+	case 0x47: /* CHA カーソル文字位置決め */
+		term->cx = CLIP(atoi(param), 1, sb->cols) - 1;
+		break;
+
 	case 0x48: /* CUP カーソル位置決め */
 		str1 = strtok2(param, ";:");
 		str2 = strtok2(NULL, ";:");
