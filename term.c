@@ -301,6 +301,20 @@ procESC(Term *term, const char *head, const char *tail)
 		return NULL;
 
 	switch (*head) {
+	/* 文字バンクの切り替え(未実装) */
+	case 0x24: /* G1D4 */
+		head++;
+	case 0x28: /* GZD4 */
+	case 0x29: /* G1D4 */
+	case 0x2a: /* G2D4 */
+	case 0x2b: /* G2D4 */
+	case 0x2c: /* GZD6 */
+	case 0x2d: /* G1D6 */
+	case 0x2e: /* G2D6 */
+	case 0x2f: /* G3D6 */
+		head++;
+		return head < tail ? head + 1 : NULL;
+
 	case 0x4d: /* RI */
 		if (sb->scrs < term->cy)
 			term->cy--;
