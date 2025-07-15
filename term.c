@@ -462,11 +462,19 @@ procCSI(Term *term, const char *head, const char *tail)
 		areaScroll(term, term->cy, sb->scre, MAX(atoi(param), 1));
 		break;
 
-	case 0x50: /* DHC */
+	case 0x50: /* DHC 文字削除 */
 		if (!(line = getLine(term, term->cy)))
 			break;
 		deleteChars(line, term->cx, MAX(atoi(param), 1));
 		break;
+
+	case 0x58: /* ECH 文字消去 */
+		if (!(line = getLine(term, term->cy)))
+			break;
+		for (i = atoi(param); 0 < i; i--)
+			PUT_SPC(line, term->cx + i - 1);
+		break;
+
 
 	case 0x64: /* VPA 行位置決め */
 		term->cy = CLIP(atoi(param), 1, term->sb->rows) - 1;
