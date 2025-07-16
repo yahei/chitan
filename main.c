@@ -149,7 +149,7 @@ run(void)
 		}
 
 		/* ウィンドウのイベント処理 */
-		if (FD_ISSET(xfd, &rfds)) {
+		if (FD_ISSET(xfd, &rfds) || XPending(disp)) {
 			procXEvent(win);
 		}
 	}
