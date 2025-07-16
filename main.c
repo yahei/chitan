@@ -51,6 +51,7 @@ static void procXEvent(Win *);
 static void procKeyPress(Win *, XEvent, int);
 static void redraw(Win *);
 static void drawLine(Win *, Line *, int, int);
+static void drawCursor(Win *, int, int, int, const char32_t *);
 
 /* IME */
 static void ximOpen(Display *, XPointer, XPointer);
@@ -363,10 +364,12 @@ redraw(Win *win)
 
 		/* Preeditとカーソルの描画 */
 		drawLine(win, win->ime.peline, pepos, y + chary);
-		XDrawRectangle(disp, win->window, win->gc, pepos + ginfo.xOff, y + chary/4, charx, chary);
+		drawCursor(win, pepos + ginfo.xOff, y + chary / 4, 6,
+				&win->ime.peline->str[pepos]);
 	} else if (GETOPT(win->term->dec, 25)) {
 		/* カーソルの描画 */
-		XDrawRectangle(disp, win->window, win->gc, x, y + chary/4, charx, chary);
+		drawCursor(win, x, y + chary / 4, win->term->ctype,
+				&line->str[getCharCnt(line, win->term->cx).index]);
 	}
 
 	/* スポット位置 */
@@ -434,6 +437,31 @@ drawLine(Win *win, Line *line, int xoff, int yoff)
 			XSetForeground(disp, win->gc, win->term->palette[fg]);
 			XDrawLine(disp, win->window, win->gc, x, yoff, x + width, yoff);
 		}
+	}
+}
+
+void
+drawCursor(Win *win, int x, int y, int type, const char32_t *c)
+{
+	XGlyphInfo ginfo;
+	XftTextExtents32(disp, font, c, 1, &ginfo);
+	int width = ginfo.xOff;
+
+	switch (type) {
+	default: /* ブロック */
+	case 0:
+	case 1:
+	case 2:
+		XDrawRectangle(disp, win->window, win->gc, x, y, width, chary);
+		break;
+	case 3: /* 下線 */
+	case 4:
+		XDrawLine(disp, win->window, win->gc, x, y + chary, x + width, y + chary);
+		break;
+	case 5: /* 縦線 */
+	case 6:
+		XDrawLine(disp, win->window, win->gc, x, y, x, y + chary);
+		break;
 	}
 }
 

@@ -26,6 +26,7 @@ typedef struct Term {
 	} ori, alt, *sb;
 	int cx, cy;             /* カーソル位置 */
 	int svx, svy;           /* 保存したカーソル位置 */
+	int ctype;              /* カーソル形状 */
 	char *readbuf;          /* 可変長リードバッファ */
 	int rblen;              /* リードバッファに残っている文字の数 */
 	char opt[8];            /* オプション */

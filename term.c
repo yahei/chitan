@@ -499,6 +499,11 @@ procCSI(Term *term, const char *head, const char *tail)
 		setSGR(term, strlen(param) ? param : "0");
 		break;
 
+	case 0x71: /* DECSCUSR カーソル形状設定 */
+		if (*inter == ' ')
+			term->ctype = atoi(param);
+		break;
+
 	case 0x72: /* DECSTBM スクロール範囲設定 */
 		str1 = strtok(param, ";");
 		str2 = strtok(NULL, ";");
