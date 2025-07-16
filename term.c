@@ -723,12 +723,14 @@ reportMouse(Term *term, int btn, int type, int mx, int my)
 
 	/* 報告を実行 */
 	btn += type == MOVE ? 32 : 0;
+	btn += type == WHEEL ? 64 : 0;
 	finc = type == RELEASE ? 'm' : 'M';
 	len = snprintf(buf, sizeof(buf), "\e[<%d;%d;%d%c", btn, mx, my, finc);
 	writePty(term, buf, len);
 
 	/* 確認用の表示 */
-	printf("(nomal, hilight, button, any) = (%d,%d,%d,%d)\n",
+	printf("btn:%d (nomal, hilight, button, any) = (%d,%d,%d,%d)\n",
+			btn,
 			GETOPT(term->dec, 1000),
 			GETOPT(term->dec, 1001),
 			GETOPT(term->dec, 1002),

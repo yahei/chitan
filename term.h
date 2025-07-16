@@ -10,7 +10,8 @@ typedef uint_least32_t Color;
 enum mouse_event_type {
 	PRESS   = 0,
 	RELEASE = 1,
-	MOVE    = 2
+	MOVE    = 2,
+	WHEEL   = 3
 };
 
 /* 端末 */

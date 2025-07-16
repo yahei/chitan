@@ -257,6 +257,16 @@ procXEvent(Win *win)
 
 		case ButtonPress:
 		case ButtonRelease:
+			/* ホイール */
+			if (BETWEEN(event.xbutton.button, 4, 6)) {
+				if (event.type == ButtonRelease)
+					break;
+				reportMouse(win->term, event.xbutton.button - 4,
+						WHEEL,
+						(event.xbutton.x - 10) / charx + 1,
+						(event.xbutton.y - 10) / chary + 1);
+				break;
+			}
 			/* マウスボタン */
 			reportMouse(win->term, event.xbutton.button - 1,
 					event.type == ButtonPress ? PRESS : RELEASE,
