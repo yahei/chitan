@@ -51,7 +51,8 @@ static void procXEvent(Win *);
 static void procKeyPress(Win *, XEvent, int);
 static void redraw(Win *);
 static void drawLine(Win *, Line *, int, int);
-static void drawCursor(Win *, int, int, int, const char32_t *);
+static void drawString(Win *, int, int, const char32_t *, int, int, int, int);
+static void drawCursor(Win *, int, int, int, Line *, int);
 
 /* IME */
 static void ximOpen(Display *, XPointer, XPointer);
@@ -364,12 +365,12 @@ redraw(Win *win)
 
 		/* Preeditとカーソルの描画 */
 		drawLine(win, win->ime.peline, pepos, y + chary);
-		drawCursor(win, pepos + ginfo.xOff, y + chary / 4, 6,
-				&win->ime.peline->str[pepos]);
+		drawCursor(win, pepos + ginfo.xOff, y + chary, 6,
+				win->ime.peline, pepos);
 	} else if (GETOPT(win->term->dec, 25)) {
 		/* カーソルの描画 */
-		drawCursor(win, x, y + chary / 4, win->term->ctype,
-				&line->str[getCharCnt(line, win->term->cx).index]);
+		drawCursor(win, x, y + chary, win->term->ctype,
+				line, getCharCnt(line, win->term->cx).index);
 	}
 
 	/* スポット位置 */
@@ -388,9 +389,7 @@ drawLine(Win *win, Line *line, int xoff, int yoff)
 	XGlyphInfo ginfo;
 	int current, next;
 	int fg, bg;
-	XftColor xc;
-	Color c;
-	int x, y, width;
+	int x, y;
 	const char32_t *str;
 	int len;
 
@@ -405,8 +404,6 @@ drawLine(Win *win, Line *line, int xoff, int yoff)
 		XftTextExtents32(disp, font, line->str, current, &ginfo);
 		x = ginfo.xOff + xoff;
 		y = yoff;
-		XftTextExtents32(disp, font, str, len, &ginfo);
-		width = ginfo.xOff;
 
 		/* 前処理 */
 		if (line->attr[current] & BOLD) { /* 太字 */
@@ -419,32 +416,47 @@ drawLine(Win *win, Line *line, int xoff, int yoff)
 			fg = fg ^ bg;
 		}
 
-		/* 背景 */
-		XSetForeground(disp, win->gc, win->term->palette[bg]);
-		XFillRectangle(disp, win->window, win->gc,
-				x, yoff - chary * 0.8, width, chary);
-
-		/* 文字 */
-		c = win->term->palette[fg];
-		xc.color.red   =   RED(c) << 8;
-		xc.color.green = GREEN(c) << 8;
-		xc.color.blue  =  BLUE(c) << 8;
-		xc.color.alpha = 0xffff;
-		XftDrawString32(win->draw, &xc, font, x, y, str, len);
-
-		/* 後処理 */
-		if (line->attr[current] & ULINE) { /* 下線 */
-			XSetForeground(disp, win->gc, win->term->palette[fg]);
-			XDrawLine(disp, win->window, win->gc, x, yoff, x + width, yoff);
-		}
+		/* 描画 */
+		drawString(win, x, y, str, len, line->attr[current], fg, bg);
 	}
 }
 
 void
-drawCursor(Win *win, int x, int y, int type, const char32_t *c)
+drawString(Win *win, int x, int y, const char32_t *str, int len, int attr, int fg, int bg)
 {
 	XGlyphInfo ginfo;
-	XftTextExtents32(disp, font, c, 1, &ginfo);
+	int width;
+	XftColor xc;
+	Color c;
+
+	/* 文字列の幅 */
+	XftTextExtents32(disp, font, str, len, &ginfo);
+	width = ginfo.xOff;
+
+	/* 背景 */
+	XSetForeground(disp, win->gc, win->term->palette[bg]);
+	XFillRectangle(disp, win->window, win->gc, x, y - chary * 0.8, width, chary);
+
+	/* 文字 */
+	c = win->term->palette[fg];
+	xc.color.red   =   RED(c) << 8;
+	xc.color.green = GREEN(c) << 8;
+	xc.color.blue  =  BLUE(c) << 8;
+	xc.color.alpha = 0xffff;
+	XftDrawString32(win->draw, &xc, font, x, y, str, len);
+
+	/* 後処理 */
+	if (attr & ULINE) { /* 下線 */
+		XSetForeground(disp, win->gc, win->term->palette[fg]);
+		XDrawLine(disp, win->window, win->gc, x, y + chary * 0.2, x + width, y + chary * 0.2);
+	}
+}
+
+void
+drawCursor(Win *win, int x, int y, int type, Line *line, int index)
+{
+	XGlyphInfo ginfo;
+	XftTextExtents32(disp, font, &line->str[index], 1, &ginfo);
 	int width = ginfo.xOff;
 
 	switch (type) {
@@ -452,15 +464,18 @@ drawCursor(Win *win, int x, int y, int type, const char32_t *c)
 	case 0:
 	case 1:
 	case 2:
-		XDrawRectangle(disp, win->window, win->gc, x, y, width, chary);
+		if (index < u32slen(line->str))
+			drawString(win, x, y, &line->str[index], 1, line->attr[index], defbg, deffg);
+		else
+			drawString(win, x, y, (char32_t *)L" ", 1, 0, defbg, deffg);
 		break;
 	case 3: /* 下線 */
 	case 4:
-		XDrawLine(disp, win->window, win->gc, x, y + chary, x + width, y + chary);
+		XFillRectangle(disp, win->window, win->gc, x, y + chary * 0.2, width, chary * 0.1);
 		break;
 	case 5: /* 縦線 */
 	case 6:
-		XDrawLine(disp, win->window, win->gc, x, y, x, y + chary);
+		XFillRectangle(disp, win->window, win->gc, x, y - chary * 0.8, chary * 0.1, chary);
 		break;
 	}
 }

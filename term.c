@@ -803,7 +803,7 @@ setSGR(Term *term, char *param)
 		if (n == 29)
 			term->attr &= ~STRIKE;
 
-		/* フォント*/
+		/* フォント */
 		if (BETWEEN(n, 10, 21))
 			fprintf(stderr, "font:%d\n", n - 10);
 
