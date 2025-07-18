@@ -394,7 +394,7 @@ procCSI(Term *term, const char *head, const char *tail)
 			INIT(fg, deffg);
 			INIT(bg, defbg);
 			InsertLine il = { str, attr, fg, bg };
-			insertU32s(line, term->cx, &il, n);
+			insertU32s(line, getCharCnt(line, term->cx).index, &il, n);
 		}
 		break;
 
@@ -480,7 +480,7 @@ procCSI(Term *term, const char *head, const char *tail)
 	case 0x50: /* DHC 文字削除 */
 		if (!(line = getLine(term, term->cy)))
 			break;
-		deleteChars(line, term->cx, MAX(atoi(param), 1));
+		eraseInLine(line, term->cx, MAX(atoi(param), 1));
 		break;
 
 	case 0x53: /* SU スクロール上 */
