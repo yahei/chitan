@@ -477,6 +477,16 @@ procCSI(Term *term, const char *head, const char *tail)
 		areaScroll(term, term->cy, sb->scre, MAX(atoi(param), 1));
 		break;
 
+	case 0x45: /* CNL カーソル復帰行前進 */
+		term->cy = MIN(term->cy + MAX(atoi(param), 1), sb->scre);
+		term->cx = 0;
+		break;
+
+	case 0x46: /* CPL カーソル復帰行後退 */
+		term->cy = MAX(term->cy - MAX(atoi(param), 1), sb->scrs);
+		term->cx = 0;
+		break;
+
 	case 0x50: /* DHC 文字削除 */
 		if (!(line = getLine(term, term->cy)))
 			break;
