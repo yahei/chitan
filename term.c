@@ -469,6 +469,14 @@ procCSI(Term *term, const char *head, const char *tail)
 		deleteChars(line, term->cx, MAX(atoi(param), 1));
 		break;
 
+	case 0x53: /* SU スクロール上 */
+		areaScroll(term, sb->scrs, sb->scre, MAX(atoi(param), 1));
+		break;
+
+	case 0x54: /* SD スクロール下 */
+		areaScroll(term, sb->scrs, sb->scre, -MAX(atoi(param), 1));
+		break;
+
 	case 0x58: /* ECH 文字消去 */
 		if (!(line = getLine(term, term->cy)))
 			break;
