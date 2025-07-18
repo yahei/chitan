@@ -116,7 +116,7 @@ void
 run(void)
 {
 	fd_set rfds;
-	struct timespec timeout, *ptimeout;
+	struct timespec timeout, *ptimeout = NULL;
 	int tfd = win->term->master;
 	int xfd = XConnectionNumber(disp);
 
@@ -125,35 +125,28 @@ run(void)
 		FD_ZERO(&rfds);
 		FD_SET(tfd, &rfds);
 		FD_SET(xfd, &rfds);
-		timeout.tv_sec = 0;
-		timeout.tv_nsec = 0;
-		ptimeout = (0 < timeout.tv_sec || 0 < timeout.tv_nsec) ?
-			&timeout : NULL;
-
 		if (pselect(MAX(tfd, xfd) + 1, &rfds, NULL, NULL, ptimeout, NULL) < 0) {
-			if (errno == EINTR) {
-				/* シグナル受信 */
+			if (errno == EINTR)
 				fprintf(stderr, "signal.\n");
-			} else {
-				/* その他のエラー */
+			else
 				errExit("pselect failed.\n");
-			}
 		}
 
 		/* 端末のread */
-		if (FD_ISSET(tfd, &rfds)) {
-			if (readPty(win->term) < 0) {
-				/* 終了 */
-				printf("exit.\n");
+		if (FD_ISSET(tfd, &rfds))
+			if (readPty(win->term) < 0)
 				return;
-			}
-			redraw(win);
-		}
 
 		/* ウィンドウのイベント処理 */
-		if (FD_ISSET(xfd, &rfds) || XPending(disp)) {
+		if (FD_ISSET(xfd, &rfds) || XPending(disp))
 			procXEvent(win);
-		}
+
+		/* 再描画 */
+		if (!FD_ISSET(tfd, &rfds) && !FD_ISSET(xfd, &rfds))
+			redraw(win);
+
+		timeout = (struct timespec) { 0, 0 };
+		ptimeout = FD_ISSET(tfd, &rfds) ? &timeout : NULL;
 	}
 }
 
