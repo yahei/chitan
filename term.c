@@ -384,6 +384,20 @@ procCSI(Term *term, const char *head, const char *tail)
 
 	/* 終端バイト */
 	switch (*head) {
+	case 0x40: /* ICH 文字挿入 */
+		if ((line = getLine(term, term->cy))) {
+			int n = MAX(atoi(param), 1);
+			char32_t str[n];
+			int attr[n], fg[n], bg[n];
+			INIT(str, L' ');
+			INIT(attr, NONE);
+			INIT(fg, deffg);
+			INIT(bg, defbg);
+			InsertLine il = { str, attr, fg, bg };
+			insertU32s(line, term->cx, &il, n);
+		}
+		break;
+
 	case 0x41: /* CUU */
 		term->cy = MAX(term->cy - MAX(atoi(param), 1), sb->scrs);
 		break;
