@@ -8,10 +8,8 @@ typedef uint_least32_t Color;
 #define GETOPT(a,n)     (0 < (a[n / 8] & 1 << (n % 8)))
 
 enum mouse_event_type {
-	PRESS   = 0,
-	RELEASE = 1,
-	MOVE    = 2,
-	WHEEL   = 3
+	MOVE    = 32,
+	WHEEL   = 64
 };
 
 /* 端末 */

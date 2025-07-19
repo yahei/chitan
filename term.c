@@ -743,30 +743,40 @@ setWinSize(Term *term, int row, int col, int xpixel, int ypixel)
 }
 
 void
-reportMouse(Term *term, int btn, int type, int mx, int my)
+reportMouse(Term *term, int btn, int release, int mx, int my)
 {
 	char buf[40], finc;
 	int len;
+	enum { normal, button, any } type;
 
 	/* 現状はSGRのみ対応 */
 	if (!GETOPT(term->dec, 1006))
 		return;
 
+	/* 該当する機能がOFFなら無視 */
+	type = (btn & MOVE) ?  ((btn & 3) == 3) ?  any : button : normal;
+	if (!(GETOPT(term->dec, 1003) && type <= any   ) &&
+	    !(GETOPT(term->dec, 1002) && type <= button) &&
+	    !(GETOPT(term->dec, 1000) && type <= normal))
+		return;
+
+	/* ホイールのreleaseは報告しない */
+	if ((btn & WHEEL) && release)
+		return;
+
 	/* MOVEは別のセルに移動したときだけ報告 */
-	if (type == MOVE && term->oldmx == mx && term->oldmy == my)
+	if (btn & MOVE && term->oldmx == mx && term->oldmy == my)
 		return;
 	term->oldmx = mx;
 	term->oldmy = my;
 
 	/* 報告を実行 */
-	btn += type == MOVE ? 32 : 0;
-	btn += type == WHEEL ? 64 : 0;
-	finc = type == RELEASE ? 'm' : 'M';
+	finc = release ? 'm' : 'M';
 	len = snprintf(buf, sizeof(buf), "\e[<%d;%d;%d%c", btn, mx, my, finc);
 	writePty(term, buf, len);
 
 	/* 確認用の表示 */
-	printf("btn:%d (nomal, hilight, button, any) = (%d,%d,%d,%d)\n",
+	printf("btn:%d (normal, hilight, button, any) = (%d,%d,%d,%d)\n",
 			btn,
 			GETOPT(term->dec, 1000),
 			GETOPT(term->dec, 1001),

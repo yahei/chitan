@@ -234,6 +234,8 @@ procXEvent(Win *win)
 {
 	XEvent event;
 	XConfigureEvent *e;
+	int mb;
+	int i;
 
 	while (0 < XPending(disp)) {
 		XNextEvent(disp, &event);
@@ -252,26 +254,20 @@ procXEvent(Win *win)
 
 		case ButtonPress:
 		case ButtonRelease:
-			/* ホイール */
-			if (BETWEEN(event.xbutton.button, 4, 6)) {
-				if (event.type == ButtonRelease)
-					break;
-				reportMouse(win->term, event.xbutton.button - 4,
-						WHEEL,
-						(event.xbutton.x - 10) / charx + 1,
-						(event.xbutton.y - 10) / chary + 1);
-				break;
-			}
-			/* マウスボタン */
-			reportMouse(win->term, event.xbutton.button - 1,
-					event.type == ButtonPress ? PRESS : RELEASE,
+			/* マウスボタン・ホイール */
+			mb = event.xbutton.button;
+			mb = BETWEEN(mb, 4, 8) ? (mb - 4) | WHEEL : mb - 1;
+			reportMouse(win->term, mb, event.type == ButtonRelease,
 					(event.xbutton.x - 10) / charx + 1,
 					(event.xbutton.y - 10) / chary + 1);
 			break;
 
 		case MotionNotify:
 			/* マウス移動 */
-			reportMouse(win->term, 0, MOVE,
+			for (i = 0; i < 3; i++)
+				if (event.xmotion.state >> (8 + i) & 1)
+					break;
+			reportMouse(win->term, i | MOVE, 0,
 					(event.xmotion.x - 10) / charx + 1,
 					(event.xmotion.y - 10) / chary + 1);
 			break;
