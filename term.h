@@ -5,8 +5,6 @@ typedef uint_least32_t Color;
 #define GREEN(c) (c >>  8 & 0xff)
 #define BLUE(c)  (c >>  0 & 0xff)
 
-#define GETOPT(a,n)     (0 < (a[n / 8] & 1 << (n % 8)))
-
 enum mouse_event_type {
 	SHIFT   = 4,
 	ALT     = 8,
@@ -31,8 +29,8 @@ typedef struct Term {
 	int ctype;              /* カーソル形状 */
 	char *readbuf;          /* 可変長リードバッファ */
 	int rblen;              /* リードバッファに残っている文字の数 */
-	char opt[8];            /* オプション */
-	char dec[1100];         /* 拡張オプション */
+	char opt[64];           /* オプション */
+	char dec[8800];         /* 拡張オプション */
 	int attr, fg, bg;       /* 現在のSGR */
 	Color *palette;         /* カラーパレット */
 	int oldmx, oldmy;       /* 前回のマウス座標 */

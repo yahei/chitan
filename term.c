@@ -45,11 +45,9 @@ openTerm(void)
 		.master = -1,
 		.ori = {}, .alt = {}, .sb = NULL,
 		.cx = 0, .cy = 0, .svx = 0, .svy = 0,
-		.readbuf = NULL,
-		.rblen = 0,
-		.opt = {0}, .dec = {0},
-		.attr = 0, .fg = deffg, .bg = defbg,
-		.palette = NULL
+		.readbuf = NULL, .rblen = 0,
+		.attr = 0, .fg = deffg, .bg = defbg, .palette = NULL,
+		.oldmx = 0, .oldmy = 0
 	};
 
 	/* スクリーンバッファの初期化 */
@@ -71,9 +69,9 @@ openTerm(void)
 	term->readbuf = xmalloc(1);
 	term->readbuf[0] = '\0';
 
-	/* オプション*/
-	term->dec[25 / 8] |=  1 << (25 % 8);
-	term->dec[ 9 / 8] |=  1 << ( 9 % 8);
+	/* オプションの初期化 */
+	memset(term->opt, 1, 64);
+	memset(term->dec, 1, 8800);
 
 	/* カラーパレットの初期化 */
 	term->palette = xmalloc(MAX(256, MAX(deffg, defbg) + 1) * sizeof(Color));
@@ -648,15 +646,12 @@ areaScroll(Term *term, int first, int last, int num)
 void
 optset(Term *term, unsigned int num, int flag)
 {
-	if (sizeof(term->opt) * 8 <= num) {
+	if (sizeof(term->opt) <= num) {
 		fprintf(stderr, "Option: %d %s\n", num, flag ? "set" : "rst");
 		return;
 	}
 
-	if (flag)
-		term->opt[num / 8] |=  1 << (num % 8);
-	else
-		term->opt[num / 8] &= ~1 << (num % 8);
+	term->opt[num] = flag ? 2 : 0;
 }
 
 void
@@ -698,14 +693,11 @@ decset(Term *term, unsigned int num, int flag)
 
 	default:
 		fprintf(stderr, "DEC Option: %d %s\n", num, flag ? "set" : "rst");
-		if (sizeof(term->dec) * 8 <= num)
+		if (sizeof(term->dec) <= num)
 			return;
 	}
 
-	if (flag)
-		term->dec[num / 8] |=  1 << (num % 8);
-	else
-		term->dec[num / 8] &= ~1 << (num % 8);
+	term->dec[num] = flag ? 2 : 0;
 }
 
 ssize_t
@@ -766,17 +758,17 @@ reportMouse(Term *term, int btn, int release, int mx, int my)
 
 	/* 対象外のイベントは報告しない */
 	type = (btn & MOVE) ?  ((btn & 3) == 3) ?  any : button : normal;
-	if (!(GETOPT(term->dec, 1003) && type <= any   ) &&
-	    !(GETOPT(term->dec, 1002) && type <= button) &&
-	    !(GETOPT(term->dec, 1000) && type <= normal))
+	if (!(1 < term->dec[1000] && type <= normal) &&
+	    !(1 < term->dec[1002] && type <= button) &&
+	    !(1 < term->dec[1003] && type <= any   ))
 		return;
 
 	/* 報告を実行 */
-	if (GETOPT(term->dec, 1006)) {
+	if (1 < term->dec[1006]) {
 		/* SGR */
 		len = snprintf(buf, sizeof(buf), "\e[<%d;%d;%d%c",
 				btn, mx, my, release ? 'm' : 'M');
-	} else if (GETOPT(term->dec, 9)) {
+	} else if (1 <= term->dec[9]) {
 		/* X10 */
 		if (!BETWEEN(btn, 0, 256 - 32) ||
 		    !BETWEEN( mx, 0, 256 - 32) ||

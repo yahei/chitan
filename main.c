@@ -359,7 +359,7 @@ redraw(Win *win)
 		drawLine(win, win->ime.peline, pepos, y + chary);
 		drawCursor(win, pepos + ginfo.xOff, y + chary, 6,
 				win->ime.peline, pepos);
-	} else if (GETOPT(win->term->dec, 25)) {
+	} else if (1 <= win->term->dec[25]) {
 		/* カーソルの描画 */
 		drawCursor(win, x, y + chary, win->term->ctype,
 				line, getCharCnt(line, win->term->cx).index);
