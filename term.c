@@ -73,6 +73,7 @@ openTerm(void)
 
 	/* オプション*/
 	term->dec[25 / 8] |=  1 << (25 % 8);
+	term->dec[ 9 / 8] |=  1 << ( 9 % 8);
 
 	/* カラーパレットの初期化 */
 	term->palette = xmalloc(MAX(256, MAX(deffg, defbg) + 1) * sizeof(Color));
@@ -667,7 +668,11 @@ decset(Term *term, unsigned int num, int flag)
 
 	switch (num) {
 	case 25:   /* カーソル表示切替 */
-	case 1006: /* マウス(SGR) */
+	case 9:    /* マウス X10 */
+	case 1000: /* マウス normal */
+	case 1002: /* マウス button */
+	case 1003: /* マウス any */
+	case 1006: /* マウス SGR */
 		break;
 
 	case 1049:  /* altscreen */
@@ -745,20 +750,9 @@ setWinSize(Term *term, int row, int col, int xpixel, int ypixel)
 void
 reportMouse(Term *term, int btn, int release, int mx, int my)
 {
-	char buf[40], finc;
+	char buf[40];
 	int len;
 	enum { normal, button, any } type;
-
-	/* 現状はSGRのみ対応 */
-	if (!GETOPT(term->dec, 1006))
-		return;
-
-	/* 該当する機能がOFFなら無視 */
-	type = (btn & MOVE) ?  ((btn & 3) == 3) ?  any : button : normal;
-	if (!(GETOPT(term->dec, 1003) && type <= any   ) &&
-	    !(GETOPT(term->dec, 1002) && type <= button) &&
-	    !(GETOPT(term->dec, 1000) && type <= normal))
-		return;
 
 	/* ホイールのreleaseは報告しない */
 	if ((btn & WHEEL) && release)
@@ -770,18 +764,28 @@ reportMouse(Term *term, int btn, int release, int mx, int my)
 	term->oldmx = mx;
 	term->oldmy = my;
 
-	/* 報告を実行 */
-	finc = release ? 'm' : 'M';
-	len = snprintf(buf, sizeof(buf), "\e[<%d;%d;%d%c", btn, mx, my, finc);
-	writePty(term, buf, len);
+	/* 対象外のイベントは報告しない */
+	type = (btn & MOVE) ?  ((btn & 3) == 3) ?  any : button : normal;
+	if (!(GETOPT(term->dec, 1003) && type <= any   ) &&
+	    !(GETOPT(term->dec, 1002) && type <= button) &&
+	    !(GETOPT(term->dec, 1000) && type <= normal))
+		return;
 
-	/* 確認用の表示 */
-	printf("btn:%d (normal, hilight, button, any) = (%d,%d,%d,%d)\n",
-			btn,
-			GETOPT(term->dec, 1000),
-			GETOPT(term->dec, 1001),
-			GETOPT(term->dec, 1002),
-			GETOPT(term->dec, 1003));
+	/* 報告を実行 */
+	if (GETOPT(term->dec, 1006)) {
+		/* SGR */
+		len = snprintf(buf, sizeof(buf), "\e[<%d;%d;%d%c",
+				btn, mx, my, release ? 'm' : 'M');
+	} else if (GETOPT(term->dec, 9)) {
+		/* X10 */
+		if (!BETWEEN(btn, 0, 256 - 32) ||
+		    !BETWEEN( mx, 0, 256 - 32) ||
+		    !BETWEEN( my, 0, 256 - 32))
+			return;
+		len = snprintf(buf, sizeof(buf), "\e[M%c%c%c",
+				(release ? 3 : btn) + 32, mx + 32, my + 32);
+	}
+	writePty(term, buf, len);
 }
 
 void
