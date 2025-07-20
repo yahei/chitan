@@ -191,7 +191,8 @@ openWindow(void)
 	XSelectInput(disp, win->window,
 			ExposureMask | StructureNotifyMask |
 			KeyPressMask | KeyReleaseMask |
-			ButtonPressMask | ButtonReleaseMask | ButtonMotionMask);
+			ButtonPressMask | ButtonReleaseMask |
+			ButtonMotionMask | PointerMotionMask);
 
 	/* 描画の準備 */
 	win->gc = XCreateGC(disp, win->window, 0, NULL);
@@ -234,7 +235,7 @@ procXEvent(Win *win)
 {
 	XEvent event;
 	XConfigureEvent *e;
-	int mb;
+	int state, mb;
 
 	while (0 < XPending(disp)) {
 		XNextEvent(disp, &event);
@@ -253,28 +254,25 @@ procXEvent(Win *win)
 
 		case ButtonPress:
 		case ButtonRelease:
-			/* マウスボタン・ホイール */
-			mb = event.xbutton.button;
-			mb = BETWEEN(mb, 4, 8) ? (mb - 4) | WHEEL : mb - 1;
-			mb += event.xbutton.state & ShiftMask   ?  4 : 0;
-			mb += event.xbutton.state & Mod1Mask    ?  8 : 0;
-			mb += event.xbutton.state & ControlMask ? 16 : 0;
+		case MotionNotify:
+			/* マウス操作 */
+			state = event.xbutton.state;
+			if (event.type == MotionNotify) {
+				mb = (state & Button1Mask ?  0 :
+				      state & Button2Mask ?  1 :
+				      state & Button3Mask ?  2 : 3) + MOVE;
+			} else {
+				mb = event.xbutton.button;
+				mb = BETWEEN(mb, 1, 4)  ? (mb - 1) :
+				     BETWEEN(mb, 4, 8)  ? (mb - 4) + WHEEL :
+				     BETWEEN(mb, 8, 12) ? (mb - 8) + OTHER : 3;
+			}
+			mb += state & ShiftMask   ? SHIFT : 0;
+			mb += state & Mod1Mask    ? ALT   : 0;
+			mb += state & ControlMask ? CTRL  : 0;
 			reportMouse(win->term, mb, event.type == ButtonRelease,
 					(event.xbutton.x - 10) / charx + 1,
 					(event.xbutton.y - 10) / chary + 1);
-			break;
-
-		case MotionNotify:
-			/* マウス移動 */
-			mb  = event.xmotion.state & Button3Mask ?  2 : 0;
-			mb  = event.xmotion.state & Button2Mask ?  1 : mb;
-			mb  = event.xmotion.state & Button1Mask ?  0 : mb;
-			mb += event.xmotion.state & ShiftMask   ?  4 : 0;
-			mb += event.xmotion.state & Mod1Mask    ?  8 : 0;
-			mb += event.xmotion.state & ControlMask ? 16 : 0;
-			reportMouse(win->term, mb | MOVE, 0,
-					(event.xmotion.x - 10) / charx + 1,
-					(event.xmotion.y - 10) / chary + 1);
 			break;
 
 		case Expose:
