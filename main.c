@@ -398,14 +398,13 @@ drawLine(Win *win, Line *line, int xoff, int yoff)
 		y = yoff;
 
 		/* 前処理 */
-		if (line->attr[current] & BOLD) { /* 太字 */
-			fg = fg < 8 ? fg + 8 : fg;
-			bg = bg < 8 ? bg + 8 : bg;
-		}
 		if (line->attr[current] & NEGA) { /* 反転 */
 			fg = fg ^ bg;
 			bg = fg ^ bg;
 			fg = fg ^ bg;
+		}
+		if (line->attr[current] & BOLD) { /* 太字 */
+			fg = fg < 8 ? fg + 8 : fg;
 		}
 
 		/* 描画 */
