@@ -153,14 +153,12 @@ putU32s(Line *line, int col, const char32_t *str, int attr, int fg, int bg, int 
 }
 
 void
-deleteTrail(Line *line)
+putSPCs(Line *line, int col, int bg, int n)
 {
-	int i;
+	char32_t str[n];
 
-	for (i = u32slen(line->str); 0 < i; i--)
-		if (line->str[i - 1] != L' ')
-			break;
-	line->str[i] = L'\0';
+	INIT(str, L' ');
+	putU32s(line, col, str, 0, deffg, bg, n);
 }
 
 CharCnt

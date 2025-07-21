@@ -423,15 +423,14 @@ procCSI(Term *term, const char *head, const char *tail)
 		switch (*param) {
 		default:
 		case '0':
-			PUT_NUL(line, term->cx);
+			putSPCs(line, term->cx, term->bg, term->sb->cols - term->cx);
 			begin = term->cy + 1;
 			end = sb->rows;
 			break;
 		case '1':
 			begin = 0;
 			end = term->cy;
-			for (i = 0; i <= term->cx; i++)
-				PUT_SPC(line, i);
+			putSPCs(line, 0, term->bg, term->cx + 1);
 			break;
 		case '2':
 			begin = 0;
@@ -449,14 +448,13 @@ procCSI(Term *term, const char *head, const char *tail)
 		switch (*param) {
 		default:
 		case '0':
-			PUT_NUL(line, term->cx);
+			putSPCs(line, term->cx, term->bg, term->sb->cols - term->cx);
 			break;
 		case '1':
-			for (i = 0; i <= term->cx; i++)
-				PUT_SPC(line, i);
+			putSPCs(line, 0, term->bg, term->cx + 1);
 			break;
 		case '2':
-			PUT_NUL(line, 0);
+			putSPCs(line, 0, term->bg, term->sb->cols);
 			break;
 		}
 		break;
@@ -496,8 +494,7 @@ procCSI(Term *term, const char *head, const char *tail)
 	case 0x58: /* ECH 文字消去 */
 		if (!(line = getLine(term, term->cy)))
 			break;
-		for (i = atoi(param); 0 < i; i--)
-			PUT_SPC(line, term->cx + i - 1);
+		putSPCs(line, term->cx, term->bg, atoi(param));
 		break;
 
 

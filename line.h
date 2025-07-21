@@ -6,7 +6,6 @@ extern int defbg;
 typedef uint_least32_t char32_t;
 
 #define PUT_NUL(l,x)    (putU32s(l, x, (char32_t *)L"\0", 0, deffg, defbg, 1))
-#define PUT_SPC(l,x)    (putU32s(l, x, (char32_t *)L" ", 0, deffg, defbg, 1))
 
 enum sgt_attribute {
 	NONE    = 0,
@@ -44,7 +43,7 @@ void insertU32s(Line *, int, const InsertLine *, int);
 void deleteChars(Line *, int, int);
 int eraseInLine(Line *, int, int);
 int putU32s(Line *, int, const char32_t *, int, int, int, int);
-void deleteTrail(Line *);
+void putSPCs(Line *, int, int, int);
 CharCnt getCharCnt(const Line *, int);
 int findNextSGR(const Line *, int);
 
