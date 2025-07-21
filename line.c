@@ -144,7 +144,7 @@ putU32s(Line *line, int col, const char32_t *str, int attr, int fg, int bg, int 
 		fgs[i] = fg;
 		bgs[i] = bg;
 	}
-	placed = (InsertLine){str, attrs, fgs, bgs};
+	placed = (InsertLine){ str, attrs, fgs, bgs };
 
 	head = eraseInLine(line, col, width);
 	insertU32s(line, head, &placed, len);
@@ -171,17 +171,17 @@ getCharCnt(const Line *line, int col)
 	int i;
 
 	if (col < 0)
-		return (CharCnt){col, col, 1};
+		return (CharCnt){ col, col, 1 };
 
 	for (i = 0, total = 0; i < linelen; i++) {
 		width = wcwidth(line->str[i]);
 		width = width < 0 ? 2 : width;
 		if (col < total + width)
-			return(CharCnt){i, total, width};
+			return (CharCnt){ i, total, width };
 		total += width;
 	}
 
-	return (CharCnt){linelen + (col - total), col, 1};
+	return (CharCnt){ linelen + (col - total), col, 1 };
 }
 
 int

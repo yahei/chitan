@@ -41,14 +41,7 @@ openTerm(void)
 
 	/* 構造体の初期化 */
 	term = xmalloc(sizeof(Term));
-	*term = (Term){
-		.master = -1,
-		.ori = {}, .alt = {}, .sb = NULL,
-		.cx = 0, .cy = 0, .svx = 0, .svy = 0,
-		.readbuf = NULL, .rblen = 0,
-		.attr = 0, .fg = deffg, .bg = defbg, .palette = NULL,
-		.oldmx = 0, .oldmy = 0
-	};
+	*term = (Term){ .master = -1, .attr = NONE, .fg = deffg, .bg = defbg };
 
 	/* スクリーンバッファの初期化 */
 	term->ori = term->alt = (struct ScreenBuffer){
@@ -729,7 +722,7 @@ setWinSize(Term *term, int row, int col, int xpixel, int ypixel)
 	row = MIN(row, term->sb->maxlines);
 	row = MAX(row, 1);
 	col = MAX(col, 1);
-	ws = (struct winsize){row, col, xpixel, ypixel};
+	ws = (struct winsize){ row, col, xpixel, ypixel };
 
 	term->cx = MIN(term->cx, col - 1);
 	term->sb->cols = col;
