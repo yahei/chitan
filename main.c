@@ -296,24 +296,39 @@ procXEvent(Win *win)
 void
 procKeyPress(Win *win, XEvent event, int bufsize)
 {
-	char buf[bufsize];
+	char buf[bufsize], str[16];
 	int len;
-	Status status;
+	KeySym keysym;
+	Status status = XLookupChars;
 
-	if (win->ime.xic) {
-		len = Xutf8LookupString(win->ime.xic, &event.xkey,
-				buf, bufsize, NULL, &status);
-		if (status == XBufferOverflow)
-			return procKeyPress(win, event, len);
+	/* 入力文字列を取得 */
+	len = win->ime.xic ?
+		Xutf8LookupString(win->ime.xic, &event.xkey, buf, bufsize, &keysym, &status) :
+		XLookupString(&event.xkey, buf, bufsize, &keysym, NULL);
+	if (status == XBufferOverflow)
+		return procKeyPress(win, event, len);
+
+	if (strlen(buf)) {
+		/* 文字列を送る */
+		if (event.xkey.state & Mod1Mask)
+			writePty(win->term, "\e", 1);
+		writePty(win->term, buf, len);
 	} else {
-		len = XLookupString(&event.xkey, buf, bufsize, NULL, NULL);
+		/* カーソルキーを送る */
+		switch (keysym) {
+		case XK_Up:
+		case XK_Down:
+		case XK_Right:
+		case XK_Left:
+			snprintf(str, sizeof(str), "\e%c%c",
+					1 < win->term->dec[1] ? 'O' : '[',
+					"DACB"[keysym - XK_Left]);
+			break;
+		default:
+			return;
+		}
+		writePty(win->term, str, strlen(str));
 	}
-
-	/* Alt */
-	if (event.xkey.state & Mod1Mask)
-		writePty(win->term, "\e", 1);
-
-	writePty(win->term, buf, len);
 }
 
 void
