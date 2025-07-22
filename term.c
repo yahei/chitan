@@ -637,7 +637,8 @@ void
 optset(Term *term, unsigned int num, int flag)
 {
 	if (sizeof(term->opt) <= num) {
-		fprintf(stderr, "Option: %d %s\n", num, flag ? "set" : "rst");
+		fprintf(stderr, "Option: %d %s\e[m\n", num,
+				flag ? "\e[32mset" : "\e[31mrst");
 		return;
 	}
 
@@ -682,7 +683,8 @@ decset(Term *term, unsigned int num, int flag)
 		break;
 
 	default:
-		fprintf(stderr, "DEC Option: %d %s\n", num, flag ? "set" : "rst");
+		fprintf(stderr, "DEC Option: %d %s\e[m\n", num,
+				flag ? "\e[32mset" : "\e[31mrst");
 		if (sizeof(term->dec) <= num)
 			return;
 	}
