@@ -661,6 +661,7 @@ decset(Term *term, unsigned int num, int flag)
 	case 1002: /* マウス button */
 	case 1003: /* マウス any */
 	case 1006: /* マウス SGR */
+	case 2004: /* Bracketed Paste Mode */
 		break;
 
 	case 1049:  /* altscreen */

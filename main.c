@@ -64,6 +64,10 @@ static void preeditDone(XIM, Win *, XPointer);
 static void preeditDraw(XIM, Win *, XIMPreeditDrawCallbackStruct *);
 static void preeditCaret(XIM, Win *, XIMPreeditCaretCallbackStruct *);
 
+/* Selection */
+enum { PRIMARY, CLIPBOARD, UTF8_STRING, MY_SELECTION, ATOM_NUM };
+Atom atoms[ATOM_NUM];
+
 int
 main(int argc, char *args[])
 {
@@ -77,6 +81,8 @@ void
 init(void)
 {
 	XGlyphInfo ginfo;
+	char **names;
+	int i;
 
 	/* localeを設定 */
 	setlocale(LC_CTYPE, "");
@@ -108,6 +114,11 @@ init(void)
 	chary = ginfo.height * 1.25;
 	charx = ginfo.width / 4 + 1;
 
+	/* Selection */
+	names = (char *[]){ "PRIMARY", "CLIPBOARD", "UTF8_STRING", "_MY_SELECTION_" };
+	for (i = 0; i < ATOM_NUM; i++)
+		atoms[i] = XInternAtom(disp, names[i], True);
+	
 	/* ウィンドウの作成 */
 	win = openWindow();
 }
@@ -236,6 +247,10 @@ procXEvent(Win *win)
 	XEvent event;
 	XConfigureEvent *e;
 	int state, mb;
+	Atom prop, type;
+	int format;
+	unsigned long ntimes, after;
+	unsigned char *props;
 
 	while (0 < XPending(disp)) {
 		XNextEvent(disp, &event);
@@ -289,6 +304,20 @@ procXEvent(Win *win)
 					(e->width - 20) / charx,
 					e->width, e->height);
 			break;
+
+		case SelectionNotify:
+			/* 貼り付け */
+			if ((prop = event.xselection.property) != None) {
+				XGetWindowProperty(disp, win->window, prop, 0, 256,
+						False, atoms[UTF8_STRING], &type,
+						&format, &ntimes, &after, &props);
+				if (1 < win->term->dec[2004])
+					writePty(win->term, "\e[200~", 6);
+				writePty(win->term, (char *)props, ntimes);
+				if (1 < win->term->dec[2004])
+					writePty(win->term, "\e[201~", 6);
+				XFree(props);
+			}
 		}
 	}
 }
@@ -307,6 +336,13 @@ procKeyPress(Win *win, XEvent event, int bufsize)
 		XLookupString(&event.xkey, buf, bufsize, &keysym, NULL);
 	if (status == XBufferOverflow)
 		return procKeyPress(win, event, len);
+
+	/* C-S-vで貼り付け */
+	if (keysym == XK_V && event.xkey.state & ControlMask) {
+		XConvertSelection(disp, atoms[CLIPBOARD], atoms[UTF8_STRING], atoms[MY_SELECTION],
+				win->window, event.xkey.time);
+		return;
+	}
 
 	if (strlen(buf)) {
 		/* 文字列を送る */
