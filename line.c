@@ -128,7 +128,7 @@ eraseInLine(Line *line, int col, int width)
 }
 
 int
-putU32s(Line *line, int col, const char32_t *str, int attr, int fg, int bg, int len)
+putU32s(Line *line, int col, const char32_t *str, int attr, int fg, int bg, size_t len)
 {
 	const int width = u32swidth(str, len);
 	int attrs[len], fgs[len], bgs[len];
@@ -153,7 +153,7 @@ putU32s(Line *line, int col, const char32_t *str, int attr, int fg, int bg, int 
 }
 
 void
-putSPCs(Line *line, int col, int bg, int n)
+putSPCs(Line *line, int col, int bg, size_t n)
 {
 	char32_t str[n];
 
@@ -231,7 +231,7 @@ u8sToU32s(char32_t *dst, const char *src, size_t n)
 	return rest;
 }
 
-int
+size_t
 u32slen(const char32_t *str)
 {
 	return wcslen((const wchar_t *)str);

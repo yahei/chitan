@@ -289,7 +289,7 @@ procESC(Term *term, const char *head, const char *tail)
 {
 	struct ScreenBuffer *sb = term->sb;
 
-	if (head >= tail)
+	if (tail <= head)
 		return NULL;
 
 	switch (*head) {
@@ -353,7 +353,7 @@ procCSI(Term *term, const char *head, const char *tail)
 	char inter[tail - head + 1], *pi;
 	char *str1, *str2;
 	Line *line;
-	int i, begin, end;
+	int i, len, begin, end;
 
 	/* パラメタバイト */
 	for (pp = param; BETWEEN(*head, 0x30, 0x40); head++) {
@@ -423,7 +423,8 @@ procCSI(Term *term, const char *head, const char *tail)
 		switch (*param) {
 		default:
 		case '0':
-			putSPCs(line, term->cx, term->bg, term->sb->cols - term->cx);
+			if (0 < (len = term->sb->cols - term->cx))
+				putSPCs(line, term->cx, term->bg, len);
 			begin = term->cy + 1;
 			end = sb->rows;
 			break;
@@ -448,7 +449,8 @@ procCSI(Term *term, const char *head, const char *tail)
 		switch (*param) {
 		default:
 		case '0':
-			putSPCs(line, term->cx, term->bg, term->sb->cols - term->cx);
+			if (0 < (len = term->sb->cols - term->cx))
+				putSPCs(line, term->cx, term->bg, len);
 			break;
 		case '1':
 			putSPCs(line, 0, term->bg, term->cx + 1);
