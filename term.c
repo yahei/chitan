@@ -664,7 +664,8 @@ decset(Term *term, unsigned int num, int flag)
 	case 2004: /* Bracketed Paste Mode */
 		break;
 
-	case 1049:  /* altscreen */
+	case 1049:  /* altscreen clear */
+	case 1047:  /* altscreen */
 		oldsb = term->sb;
 		term->sb = flag ? &term->alt : &term->ori;
 
@@ -674,9 +675,10 @@ decset(Term *term, unsigned int num, int flag)
 		if (flag) {
 			term->svx = term->cx;
 			term->svy = term->cy;
-			for (i = 0; i < term->sb->rows; i++)
-				if ((line = getLine(term, i)))
-					PUT_NUL(line, 0);
+			if (num == 1049)
+				for (i = 0; i < term->sb->rows; i++)
+					if ((line = getLine(term, i)))
+						PUT_NUL(line, 0);
 		} else {
 			term->cx = term->svx;
 			term->cy = term->svy;
