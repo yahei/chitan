@@ -34,6 +34,7 @@ typedef struct Term {
 	int attr, fg, bg;       /* 現在のSGR */
 	Color *palette;         /* カラーパレット */
 	int oldmx, oldmy;       /* 前回のマウス座標 */
+	const char32_t *g[4];   /* 文字集合 */
 } Term;
 
 Term *openTerm(void);

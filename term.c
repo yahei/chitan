@@ -30,6 +30,7 @@ static void optset(Term *, unsigned int, int);
 static void decset(Term *, unsigned int, int);
 static void setScrBufSize(Term *term, int, int);
 static void setSGR(Term *, char *);
+static const char *designateCharSet(Term *, const char *, const char *);
 
 Term *
 openTerm(void)
@@ -223,8 +224,18 @@ procNCCs(Term *term, const char *head)
 	char32_t decoded[len];
 	const char *rest;
 	Line *line;
+	int i;
 
+	/* UTF32に変換 */
 	rest = u8sToU32s(decoded, head, len);
+
+	/* 図形文字集合が切り替えられていたら文字を置き換える */
+	if (term->g[0])
+		for (i = 0; i < len; i++)
+			if (BETWEEN(decoded[i], 0x21, 0x7f))
+				decoded[i] = term->g[0][decoded[i] - 0x21];
+
+	/* 書き込む */
 	if ((line = getLine(term, term->cy)))
 		term->cx += putU32s(line, term->cx, decoded, term->attr,
 				term->fg, term->bg, u32slen(decoded));
@@ -293,19 +304,16 @@ procESC(Term *term, const char *head, const char *tail)
 		return NULL;
 
 	switch (*head) {
-	/* 文字バンクの切り替え(未実装) */
-	case 0x24: /* G1D4 */
-		head++;
-	case 0x28: /* GZD4 */
-	case 0x29: /* G1D4 */
-	case 0x2a: /* G2D4 */
-	case 0x2b: /* G2D4 */
-	case 0x2c: /* GZD6 */
-	case 0x2d: /* G1D6 */
-	case 0x2e: /* G2D6 */
-	case 0x2f: /* G3D6 */
-		head++;
-		return head < tail ? head + 1 : NULL;
+	case 0x24: /* DESIGGNAE MULTIBYTE */
+	case 0x28: /* G0-DESIGGNAE 94-SET */
+	case 0x29: /* G1-DESIGGNAE 94-SET */
+	case 0x2a: /* G2-DESIGGNAE 94-SET */
+	case 0x2b: /* G3-DESIGGNAE 94-SET */
+	case 0x2c: /* G0-DESIGGNAE 96-SET (使用しない) */
+	case 0x2d: /* G1-DESIGGNAE 96-SET */
+	case 0x2e: /* G2-DESIGGNAE 96-SET */
+	case 0x2f: /* G3-DESIGGNAE 96-SET */
+		return designateCharSet(term, head, tail);
 
 	case 0x4d: /* RI */
 		if (sb->scrs < term->cy)
@@ -876,4 +884,61 @@ setSGR(Term *term, char *param)
 		if (n == 65)
 			fprintf(stderr, "cancel effect: %d\n", n);
 	}
+}
+
+const char *
+designateCharSet(Term *term, const char *head, const char *tail)
+{
+	/* 94文字集合 */
+	static const char32_t * const cset94[256] = {
+		/* DEC Special Graphics Characters */
+		['0'] = (char32_t *)
+			L"!\"#$%&'()*+,-./"
+			L"0123456789:;<=>?"
+			L"@ABCDEFGHIJKLMNO"
+			L"PQRSTUVWXYZ[\\]^ "
+			L"⧫▒␉␌␍␊°±␤␋┘┐┌└┼⎺"
+			L"⎻─⎼⎽├┤┴┬│≤≥π≠£·",
+	};
+	char *size[] = {"94", "96", "94x94", "96x96"};
+	int multi = 0, gnum, set96;
+	const char *name;
+
+	/* 複数バイトかどうか */
+	multi = (head[0] == 0x24) ;
+	if (multi && tail <= ++head)
+		return NULL;
+
+	/* バンク番号と94文字集合か96文字集合か */
+	if (BETWEEN(head[0], 0x28, 0x30)) {
+		gnum = head[0] - 0x28;
+		set96 = (0x2c <= gnum);
+		gnum %= 4;
+		if (tail <= ++head)
+			return NULL;
+	} else if (BETWEEN(head[0], 0x40, 0x43)) {
+		gnum = 0;
+		set96 = 0;
+	} else {
+		return head;
+	}
+
+	/* 図形文字集合名 */
+	name = head;
+	if (strchr("\"%`&", name[0]))
+		if (tail <= ++head)
+			return NULL;
+
+	/* 設定する */
+	term->g[gnum] = NULL;
+
+	if (!multi && !set96 && !strchr("\"%`&", name[0]))
+		term->g[gnum] = cset94[(unsigned int)name[0]];
+
+	if (!term->g[gnum] && name[0] != 'B')
+		fprintf(stderr, "Not Supported CharSet. (%s %c%c)\n",
+				size[multi + set96 * 2], name[0],
+				strchr("\"%`&", name[0]) ? name[1] : '\0');
+
+	return head + 1;
 }
