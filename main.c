@@ -10,6 +10,12 @@
 #include "term.h"
 #include "util.h"
 
+typedef struct XFont {
+	Display *disp;
+	XftFont *normal;
+	int cw, ch;
+} XFont;
+
 typedef struct Win {
 	Term *term;
 	Window window;
@@ -17,6 +23,8 @@ typedef struct Win {
 	XftDraw *draw;
 	XClassHint *hint;
 	int width, height;
+	int xpad, ypad;
+	int col, row;
 	struct {
 		XIC xic;
 		XICCallback icdestroy;
@@ -35,14 +43,17 @@ typedef struct Win {
 static Display *disp;
 static Visual *visual;
 static Colormap cmap;
-static XftFont *font;
-static int charx, chary;
+static XFont *xfont;
 static XIM xim;
 static Win *win;
 
 static void init(void);
 static void run(void);
 static void fin(void);
+
+/* Font */
+static XFont *openFont(Display *, const char *, float);
+static void closeFont(XFont *);
 
 /* Win */
 static Win *openWindow(void);
@@ -80,7 +91,6 @@ main(int argc, char *args[])
 void
 init(void)
 {
-	XGlyphInfo ginfo;
 	char **names;
 	int i;
 
@@ -101,18 +111,9 @@ init(void)
 
 	/* 文字描画の準備 */
 	FcInit();
-	font = XftFontOpen(
-			disp, 0,
-			XFT_FAMILY, XftTypeString, "monospace",
-			XFT_SIZE, XftTypeDouble, 11.5,
-			NULL);
-	if (font == NULL)
+	xfont = openFont(disp, "monospace", 11.5);
+	if (xfont == NULL)
 		fatal("XftFontOpen failed.\n");
-	
-	/* テキストの高さや横幅を取得 */
-	XftTextExtents32(disp, font, (char32_t *)L"plmM", 4, &ginfo);
-	chary = ginfo.height * 1.25;
-	charx = ginfo.width / 4 + 1;
 
 	/* Selection */
 	names = (char *[]){ "PRIMARY", "CLIPBOARD", "UTF8_STRING", "_MY_SELECTION_" };
@@ -165,11 +166,44 @@ void
 fin(void)
 {
 	closeWindow(win);
-	XftFontClose(disp, font);
+	closeFont(xfont);
 	FcFini();
 	if (xim)
 		XCloseIM(xim);
 	XCloseDisplay(disp);
+}
+
+XFont *
+openFont(Display *disp, const char *name, float size)
+{
+	XFont *xfont = xmalloc(sizeof(XFont));
+	XGlyphInfo ginfo;
+
+	xfont->disp = disp;
+
+	/* フォントを読み込む */
+	xfont->normal = XftFontOpen(
+			disp, 0,
+			XFT_FAMILY, XftTypeString, name,
+			XFT_SIZE, XftTypeDouble, size,
+			NULL);
+	if (xfont->normal== NULL) {
+		closeFont(xfont);
+		return NULL;
+	}
+
+	/* テキストの高さや横幅を取得 */
+	xfont->ch = xfont->normal->height - 2.0;
+	XftTextExtents32(disp, xfont->normal, (char32_t *)L"x", 1, &ginfo);
+	xfont->cw = ginfo.width;
+
+	return xfont;
+}
+
+void
+closeFont(XFont *xfont) {
+	XftFontClose(xfont->disp, xfont->normal);
+	free(xfont);
 }
 
 Win *
@@ -185,6 +219,8 @@ openWindow(void)
 	/* ウィンドウ作成 */
 	win->width = 800;
 	win->height = 600;
+	win->xpad = 10;
+	win->ypad = 10;
 	win->window = XCreateSimpleWindow(
 			disp,
 			DefaultRootWindow(disp),
@@ -286,8 +322,8 @@ procXEvent(Win *win)
 			mb += state & Mod1Mask    ? ALT   : 0;
 			mb += state & ControlMask ? CTRL  : 0;
 			reportMouse(win->term, mb, event.type == ButtonRelease,
-					(event.xbutton.x - 10) / charx + 1,
-					(event.xbutton.y - 10) / chary + 1);
+					(event.xbutton.x - win->xpad) / xfont->cw + 1,
+					(event.xbutton.y - win->ypad) / xfont->ch + 1);
 			break;
 
 		case Expose:
@@ -300,9 +336,10 @@ procXEvent(Win *win)
 			e = (XConfigureEvent *)&event;
 			win->width = e->width;
 			win->height = e->height;
-			setWinSize(win->term, (e->height - 10) / chary,
-					(e->width - 20) / charx,
-					e->width, e->height);
+			win->col = (e->width - win->xpad * 2) / xfont->cw;
+			win->row = (e->height - win->ypad * 2) / xfont->ch;
+			setWinSize(win->term, win->row, win->col,
+					win->width, win->height);
 			break;
 
 		case SelectionNotify:
@@ -370,11 +407,9 @@ procKeyPress(Win *win, XEvent event, int bufsize)
 void
 redraw(Win *win)
 {
-	XGlyphInfo ginfo;
 	XWindowAttributes wattr;
 	Line *line;
-	int x, y, pepos, pewidth;
-	int index;
+	int x, y, pepos, pewidth, pecaretpos;
 	int i;
 
 	/* 画面をクリア */
@@ -383,43 +418,41 @@ redraw(Win *win)
 
 	/* 端末の内容をウィンドウに表示 */
 	for (i = 0; (line = getLine(win->term, i)); i++)
-		drawLine(win, line, 10, (i + 1) * chary);
+		drawLine(win, line, win->xpad,
+				win->ypad + i * xfont->ch + xfont->normal->ascent);
 
 	/* カーソルの位置を取得 */
 	line = getLine(win->term, win->term->cy);
-	index = getCharCnt(line, win->term->cx).index;
-	XftTextExtents32(disp, font, line->str, index, &ginfo);
-	x = ginfo.xOff + 10;
-	y = win->term->cy * chary;
+	x = win->xpad + win->term->cx * xfont->cw;
+	y = win->ypad + win->term->cy * xfont->ch + xfont->normal->ascent;
 
 	/* カーソルかPreeditを表示 */
 	XSetForeground(disp, win->gc, win->term->palette[deffg]);
 	if (u32slen(win->ime.peline->str)) {
-		/* Preeditの幅とキャレットのPreedit内での座標を取得 */
-		XftTextExtents32(disp, font, win->ime.peline->str, u32slen(win->ime.peline->str), &ginfo);
-		pewidth = ginfo.xOff;
-		XftTextExtents32(disp, font, win->ime.peline->str, win->ime.caret, &ginfo);
+		/* Preeditの幅とキャレットのPreedit内での位置を取得 */
+		pewidth = u32swidth(win->ime.peline->str, u32slen(win->ime.peline->str));
+		pecaretpos = u32swidth(win->ime.peline->str, win->ime.caret);
 
 		/* Preeditの画面上での描画位置を決める */
-		pepos = x - ginfo.xOff;
-		pepos = MIN(pepos, 10);
-		pepos = MAX(pepos, win->width - pewidth - 10);
-		pepos = MIN(pepos, x);
+		pepos = win->term->cx - pecaretpos;
+		pepos = MIN(pepos, 0);
+		pepos = MAX(pepos, win->col - pewidth);
+		pepos = MIN(pepos, win->term->cx);
 
 		/* Preeditとカーソルの描画 */
-		drawLine(win, win->ime.peline, pepos, y + chary);
-		drawCursor(win, pepos + ginfo.xOff, y + chary, 6,
-				win->ime.peline, pepos);
+		drawLine(win, win->ime.peline, win->xpad + xfont->cw * pepos, y);
+		drawCursor(win, win->xpad + xfont->cw * (pepos + pecaretpos),
+				y, 6, win->ime.peline, win->ime.caret);
 	} else if (1 <= win->term->dec[25]) {
 		/* カーソルの描画 */
-		drawCursor(win, x, y + chary, win->term->ctype,
+		drawCursor(win, x, y, win->term->ctype,
 				line, getCharCnt(line, win->term->cx).index);
 	}
 
 	/* スポット位置 */
 	if (win->ime.xic) {
 		win->ime.spot.x = x;
-		win->ime.spot.y = y + chary;
+		win->ime.spot.y = y;
 		XSetICValues(win->ime.xic, XNPreeditAttributes, win->ime.spotlist, NULL);
 	}
 
@@ -429,55 +462,46 @@ redraw(Win *win)
 void
 drawLine(Win *win, Line *line, int xoff, int yoff)
 {
-	XGlyphInfo ginfo;
-	int current, next;
 	int fg, bg;
 	int x, y;
-	const char32_t *str;
-	int len;
+	int i;
 
-	/* 同じSGRの文字列ごとにまとめて書く */
-	for (current = 0; line->str[current] != L'\0'; current = next) {
+	/* 1文字ずつ座標を指定して書く */
+	for (i = 0; line->str[i] != L'\0'; i++) {
 		/* 描画する文字列 */
-		next = findNextSGR(line, current);
-		fg = line->fg[current];
-		bg = line->bg[current];
-		str = line->str + current;
-		len = next - current;
-		XftTextExtents32(disp, font, line->str, current, &ginfo);
-		x = ginfo.xOff + xoff;
+		fg = line->fg[i];
+		bg = line->bg[i];
+		x = xoff + xfont->cw * u32swidth(line->str, i);
 		y = yoff;
 
 		/* 前処理 */
-		if (line->attr[current] & NEGA) { /* 反転 */
+		if (line->attr[i] & NEGA) { /* 反転 */
 			fg = fg ^ bg;
 			bg = fg ^ bg;
 			fg = fg ^ bg;
 		}
-		if (line->attr[current] & BOLD) { /* 太字 */
+		if (line->attr[i] & BOLD) { /* 太字 */
 			fg = fg < 8 ? fg + 8 : fg;
 		}
 
 		/* 描画 */
-		drawString(win, x, y, str, len, line->attr[current], fg, bg);
+		drawString(win, x, y, &line->str[i], 1, line->attr[i], fg, bg);
 	}
 }
 
 void
 drawString(Win *win, int x, int y, const char32_t *str, int len, int attr, int fg, int bg)
 {
-	XGlyphInfo ginfo;
 	int width;
 	XftColor xc;
 	Color c;
 
 	/* 文字列の幅 */
-	XftTextExtents32(disp, font, str, len, &ginfo);
-	width = ginfo.xOff;
+	width = xfont->cw * u32swidth(str, len);
 
 	/* 背景 */
 	XSetForeground(disp, win->gc, win->term->palette[bg]);
-	XFillRectangle(disp, win->window, win->gc, x, y - chary * 0.8, width, chary);
+	XFillRectangle(disp, win->window, win->gc, x, y - xfont->normal->ascent + 1, width, xfont->ch);
 
 	/* 文字 */
 	c = win->term->palette[fg];
@@ -485,21 +509,19 @@ drawString(Win *win, int x, int y, const char32_t *str, int len, int attr, int f
 	xc.color.green = GREEN(c) << 8;
 	xc.color.blue  =  BLUE(c) << 8;
 	xc.color.alpha = 0xffff;
-	XftDrawString32(win->draw, &xc, font, x, y, str, len);
+	XftDrawString32(win->draw, &xc, xfont->normal, x, y, str, len);
 
 	/* 後処理 */
 	if (attr & ULINE) { /* 下線 */
 		XSetForeground(disp, win->gc, win->term->palette[fg]);
-		XDrawLine(disp, win->window, win->gc, x, y + chary * 0.2, x + width, y + chary * 0.2);
+		XDrawLine(disp, win->window, win->gc, x, y + 1, x + width, y + 1);
 	}
 }
 
 void
 drawCursor(Win *win, int x, int y, int type, Line *line, int index)
 {
-	XGlyphInfo ginfo;
-	XftTextExtents32(disp, font, &line->str[index], 1, &ginfo);
-	int width = ginfo.xOff;
+	int width = xfont->cw * u32swidth(&line->str[index], 1);
 
 	switch (type) {
 	default: /* ブロック */
@@ -513,11 +535,12 @@ drawCursor(Win *win, int x, int y, int type, Line *line, int index)
 		break;
 	case 3: /* 下線 */
 	case 4:
-		XFillRectangle(disp, win->window, win->gc, x, y + chary * 0.2, width, chary * 0.1);
+		XFillRectangle(disp, win->window, win->gc, x, y + 1, width, xfont->ch * 0.1);
 		break;
 	case 5: /* 縦線 */
 	case 6:
-		XFillRectangle(disp, win->window, win->gc, x, y - chary * 0.8, chary * 0.1, chary);
+		y = y - xfont->normal->ascent + 1;
+		XFillRectangle(disp, win->window, win->gc, x, y, xfont->ch * 0.1, xfont->ch);
 		break;
 	}
 }
