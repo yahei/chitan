@@ -4,8 +4,8 @@ CFLAGS  = -Wall -D_XOPEN_SOURCE=600 -I/usr/include/freetype2
 SRCS    = main.c term.c line.c util.c
 OBJS    = $(SRCS:.c=.o)
 
-minty: $(OBJS)
-	$(CC) -o minty $(OBJS) -lX11 -lXft -lfontconfig
+chitan: $(OBJS)
+	$(CC) -o chitan $(OBJS) -lX11 -lXft -lfontconfig
 
 .c.o:
 	$(CC) $(CFLAGS) -c $<
@@ -16,6 +16,6 @@ line.o: line.h util.h
 util.o: util.h
 
 clean:
-	rm minty $(OBJS)
+	rm chitan $(OBJS)
 
 .PHONY: clean

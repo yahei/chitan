@@ -245,8 +245,8 @@ openWindow(void)
 
 	/* プロパティ */
 	win->hint = XAllocClassHint();
-	win->hint->res_name = "minty";
-	win->hint->res_class = "minty";
+	win->hint->res_name = "chitan";
+	win->hint->res_class = "chitan";
 	XSetClassHint(disp, win->window, win->hint);
 
 	/* イベントマスク */
