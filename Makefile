@@ -10,12 +10,19 @@ chitan: $(OBJS)
 .c.o:
 	$(CC) $(CFLAGS) -c $<
 
-main.o: term.h line.h util.h
-term.o: term.h line.h util.h
-line.o: line.h util.h
+main.o: util.h line.h term.h
+term.o: util.h line.h term.h
+line.o: util.h line.h
 util.o: util.h
 
 clean:
 	rm chitan $(OBJS)
 
-.PHONY: clean
+install: chitan
+	cp -f chitan /usr/local/bin
+	chmod 755 /usr/local/bin/chitan
+
+uninstall:
+	rm /usr/local/bin/chitan
+
+.PHONY: clean install uninstall

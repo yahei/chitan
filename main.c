@@ -115,7 +115,7 @@ init(void)
 
 	/* 文字描画の準備 */
 	FcInit();
-	xfont = openFont(disp, "monospace", 11.5);
+	xfont = openFont(disp, "monospace", 12.0);
 	if (xfont == NULL)
 		fatal("XftFontOpen failed.\n");
 
@@ -161,7 +161,7 @@ run(void)
 		if (!FD_ISSET(tfd, &rfds) && !FD_ISSET(xfd, &rfds))
 			redraw(win);
 
-		timeout = (struct timespec) { 0, 0 };
+		timeout = (struct timespec) { 0, 1000 };
 		ptimeout = FD_ISSET(tfd, &rfds) ? &timeout : NULL;
 	}
 }
