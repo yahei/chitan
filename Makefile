@@ -21,6 +21,7 @@ clean:
 install: chitan
 	cp -f chitan /usr/local/bin
 	chmod 755 /usr/local/bin/chitan
+	tic chitan.info
 
 uninstall:
 	rm /usr/local/bin/chitan

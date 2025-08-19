@@ -1,0 +1,33 @@
+chitan,
+# 端末の仕様
+	bce,
+	km,
+	it#8,
+	colors#0x100,
+	pairs#0x7fff,
+
+# キーボード・マウス
+	kcuu1=\e[A,
+	kcud1=\e[B,
+	kcuf1=\e[C,
+	kcub1=\e[D,
+	kmous=\e[M,
+
+# 端末制御コード
+	civis=\e[?25l,
+	cnorm=\e[?25h,
+	smcup=\e[?1049h,
+	rmcup=\e[?1049l,
+	cup=\e[%i%p1%d;%p2%dH,
+
+# SGR
+	sgr0=\e[0m,
+	bold=\e[1m,
+	sitm=\e[3m,
+	smul=\e[4m,
+	blink=\e[5m,
+	rev=\e[7m,
+	setaf=\e[38;5;%p1%dm,
+	setab=\e[48;5;%p1%dm,
+	op=\e[39;49m,
+	oc=\e[39;49m,
