@@ -19,6 +19,12 @@ chitan,
 	smcup=\e[?1049h,
 	rmcup=\e[?1049l,
 	cup=\e[%i%p1%d;%p2%dH,
+	el=\e[0K,
+	el1=\e[1K,
+	ed=\e[0J,
+	cr=^M,
+	clear=\e[2J,
+	ri=\eM,
 
 # SGR
 	sgr0=\e[0m,
