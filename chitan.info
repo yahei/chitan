@@ -27,7 +27,7 @@ chitan,
 	el1=\e[1K,
 	ed=\e[0J,
 	cr=^M,
-	clear=\e[2J,
+	clear=\e[2J\e[H,
 	ri=\eM,
 
 # SGR
