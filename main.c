@@ -153,13 +153,13 @@ run(void)
 			if (readPty(win->term) < 0)
 				return;
 
-		/* ウィンドウのイベント処理 */
-		if (FD_ISSET(xfd, &rfds) || XPending(disp))
-			procXEvent(win);
-
 		/* 再描画 */
-		if (!FD_ISSET(tfd, &rfds) && !FD_ISSET(xfd, &rfds))
+		if (!FD_ISSET(tfd, &rfds) && !XPending(disp))
 			redraw(win);
+
+		/* ウィンドウのイベント処理 */
+		if (XPending(disp))
+			procXEvent(win);
 
 		timeout = (struct timespec) { 0, 1000 };
 		ptimeout = FD_ISSET(tfd, &rfds) ? &timeout : NULL;
