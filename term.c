@@ -394,7 +394,7 @@ procCSI(Term *term, const char *head, const char *tail)
 			INIT(fg, deffg);
 			INIT(bg, defbg);
 			InsertLine il = { str, attr, fg, bg };
-			insertU32s(line, getCharCnt(line, term->cx).index, &il, n);
+			insertU32s(line, getCharCnt(line->str, term->cx).index, &il, n);
 		}
 		break;
 

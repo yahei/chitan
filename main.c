@@ -461,7 +461,7 @@ redraw(Win *win)
 		/* カーソルの描画 */
 		line = getLine(win->term, win->term->cy);
 		drawCursor(win, x, y, win->term->ctype,
-				line, getCharCnt(line, win->term->cx).index);
+				line, getCharCnt(line->str, win->term->cx).index);
 	}
 
 	/* スポット位置 */

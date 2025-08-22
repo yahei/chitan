@@ -107,11 +107,11 @@ eraseInLine(Line *line, int col, int width)
 	if (col < 0)
 		return 0;
 
-	cc = getCharCnt(line, col);
+	cc = getCharCnt(line->str, col);
 	head = MIN(cc.index, linelen);
 	lpad = col - MIN(cc.col, u32swidth(line->str, linelen));
 
-	cc = getCharCnt(line, col + width - 1);
+	cc = getCharCnt(line->str, col + width - 1);
 	tail = MIN(cc.index, linelen) + 1;
 	rpad = (cc.col + cc.width) - (col + width);
 
@@ -161,27 +161,6 @@ putSPCs(Line *line, int col, int bg, size_t n)
 	putU32s(line, col, str, 0, deffg, bg, n);
 }
 
-CharCnt
-getCharCnt(const Line *line, int col)
-{
-	const int linelen = u32slen(line->str);
-	int width, total;
-	int i;
-
-	if (col < 0)
-		return (CharCnt){ col, col, 1 };
-
-	for (i = 0, total = 0; i < linelen; i++) {
-		width = wcwidth(line->str[i]);
-		width = width < 0 ? 2 : width;
-		if (col < total + width)
-			return (CharCnt){ i, total, width };
-		total += width;
-	}
-
-	return (CharCnt){ linelen + (col - total), col, 1 };
-}
-
 const char *
 u8sToU32s(char32_t *dst, const char *src, size_t n)
 {
@@ -228,4 +207,25 @@ u32swidth(const char32_t *str, int len)
 	}
 
 	return total;
+}
+
+CharCnt
+getCharCnt(const char32_t *str, int col)
+{
+	const int len = u32slen(str);
+	int width, total;
+	int i;
+
+	if (col < 0)
+		return (CharCnt){ col, col, 1 };
+
+	for (i = 0, total = 0; i < len; i++) {
+		width = wcwidth(str[i]);
+		width = width < 0 ? 2 : width;
+		if (col < total + width)
+			return (CharCnt){ i, total, width };
+		total += width;
+	}
+
+	return (CharCnt){ len + (col - total), col, 1 };
 }
