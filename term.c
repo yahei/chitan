@@ -277,7 +277,8 @@ procCC(Term *term, const char *head, const char *tail)
 			areaScroll(term, sb->scrs, sb->scre, 1);
 		} else {
 			sb->firstline++;
-			sb->lastline++;
+			if (sb->lastline < sb->firstline + sb->rows - 1)
+				sb->lastline++;
 			if ((line = getLine(term, term->cy)))
 				PUT_NUL(line, 0);
 		}
@@ -719,10 +720,10 @@ Line *
 getLine(Term *term, int row)
 {
 	struct ScreenBuffer *sb = term->sb;
-	int index = sb->lastline - (sb->rows - 1) + row;
-	int oldest = sb->lastline - (sb->maxlines - 1);
+	int index = sb->firstline + row;
+	int oldest = MAX(sb->lastline - (sb->maxlines - 1), 0);
 
-	if (index < 0 || index < oldest || sb->lastline < index)
+	if (index < oldest || sb->lastline < index || sb->rows - 1 < row)
 		return NULL;
 
 	return LINE(sb, index);
@@ -791,33 +792,20 @@ void
 setScrBufSize(Term *term, int row, int col)
 {
 	struct ScreenBuffer *sb = term->sb;
+	int newfst;
 
-	// 新しい処理
-	if (row < sb->rows) {
-		if (row - 1 < term->cy) {
-			sb->firstline += term->cy - (row - 1);
-		}
+	if (row < sb->rows && row - 1 < term->cy) {
+		term->cy = row - 1;
+		sb->firstline += term->cy - (row - 1);
 	}
 	if (sb->rows < row) {
-		sb->firstline -= MIN(row - sb->rows, sb->firstline);
+		newfst = MAX(sb->firstline - (row - sb->rows), 0);
+		newfst = MAX(sb->lastline - (sb->maxlines - 1), newfst);
+		term->cy += sb->firstline - newfst;
+		sb->firstline = newfst;
+		sb->lastline = MAX(sb->firstline + (row - 1), sb->lastline);
 	}
-
-	// 従来の処理
-	while (sb->rows < row) {
-		sb->rows++;
-		if (sb->rows - 1 < sb->lastline)
-			term->cy++;
-		else
-			PUT_NUL(LINE(sb, sb->lastline++), 0);
-	}
-	while (row < sb->rows) {
-		sb->rows--;
-		if (sb->rows - 1 < term->cy ||
-				LINE(sb, sb->lastline)->str[0] != L'\0')
-			term->cy = MAX(term->cy - 1, 0);
-		else
-			sb->lastline--;
-	}
+	sb->rows = row;
 	sb->cols = col;
 	sb->scrs = 0;
 	sb->scre = row - 1;
