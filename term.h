@@ -20,6 +20,7 @@ typedef struct Term {
 	struct ScreenBuffer {
 		Line **lines;   /* ログ */
 		int maxlines;   /* ログの最大行数*/
+		int firstline;  /* 画面上1行目となる行 */
 		int lastline;   /* ログの最終行 */
 		int rows, cols; /* 画面の行数と列数 */
 		int scrs, scre; /* スクロール範囲 */

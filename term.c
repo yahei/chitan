@@ -46,6 +46,7 @@ openTerm(void)
 
 	/* スクリーンバッファの初期化 */
 	term->ori = term->alt = (struct ScreenBuffer){
+		.firstline = 0,
 		.lastline = 24,
 		.maxlines = 256,
 		.rows = 24, .cols = 80,
@@ -275,6 +276,7 @@ procCC(Term *term, const char *head, const char *tail)
 		} else if (0 < sb->scrs || sb->scre < sb->rows - 1) {
 			areaScroll(term, sb->scrs, sb->scre, 1);
 		} else {
+			sb->firstline++;
 			sb->lastline++;
 			if ((line = getLine(term, term->cy)))
 				PUT_NUL(line, 0);
@@ -790,6 +792,17 @@ setScrBufSize(Term *term, int row, int col)
 {
 	struct ScreenBuffer *sb = term->sb;
 
+	// 新しい処理
+	if (row < sb->rows) {
+		if (row - 1 < term->cy) {
+			sb->firstline += term->cy - (row - 1);
+		}
+	}
+	if (sb->rows < row) {
+		sb->firstline -= MIN(row - sb->rows, sb->firstline);
+	}
+
+	// 従来の処理
 	while (sb->rows < row) {
 		sb->rows++;
 		if (sb->rows - 1 < sb->lastline)
