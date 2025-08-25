@@ -795,15 +795,17 @@ setScrBufSize(Term *term, int row, int col)
 	int newfst;
 
 	if (row < sb->rows && row - 1 < term->cy) {
-		term->cy = row - 1;
-		sb->firstline += term->cy - (row - 1);
+		newfst = sb->firstline + (sb->rows - row);
+		newfst = MIN(sb->firstline + term->cy, newfst);
+		term->cy -= newfst - sb->firstline;
+		sb->firstline = newfst;
 	}
 	if (sb->rows < row) {
 		newfst = MAX(sb->firstline - (row - sb->rows), 0);
 		newfst = MAX(sb->totallines - sb->maxlines, newfst);
 		term->cy += sb->firstline - newfst;
 		sb->firstline = newfst;
-		sb->totallines = MAX(sb->firstline + row, sb->totallines);
+		sb->totallines = MAX(newfst + row, sb->totallines);
 	}
 	sb->rows = row;
 	sb->cols = col;
