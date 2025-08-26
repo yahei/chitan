@@ -483,9 +483,9 @@ drawLine(Win *win, Line *line, int xoff, int yoff)
 	int i, next;
 
 	/* 同じ属性の文字はまとめて処理する */
-	for (i = 0; line->str[i] != L'\0'; i = next) {
+	for (i = 0; line->str[i] != L'\0' && i < win->col; i = next) {
 		/* 描画する文字列 */
-		next = findNextSGR(line, i);
+		next = MIN(findNextSGR(line, i), win->col);
 		fg = line->fg[i];
 		bg = line->bg[i];
 		x = xoff + xfont->cw * u32swidth(line->str, i);
