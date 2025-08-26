@@ -49,3 +49,4 @@ const char *u8sToU32s(char32_t *,const char *, size_t);
 size_t u32slen(const char32_t *);
 int u32swidth(const char32_t *, int);
 CharCnt getCharCnt(const char32_t *, int);
+int findNextSGR(const Line *, int);

@@ -161,6 +161,26 @@ putSPCs(Line *line, int col, int bg, size_t n)
 	putU32s(line, col, str, 0, deffg, bg, n);
 }
 
+int
+findNextSGR(const Line *line, int index)
+{
+	const int len = u32slen(line->str);
+
+	if (index < len) {
+		const int attr = line->attr[index];
+		const int fg = line->fg[index];
+		const int bg = line->bg[index];
+
+		for (; index < len; index++)
+			if (attr != line->attr[index] ||
+			      fg != line->fg[index] ||
+			      bg != line->bg[index])
+				return index;
+	}
+
+	return len;
+}
+
 const char *
 u8sToU32s(char32_t *dst, const char *src, size_t n)
 {

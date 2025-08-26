@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
+#include <wchar.h>
 #include <X11/Xlib.h>
 #include <X11/Xft/Xft.h>
 
@@ -479,11 +480,12 @@ drawLine(Win *win, Line *line, int xoff, int yoff)
 {
 	int fg, bg;
 	int x, y;
-	int i;
+	int i, next;
 
-	/* 1文字ずつ座標を指定して書く */
-	for (i = 0; line->str[i] != L'\0'; i++) {
+	/* 同じ属性の文字はまとめて処理する */
+	for (i = 0; line->str[i] != L'\0'; i = next) {
 		/* 描画する文字列 */
+		next = findNextSGR(line, i);
 		fg = line->fg[i];
 		bg = line->bg[i];
 		x = xoff + xfont->cw * u32swidth(line->str, i);
@@ -500,7 +502,8 @@ drawLine(Win *win, Line *line, int xoff, int yoff)
 		}
 
 		/* 描画 */
-		drawString(win, x, y, &line->str[i], 1, line->attr[i], fg, bg);
+		drawString(win, x, y, &line->str[i], next - i,
+				line->attr[i], fg, bg);
 	}
 }
 
@@ -511,6 +514,7 @@ drawString(Win *win, int x, int y, const char32_t *str, int len, int attr, int f
 	int width;
 	XftColor xc;
 	Color c;
+	int i, x2;
 
 	/* 使うフォント */
 	if ((attr & BOLD) && (attr & ITALIC))
@@ -536,7 +540,10 @@ drawString(Win *win, int x, int y, const char32_t *str, int len, int attr, int f
 	xc.color.green = GREEN(c) << 8;
 	xc.color.blue  =  BLUE(c) << 8;
 	xc.color.alpha = 0xffff;
-	XftDrawString32(win->draw, &xc, font, x, y, str, len);
+	for (i = 0, x2 = x; i < len; i++) {
+		XftDrawString32(win->draw, &xc, font, x2, y, &str[i], 1);
+		x2 += xfont->cw * wcwidth(str[i]);
+	}
 
 	/* 後処理 */
 	if (attr & ULINE) { /* 下線 */
