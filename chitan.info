@@ -1,5 +1,6 @@
 chitan,
 # 端末の仕様
+	acsc=``aaffggjjkkllmmnnooppqqrrssttuuvvwwxxyyzz{{||}}~~
 	bce,
 	km,
 	it#8,
@@ -23,12 +24,15 @@ chitan,
 	cud1=\e[B,
 	cuf1=\e[C,
 	cub1=\e[D,
+	home=\e[H,
 	el=\e[0K,
 	el1=\e[1K,
 	ed=\e[0J,
 	cr=^M,
 	clear=\e[2J\e[H,
 	ri=\eM,
+	smacs=\e(0,
+	rmacs=\e(B,
 
 # SGR
 	sgr0=\e[0m,
