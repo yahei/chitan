@@ -816,7 +816,7 @@ setScrBufSize(Term *term, int row, int col)
 void
 setSGR(Term *term, char *param)
 {
-	char *buf;
+	char *buf, *buf2;
 	int n;
 
 	for (buf = strtok(param, ";"); buf; buf = strtok(NULL, ";")) {
@@ -859,8 +859,10 @@ setSGR(Term *term, char *param)
 		if (BETWEEN(n, 90, 98))
 			term->fg = n - 82;
 		if (n == 38) {
-			if (atoi(strtok(NULL, ";")) == 5)
-				term->fg = atoi(strtok(NULL, ";"));
+			buf = strtok(NULL, ";");
+			buf2 = strtok(NULL, ";");
+			if (buf && buf2 && atoi(buf) == 5)
+				term->fg = atoi(buf2);
 			else
 				fprintf(stderr, "Not Supported SGR: %s\n", param);
 		}
@@ -873,8 +875,10 @@ setSGR(Term *term, char *param)
 		if (BETWEEN(n, 100, 108))
 			term->bg = n - 92;
 		if (n == 48) {
-			if (atoi(strtok(NULL, ";")) == 5)
-				term->bg = atoi(strtok(NULL, ";"));
+			buf = strtok(NULL, ";");
+			buf2 = strtok(NULL, ";");
+			if (buf && buf2 && atoi(buf) == 5)
+				term->bg = atoi(buf2);
 			else
 				fprintf(stderr, "Not Supported SGR: %s\n", param);
 		}
