@@ -66,8 +66,7 @@ static void closeWindow(Win *);
 static void procXEvent(Win *);
 static void procKeyPress(Win *, XEvent, int);
 static void redraw(Win *);
-static void drawLine(Win *, Line *, int, int);
-static void drawString(Win *, int, int, const char32_t *, int, int, int, int);
+static void drawLine(Win *, Line *, int, int, int, int);
 static void drawCursor(Win *, int, int, int, Line *, int);
 
 /* IME */
@@ -434,7 +433,7 @@ redraw(Win *win)
 
 	/* 端末の内容をウィンドウに表示 */
 	for (i = 0; (line = getLine(win->term, i)); i++)
-		drawLine(win, line, win->xpad,
+		drawLine(win, line, 0, win->col, win->xpad,
 				win->ypad + i * xfont->ch + xfont->fonts[NORMAL_FONT]->ascent);
 
 	/* カーソルの位置を取得 */
@@ -455,7 +454,7 @@ redraw(Win *win)
 		pepos = MIN(pepos, win->term->cx);
 
 		/* Preeditとカーソルの描画 */
-		drawLine(win, win->ime.peline, win->xpad + xfont->cw * pepos, y);
+		drawLine(win, win->ime.peline, 0, win->col, win->xpad + xfont->cw * pepos, y);
 		drawCursor(win, win->xpad + xfont->cw * (pepos + pecaretpos),
 				y, 6, win->ime.peline, win->ime.caret);
 	} else if (1 <= win->term->dec[25]) {
@@ -476,79 +475,66 @@ redraw(Win *win)
 }
 
 void
-drawLine(Win *win, Line *line, int xoff, int yoff)
+drawLine(Win *win, Line *line, int i, int len, int xoff, int yoff)
 {
 	int fg, bg;
-	int x, y;
-	int i, next;
-
-	/* 同じ属性の文字はまとめて処理する */
-	for (i = 0; line->str[i] != L'\0' && i < win->col; i = next) {
-		/* 描画する文字列 */
-		next = MIN(findNextSGR(line, i), win->col);
-		fg = line->fg[i];
-		bg = line->bg[i];
-		x = xoff + xfont->cw * u32swidth(line->str, i);
-		y = yoff;
-
-		/* 前処理 */
-		if (line->attr[i] & NEGA) { /* 反転 */
-			fg = fg ^ bg;
-			bg = fg ^ bg;
-			fg = fg ^ bg;
-		}
-		if (line->attr[i] & BOLD) { /* 太字 */
-			fg = fg < 8 ? fg + 8 : fg;
-		}
-
-		/* 描画 */
-		drawString(win, x, y, &line->str[i], next - i,
-				line->attr[i], fg, bg);
-	}
-}
-
-void
-drawString(Win *win, int x, int y, const char32_t *str, int len, int attr, int fg, int bg)
-{
+	int x, y, width;
+	int j, next;
 	XftFont *font;
-	int width;
 	XftColor xc;
 	Color c;
-	int i, x2;
 
-	/* 使うフォント */
-	if ((attr & BOLD) && (attr & ITALIC))
+	if (len <= i || line->str[i] == L'\0')
+		return;
+
+	/* 同じ属性の文字はまとめて処理する */
+	next = MIN(findNextSGR(line, i), len);
+	width = xfont->cw * u32swidth(&line->str[i], next - i);
+	drawLine(win, line, next, len, xoff + width, yoff);
+
+	/* 前処理 */
+	if (line->attr[i] & NEGA) { /* 反転 */
+		fg = line->bg[i];
+		bg = line->fg[i];
+	} else {
+		fg = line->fg[i];
+		bg = line->bg[i];
+	}
+	if (line->attr[i] & BOLD) /* 太字 */
+		fg = fg < 8 ? fg + 8 : fg;
+
+	/* 背景を塗る */
+	y = yoff - xfont->fonts[NORMAL_FONT]->ascent + 1;
+	XSetForeground(disp, win->gc, win->term->palette[bg]);
+	XFillRectangle(disp, win->window, win->gc, xoff, y, width, xfont->ch);
+
+	/* フォント */
+	if ((line->attr[i] & BOLD) && (line->attr[i] & ITALIC))
 		font = xfont->fonts[BOLD_ITALIC_FONT];
-	else if (attr & BOLD)
+	else if (line->attr[i] & BOLD)
 		font = xfont->fonts[BOLD_FONT];
-	else if (attr & ITALIC)
+	else if (line->attr[i] & ITALIC)
 		font = xfont->fonts[ITALIC_FONT];
 	else
 		font = xfont->fonts[NORMAL_FONT];
 
-	/* 文字列の幅 */
-	width = xfont->cw * u32swidth(str, len);
-
-	/* 背景 */
-	XSetForeground(disp, win->gc, win->term->palette[bg]);
-	XFillRectangle(disp, win->window, win->gc,
-			x, y - font->ascent + 1, width, xfont->ch);
-
-	/* 文字 */
+	/* 色 */
 	c = win->term->palette[fg];
 	xc.color.red   =   RED(c) << 8;
 	xc.color.green = GREEN(c) << 8;
 	xc.color.blue  =  BLUE(c) << 8;
 	xc.color.alpha = 0xffff;
-	for (i = 0, x2 = x; i < len; i++) {
-		XftDrawString32(win->draw, &xc, font, x2, y, &str[i], 1);
-		x2 += xfont->cw * wcwidth(str[i]);
+
+	/* 文字を書く */
+	for (j = 0, x = xoff; j < next - i; j++) {
+		XftDrawString32(win->draw, &xc, font, x, yoff, &line->str[i + j], 1);
+		x += xfont->cw * wcwidth(line->str[i + j]);
 	}
 
 	/* 後処理 */
-	if (attr & ULINE) { /* 下線 */
+	if (line->attr[i] & ULINE) { /* 下線 */
 		XSetForeground(disp, win->gc, win->term->palette[fg]);
-		XDrawLine(disp, win->window, win->gc, x, y + 1, x + width, y + 1);
+		XDrawLine(disp, win->window, win->gc, xoff, yoff + 1, xoff + width, yoff + 1);
 	}
 }
 
@@ -556,6 +542,7 @@ void
 drawCursor(Win *win, int x, int y, int type, Line *line, int index)
 {
 	int width = xfont->cw * u32swidth(&line->str[index], 1);
+	Line cursor;
 
 	switch (type) {
 	default: /* ブロック */
@@ -563,9 +550,10 @@ drawCursor(Win *win, int x, int y, int type, Line *line, int index)
 	case 1:
 	case 2:
 		if (index < u32slen(line->str))
-			drawString(win, x, y, &line->str[index], 1, line->attr[index], defbg, deffg);
+			cursor = (Line){&line->str[index], &line->attr[index], &defbg, &deffg};
 		else
-			drawString(win, x, y, (char32_t *)L" ", 1, 0, defbg, deffg);
+			cursor = (Line){(char32_t *)L" ", &(int){0}, &defbg, &deffg};
+		drawLine(win, &cursor, 0, 1, x, y);
 		break;
 	case 3: /* 下線 */
 	case 4:
