@@ -11,13 +11,9 @@
 #include "term.h"
 #include "util.h"
 
-enum { NORMAL_FONT, BOLD_FONT, ITALIC_FONT, BOLD_ITALIC_FONT, FONT_NUM };
-static const int weights[] = { XFT_WEIGHT_MEDIUM, XFT_WEIGHT_BOLD, XFT_WEIGHT_MEDIUM, XFT_WEIGHT_BOLD };
-static const int slants[] = { XFT_SLANT_ROMAN, XFT_SLANT_ROMAN, XFT_SLANT_ITALIC, XFT_SLANT_ITALIC };
-
 typedef struct XFont {
 	Display *disp;
-	XftFont *fonts[FONT_NUM];
+	XftFont *fonts[8];
 	int cw, ch;
 } XFont;
 
@@ -182,21 +178,23 @@ openFont(Display *disp, const char *name, float size)
 {
 	XFont *xfont = xmalloc(sizeof(XFont));
 	XGlyphInfo ginfo;
-	int i;
+	int i, weight, slant;
 
 	xfont->disp = disp;
 
-	/* フォントを読み込む */
-	for (i = 0; i < FONT_NUM; i++)
+	for (i = 0; i < 8; i++) {
+		weight = i & BOLD ? XFT_WEIGHT_BOLD : XFT_WEIGHT_MEDIUM;
+		slant = i & ITALIC ? XFT_SLANT_ITALIC : XFT_SLANT_ROMAN;
 		xfont->fonts[i] = XftFontOpen(
 				disp, 0,
 				XFT_FAMILY, XftTypeString, name,
 				XFT_SIZE, XftTypeDouble, size,
-				XFT_WEIGHT, XftTypeInteger, weights[i],
-				XFT_SLANT, XftTypeInteger, slants[i],
+				XFT_WEIGHT, XftTypeInteger, weight,
+				XFT_SLANT, XftTypeInteger, slant,
 				NULL);
+	}
 
-	for (i = 0; i < FONT_NUM; i++) {
+	for (i = 0; i < 8; i++) {
 		if (xfont->fonts[i] == NULL) {
 			closeFont(xfont);
 			return NULL;
@@ -204,8 +202,8 @@ openFont(Display *disp, const char *name, float size)
 	}
 
 	/* テキストの高さや横幅を取得 */
-	xfont->ch = xfont->fonts[NORMAL_FONT]->height - 2.0;
-	XftTextExtents32(disp, xfont->fonts[NORMAL_FONT], (char32_t *)L"x", 1, &ginfo);
+	xfont->ch = xfont->fonts[NONE]->height - 1.0;
+	XftTextExtents32(disp, xfont->fonts[NONE], (char32_t *)L"x", 1, &ginfo);
 	xfont->cw = ginfo.width;
 
 	return xfont;
@@ -215,7 +213,7 @@ void
 closeFont(XFont *xfont) {
 	int i;
 
-	for (i = 0; i < FONT_NUM; i++)
+	for (i = 0; i < 8; i++)
 		if (xfont->fonts[i])
 			XftFontClose(xfont->disp, xfont->fonts[i]);
 	free(xfont);
@@ -434,11 +432,11 @@ redraw(Win *win)
 	/* 端末の内容をウィンドウに表示 */
 	for (i = 0; (line = getLine(win->term, i)); i++)
 		drawLine(win, line, 0, win->col, win->xpad,
-				win->ypad + i * xfont->ch + xfont->fonts[NORMAL_FONT]->ascent);
+				win->ypad + i * xfont->ch + xfont->fonts[NONE]->ascent);
 
 	/* カーソルの位置を取得 */
 	x = win->xpad + win->term->cx * xfont->cw;
-	y = win->ypad + win->term->cy * xfont->ch + xfont->fonts[NORMAL_FONT]->ascent;
+	y = win->ypad + win->term->cy * xfont->ch + xfont->fonts[NONE]->ascent;
 
 	/* カーソルかPreeditを表示 */
 	XSetForeground(disp, win->gc, win->term->palette[deffg]);
@@ -504,19 +502,12 @@ drawLine(Win *win, Line *line, int i, int len, int xoff, int yoff)
 		fg = fg < 8 ? fg + 8 : fg;
 
 	/* 背景を塗る */
-	y = yoff - xfont->fonts[NORMAL_FONT]->ascent + 1;
+	y = yoff - xfont->fonts[NONE]->ascent + 1;
 	XSetForeground(disp, win->gc, win->term->palette[bg]);
 	XFillRectangle(disp, win->window, win->gc, xoff, y, width, xfont->ch);
 
 	/* フォント */
-	if ((line->attr[i] & BOLD) && (line->attr[i] & ITALIC))
-		font = xfont->fonts[BOLD_ITALIC_FONT];
-	else if (line->attr[i] & BOLD)
-		font = xfont->fonts[BOLD_FONT];
-	else if (line->attr[i] & ITALIC)
-		font = xfont->fonts[ITALIC_FONT];
-	else
-		font = xfont->fonts[NORMAL_FONT];
+	font = xfont->fonts[line->attr[i] & (BOLD | ITALIC)];
 
 	/* 色 */
 	c = win->term->palette[fg];
@@ -561,7 +552,7 @@ drawCursor(Win *win, int x, int y, int type, Line *line, int index)
 		break;
 	case 5: /* 縦線 */
 	case 6:
-		y = y - xfont->fonts[NORMAL_FONT]->ascent + 1;
+		y = y - xfont->fonts[NONE]->ascent + 1;
 		XFillRectangle(disp, win->window, win->gc, x, y, xfont->ch * 0.1, xfont->ch);
 		break;
 	}
