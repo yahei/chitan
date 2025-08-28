@@ -74,7 +74,7 @@ openTerm(void)
 
 	/* 疑似端末を開く */
 	errno = -1;
-	if ((term->master = posix_openpt(O_RDWR)) < 0)
+	if ((term->master = posix_openpt(O_RDWR | O_NOCTTY)) < 0)
 		goto FAIL;
 	if ((sname = ptsname(term->master)) == NULL)
 		goto FAIL;
@@ -82,7 +82,7 @@ openTerm(void)
 		goto FAIL;
 	if (unlockpt(term->master) < 0)
 		goto FAIL;
-	if ((slave = open(sname, O_RDWR)) < 0)
+	if ((slave = open(sname, O_RDWR | O_NOCTTY)) < 0)
 		goto FAIL;
 
 	/* slave側でプロセスを起動 */
@@ -90,7 +90,8 @@ openTerm(void)
 	case -1:/* 失敗 */
 		goto FAIL;
 		break;
-	case 0: /* プロセス側 */
+
+	case 0: /* slave側 */
 		close(term->master);
 		dup2(slave, 0);
 		dup2(slave, 1);
@@ -99,10 +100,13 @@ openTerm(void)
 		setenv("TERM", "chitan", 1);
 		if (setsid() < 0)
 			fatal("setsid failed.\n");
+		if (ioctl(0, TIOCSCTTY) < 0)
+			fprintf(stderr, "TIOCSCTTY failed.\n");
 		if (execlp("bash", "bash", NULL) < 0)
 			fatal("exec failed.\n");
 		break;
-	default: /* 本体側 */
+
+	default: /* master側 */
 		close(slave);
 	}
 
