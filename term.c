@@ -23,8 +23,9 @@ static const char *procNCCs(Term *, const char *);
 static const char *procCC(Term *, const char *, const char *);
 static const char *procESC(Term *, const char *, const char *);
 static const char *procCSI(Term *, const char *, const char *);
-static const char *procCStr(Term *, const char *, const char *);
 static const char *procSOS(Term *, const char *, const char *);
+static const char *procOSC(Term *, const char *, const char *);
+static const char *procCStr(Term *, const char *, const char *);
 static void areaScroll(Term *, int, int, int);
 static void optset(Term *, unsigned int, int);
 static void decset(Term *, unsigned int, int);
@@ -335,8 +336,10 @@ procESC(Term *term, const char *head, const char *tail)
 	case 0x58: /* SOS */
 		return procSOS(term, head + 1, tail);
 
-	case 0x50: /* DCS */
 	case 0x5d: /* OSC */
+		return procOSC(term, head + 1, tail);
+
+	case 0x50: /* DCS */
 	case 0x5e: /* PM */
 	case 0x5f: /* APC */
 		return procCStr(term, head, tail);
@@ -569,54 +572,90 @@ procCSI(Term *term, const char *head, const char *tail)
 const char *
 procSOS(Term *term, const char *head, const char *tail)
 {
-	const char *ps, *ps2;
+	const char *p;
+	char *perr, err[tail - head + 1];
 
-	/* ST (ESC \) が出てくるまで継続 */
-	for (ps = head; !(*(ps - 1) == 0x1b && *ps == 0x5c); ps++) {
-		if (ps >= tail)
+	for (p = head, perr = err;; p++, perr++) {
+		/* 正常終了 */
+		if (p < tail && p[0] == 0x1b && p[1] == 0x5c) {
+			p++;
+			break;
+		}
+
+		/* 中断 */
+		if (p < tail && p[0] == 0x1b && p[1] == 0x58)
+			return p;
+		if (tail <= p)
 			return NULL;
+
+		/* 未対応の表示用 */
+		*perr = BETWEEN(*p, 0x20, 0x7f) ? *p : '?';
 	}
+	err[p - head] = '\0';
 
 	/* 未対応 */
-	fprintf(stderr, "Not Supported SOS: SOS ");
-	for (ps2 = head; ps2 <= ps; ps2++) {
-		if (BETWEEN(*ps2, 0x20, 0x7f))
-			fprintf(stderr, "%c", *ps2);
-		else
-			fprintf(stderr, "(%#x)", *ps2);
-	}
-	fprintf(stderr, "\n");
+	fprintf(stderr, "Not Supported SOS: %s\n", err);
+	return p + 1;
+}
 
-	return ps + 1;
+const char *
+procOSC(Term *term, const char *head, const char *tail)
+{
+	const char *p;
+	char *perr, err[tail - head + 1];
+
+	for (p = head, perr = err;; p++, perr++) {
+		/* 正常終了 */
+		if (p[0] == 0x07)
+			break;
+		if (p < tail && p[0] == 0x1b && p[1] == 0x5c) {
+			p++;
+			break;
+		}
+
+		/* 中断 */
+		if (!(BETWEEN(*p, 0x08, 0x0e) || BETWEEN(*p, 0x20, 0x7f)))
+			return p;
+		if (tail <= p)
+			return NULL;
+
+		/* 未対応の表示用 */
+		*perr = BETWEEN(*p, 0x20, 0x7f) ? *p : '?';
+	}
+	err[p - head] = '\0';
+
+	/* 未対応 */
+	fprintf(stderr, "Not Supported OSC: %s\n", err);
+	return p + 1;
 }
 
 const char *
 procCStr(Term *term, const char *head, const char *tail)
 {
-	const char *ps, *ps2;
+	const char *p;
+	char *perr, err[tail - head + 1];
 
-	/* ST (ESC \) が出てくるまで継続 */
-	for (ps = head; !(*(ps - 1) == 0x1b && *ps == 0x5c); ps++) {
-		if (ps >= tail)
+	for (p = head, perr = err;; p++, perr++) {
+		/* 正常終了 */
+		if (p < tail && p[0] == 0x1b && p[1] == 0x5c) {
+			p++;
+			break;
+		}
+
+		/* 中断 */
+		if (!(BETWEEN(*p, 0x08, 0x0e) || BETWEEN(*p, 0x20, 0x7f)))
+			return p;
+		if (tail <= p)
 			return NULL;
 
-		/* 指令列に使えない文字が出たら終了 */
-		if (!BETWEEN(*ps, 0x08, 0x0e) && !BETWEEN(*ps, 0x20, 0x7f)
-				&& *ps != 0x1b)
-			break;
+		/* 未対応の表示用 */
+		*perr = BETWEEN(*p, 0x20, 0x7f) ? *p : '?';
 	}
+	err[p - head] = '\0';
 
 	/* 未対応 */
-	fprintf(stderr, "Not Supported CtrlStr: ESC ");
-	for (ps2 = head; ps2 <= ps; ps2++) {
-		if (BETWEEN(*ps2, 0x20, 0x7f))
-			fprintf(stderr, "%c", *ps2);
-		else
-			fprintf(stderr, "(%#x)", *ps2);
-	}
-	fprintf(stderr, "\n");
-
-	return ps + 1;
+	fprintf(stderr, "Not Supported CtrlStr: %s\n", err);
+	return p + 1;
 }
 
 void
