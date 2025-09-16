@@ -19,8 +19,7 @@ clean:
 	rm chitan $(OBJS)
 
 install: chitan
-	cp -f chitan /usr/local/bin
-	chmod 755 /usr/local/bin/chitan
+	install chitan /usr/local/bin
 	tic chitan.info
 
 uninstall:
