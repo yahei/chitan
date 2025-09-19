@@ -11,6 +11,9 @@
 #include "term.h"
 #include "util.h"
 
+#define CURSOR_X(win)   (win->xpad + win->term->cx * xfont->cw)
+#define CURSOR_Y(win)   (win->ypad + win->term->cy * xfont->ch + xfont->fonts[NONE]->ascent)
+
 typedef struct XFont {
 	Display *disp;
 	XftFont *fonts[8];
@@ -128,7 +131,7 @@ void
 run(void)
 {
 	fd_set rfds;
-	struct timespec timeout, *ptimeout = NULL;
+	struct timespec timeout = { 0, 1000 }, *ptimeout = NULL;
 	int tfd = win->term->master;
 	int xfd = XConnectionNumber(disp);
 
@@ -143,22 +146,27 @@ run(void)
 			else
 				errExit("pselect failed.\n");
 		}
-
-		/* 端末のread */
-		if (FD_ISSET(tfd, &rfds))
-			if (readPty(win->term) < 0)
-				return;
+		ptimeout = FD_ISSET(tfd, &rfds) ? &timeout : NULL;
 
 		/* 再描画 */
-		if (!FD_ISSET(tfd, &rfds) && !XPending(disp))
+		if (!ptimeout)
 			redraw(win);
+
+		/* 端末のread */
+		if (FD_ISSET(tfd, &rfds)) {
+			if (readPty(win->term) < 0)
+				return;
+			/* IMEスポット移動 */
+			if (win->ime.xic) {
+				win->ime.spot.x = CURSOR_X(win);
+				win->ime.spot.y = CURSOR_Y(win);
+				XSetICValues(win->ime.xic, XNPreeditAttributes, win->ime.spotlist, NULL);
+			}
+		}
 
 		/* ウィンドウのイベント処理 */
 		if (XPending(disp))
 			procXEvent(win);
-
-		timeout = (struct timespec) { 0, 1000 };
-		ptimeout = FD_ISSET(tfd, &rfds) ? &timeout : NULL;
 	}
 }
 
@@ -269,7 +277,7 @@ openWindow(void)
 
 	/* ウィンドウを表示 */
 	XMapWindow(disp, win->window);
-	XFlush(disp);
+	XSync(disp, False);
 
 	return win;
 }
@@ -422,7 +430,8 @@ redraw(Win *win)
 {
 	XWindowAttributes wattr;
 	Line *line;
-	int x, y, pepos, pewidth, pecaretpos;
+	const int x = CURSOR_X(win), y = CURSOR_Y(win);
+	int pepos, pewidth, pecaretpos;
 	int i;
 
 	/* 画面をクリア */
@@ -433,10 +442,6 @@ redraw(Win *win)
 	for (i = 0; (line = getLine(win->term, i)); i++)
 		drawLine(win, line, 0, win->col, win->xpad,
 				win->ypad + i * xfont->ch + xfont->fonts[NONE]->ascent);
-
-	/* カーソルの位置を取得 */
-	x = win->xpad + win->term->cx * xfont->cw;
-	y = win->ypad + win->term->cy * xfont->ch + xfont->fonts[NONE]->ascent;
 
 	/* カーソルかPreeditを表示 */
 	XSetForeground(disp, win->gc, win->term->palette[deffg]);
@@ -462,14 +467,7 @@ redraw(Win *win)
 				line, getCharCnt(line->str, win->term->cx).index);
 	}
 
-	/* スポット位置 */
-	if (win->ime.xic) {
-		win->ime.spot.x = x;
-		win->ime.spot.y = y;
-		XSetICValues(win->ime.xic, XNPreeditAttributes, win->ime.spotlist, NULL);
-	}
-
-	XFlush(disp);
+	XSync(disp, False);
 }
 
 void
