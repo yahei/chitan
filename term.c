@@ -26,6 +26,8 @@ static const char *procCSI(Term *, const char *, const char *);
 static const char *procSOS(Term *, const char *, const char *);
 static const char *procOSC(Term *, const char *, const char *);
 static const char *procCStr(Term *, const char *, const char *);
+static void setCursorPos(Term *, int, int);
+static void moveCursorPos(Term *, int, int);
 static void areaScroll(Term *, int, int, int);
 static void optset(Term *, unsigned int, int);
 static void decset(Term *, unsigned int, int);
@@ -245,6 +247,7 @@ procNCCs(Term *term, const char *head)
 	if ((line = getLine(term, term->cy)))
 		term->cx += putU32s(line, term->cx, decoded, term->attr,
 				term->fg, term->bg, u32slen(decoded));
+	/* 自動改行の処理に関わるので、ここだけ直接term->cxを変更する書き方のままにしている */
 
 	return rest;
 }
@@ -268,11 +271,11 @@ procCC(Term *term, const char *head, const char *tail)
 		break;
 
 	case 0x08: /* BS */
-		term->cx -= 1;
+		moveCursorPos(term, -1, 0);
 		break;
 
 	case 0x09: /* HT */
-		term->cx += 8 - term->cx % 8;
+		moveCursorPos(term, 8 - term->cx % 8, 0);
 		break;
 
 	case 0x0a: /* LF */
@@ -290,7 +293,7 @@ procCC(Term *term, const char *head, const char *tail)
 		break;
 
 	case 0x0d: /* CR */
-		term->cx = 0;
+		setCursorPos(term, 0, term->cy);
 		break;
 
 	case 0x1b: /* ESC */
@@ -409,30 +412,30 @@ procCSI(Term *term, const char *head, const char *tail)
 		break;
 
 	case 0x41: /* CUU */
-		term->cy = MAX(term->cy - MAX(atoi(param), 1), sb->scrs);
+		moveCursorPos(term, 0, -MAX(atoi(param), 1));
 		break;
 
 	case 0x42: /* CUD */
-		term->cy = MIN(term->cy + MAX(atoi(param), 1), sb->scre);
+		moveCursorPos(term, 0, MAX(atoi(param), 1));
 		break;
 
 	case 0x43: /* CUF */
-		term->cx = MIN(term->cx + MAX(atoi(param), 1), sb->cols - 1);
+		moveCursorPos(term, MAX(atoi(param), 1), 0);
 		break;
 
 	case 0x44: /* CUB */
-		term->cx = MAX(term->cx - MAX(atoi(param), 1), 0);
+		moveCursorPos(term, -MAX(atoi(param), 1), 0);
 		break;
 
 	case 0x47: /* CHA カーソル文字位置決め */
-		term->cx = CLIP(atoi(param), 1, sb->cols) - 1;
+		setCursorPos(term, atoi(param) - 1, term->cy);
 		break;
 
 	case 0x48: /* CUP カーソル位置決め */
 		str1 = strtok2(param, ";:");
 		str2 = strtok2(NULL, ";:");
-		term->cy = CLIP(atoi(str1 ? str1 : "1"), 1, sb->rows) - 1;
-		term->cx = CLIP(atoi(str2 ? str2 : "1"), 1, sb->cols) - 1;
+		setCursorPos(term, atoi(str2 ? str2 : "1") - 1,
+		                   atoi(str1 ? str1 : "1") - 1);
 		break;
 
 	case 0x4a: /* ED ページ内消去 */
@@ -488,13 +491,13 @@ procCSI(Term *term, const char *head, const char *tail)
 		break;
 
 	case 0x45: /* CNL カーソル復帰行前進 */
-		term->cy = MIN(term->cy + MAX(atoi(param), 1), sb->scre);
-		term->cx = 0;
+		moveCursorPos(term, 0, MAX(atoi(param), 1));
+		setCursorPos(term, 0, term->cy);
 		break;
 
 	case 0x46: /* CPL カーソル復帰行後退 */
-		term->cy = MAX(term->cy - MAX(atoi(param), 1), sb->scrs);
-		term->cx = 0;
+		moveCursorPos(term, 0, -MAX(atoi(param), 1));
+		setCursorPos(term, 0, term->cy);
 		break;
 
 	case 0x50: /* DHC 文字削除 */
@@ -519,7 +522,7 @@ procCSI(Term *term, const char *head, const char *tail)
 
 
 	case 0x64: /* VPA 行位置決め */
-		term->cy = CLIP(atoi(param), 1, term->sb->rows) - 1;
+		setCursorPos(term, term->cx, atoi(param) - 1);
 		break;
 
 	case 0x68: /* SM DECSET オプション設定 */
@@ -659,6 +662,19 @@ procCStr(Term *term, const char *head, const char *tail)
 }
 
 void
+setCursorPos(Term *term, int cx, int cy)
+{
+	term->cx = CLIP(cx, 0, term->sb->cols - 1);
+	term->cy = CLIP(cy, term->sb->scrs, term->sb->scre);
+}
+
+void
+moveCursorPos(Term *term, int dx, int dy)
+{
+	setCursorPos(term, term->cx + dx, term->cy + dy);
+}
+
+void
 areaScroll(Term *term, int first, int last, int num)
 {
 	struct ScreenBuffer *sb = term->sb;
@@ -734,8 +750,7 @@ decset(Term *term, unsigned int num, int flag)
 					if ((line = getLine(term, i)))
 						PUT_NUL(line, 0);
 		} else {
-			term->cx = term->svx;
-			term->cy = term->svy;
+			setCursorPos(term, term->svx, term->svy);
 		}
 
 		setScrBufSize(term, oldsb->rows, oldsb->cols);
@@ -781,9 +796,6 @@ setWinSize(Term *term, int row, int col, int xpixel, int ypixel)
 	row = MAX(row, 1);
 	col = MAX(col, 1);
 	ws = (struct winsize){ row, col, xpixel, ypixel };
-
-	term->cx = MIN(term->cx, col - 1);
-	term->sb->cols = col;
 
 	setScrBufSize(term, row, col);
 
@@ -835,18 +847,18 @@ void
 setScrBufSize(Term *term, int row, int col)
 {
 	struct ScreenBuffer *sb = term->sb;
-	int newfst;
+	int newfst, dy = 0;
 
 	if (row < sb->rows && row - 1 < term->cy) {
 		newfst = sb->firstline + (sb->rows - row);
 		newfst = MIN(sb->firstline + term->cy, newfst);
-		term->cy -= newfst - sb->firstline;
+		dy = sb->firstline - newfst;
 		sb->firstline = newfst;
 	}
 	if (sb->rows < row) {
 		newfst = MAX(sb->firstline - (row - sb->rows), 0);
 		newfst = MAX(sb->totallines - sb->maxlines, newfst);
-		term->cy += sb->firstline - newfst;
+		dy = sb->firstline - newfst;
 		sb->firstline = newfst;
 		sb->totallines = MAX(newfst + row, sb->totallines);
 	}
@@ -854,6 +866,8 @@ setScrBufSize(Term *term, int row, int col)
 	sb->cols = col;
 	sb->scrs = 0;
 	sb->scre = row - 1;
+
+	moveCursorPos(term, 0, dy);
 }
 
 void
