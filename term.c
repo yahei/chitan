@@ -792,13 +792,12 @@ setWinSize(Term *term, int row, int col, int xpixel, int ypixel)
 {
 	struct winsize ws;
 
-	row = MIN(row, term->sb->maxlines);
-	row = MAX(row, 1);
+	row = CLIP(row, 1, term->sb->maxlines);
 	col = MAX(col, 1);
 	ws = (struct winsize){ row, col, xpixel, ypixel };
 
-	setScrBufSize(term, row, col);
-
+	if (term->sb->rows != row || term->sb->cols != col)
+		setScrBufSize(term, row, col);
 	ioctl(term->master, TIOCSWINSZ, &ws);
 }
 
@@ -847,27 +846,31 @@ void
 setScrBufSize(Term *term, int row, int col)
 {
 	struct ScreenBuffer *sb = term->sb;
-	int newfst, dy = 0;
+	int newfst = sb->firstline;
 
+	/* 行数が減ってカーソルが画面外に出たとき */
 	if (row < sb->rows && row - 1 < term->cy) {
 		newfst = sb->firstline + (sb->rows - row);
 		newfst = MIN(sb->firstline + term->cy, newfst);
-		dy = sb->firstline - newfst;
-		sb->firstline = newfst;
 	}
+	/* 行数が増えたとき */
 	if (sb->rows < row) {
 		newfst = MAX(sb->firstline - (row - sb->rows), 0);
 		newfst = MAX(sb->totallines - sb->maxlines, newfst);
-		dy = sb->firstline - newfst;
-		sb->firstline = newfst;
 		sb->totallines = MAX(newfst + row, sb->totallines);
 	}
+
+	/* 画面サイズ変更 */
 	sb->rows = row;
 	sb->cols = col;
 	sb->scrs = 0;
 	sb->scre = row - 1;
 
-	moveCursorPos(term, 0, dy);
+	/* firstlineの変更とカーソル移動を実行 */
+	if (sb->firstline != newfst) {
+		moveCursorPos(term, 0, sb->firstline - newfst);
+		sb->firstline = newfst;
+	}
 }
 
 void
