@@ -248,6 +248,9 @@ openWindow(void)
 			10, 10, win->width, win->height, 1,
 			win->term->palette[deffg],
 			win->term->palette[defbg]);
+	win->col = (win->width - win->xpad * 2) / xfont->cw;
+	win->row = (win->height - win->ypad * 2) / xfont->ch;
+	setWinSize(win->term, win->row, win->col, win->width, win->height);
 
 	/* プロパティ */
 	win->hint = XAllocClassHint();
@@ -355,12 +358,13 @@ procXEvent(Win *win)
 		case ConfigureNotify:
 			/* ウィンドウサイズ変更 */
 			e = (XConfigureEvent *)&event;
+			if (win->width == e->width && win->height == e->height)
+				break;
 			win->width = e->width;
 			win->height = e->height;
-			win->col = (e->width - win->xpad * 2) / xfont->cw;
-			win->row = (e->height - win->ypad * 2) / xfont->ch;
-			setWinSize(win->term, win->row, win->col,
-					win->width, win->height);
+			win->col = (win->width - win->xpad * 2) / xfont->cw;
+			win->row = (win->height - win->ypad * 2) / xfont->ch;
+			setWinSize(win->term, win->row, win->col, win->width, win->height);
 			break;
 
 		case SelectionNotify:
