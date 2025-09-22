@@ -255,7 +255,7 @@ procNCCs(Term *term, const char *head)
 		}
 
 		/* 行が埋まる場合は自動改行を設定して行末までを書く */
-		term->sb->am = max < u32swidth(dp, u32slen(dp));
+		term->sb->am = 0 < term->dec[7] && max < u32swidth(dp, u32slen(dp));
 		wlen = term->sb->am ? getCharCnt(dp, max).index : u32slen(dp);
 
 		/* 書き込む */
@@ -755,6 +755,10 @@ decset(Term *term, unsigned int num, int flag)
 	case 1003: /* マウス any */
 	case 1006: /* マウス SGR */
 	case 2004: /* Bracketed Paste Mode */
+		break;
+
+	case 7:    /* 自動改行モード */
+		term->sb->am = 0;
 		break;
 
 	case 1049:  /* altscreen clear */
