@@ -829,6 +829,37 @@ setWinSize(Term *term, int row, int col, int xpixel, int ypixel)
 }
 
 void
+setScrBufSize(Term *term, int row, int col)
+{
+	struct ScreenBuffer *sb = term->sb;
+	int newfst = sb->firstline;
+
+	/* 行数が減ってカーソルが画面外に出たとき */
+	if (row < sb->rows && row - 1 < term->cy) {
+		newfst = sb->firstline + (sb->rows - row);
+		newfst = MIN(sb->firstline + term->cy, newfst);
+	}
+	/* 行数が増えたとき */
+	if (sb->rows < row) {
+		newfst = MAX(sb->firstline - (row - sb->rows), 0);
+		newfst = MAX(sb->totallines - sb->maxlines, newfst);
+		sb->totallines = MAX(newfst + row, sb->totallines);
+	}
+
+	/* 画面サイズ変更 */
+	sb->rows = row;
+	sb->cols = col;
+	sb->scrs = 0;
+	sb->scre = row - 1;
+
+	/* firstlineの変更とカーソル移動を実行 */
+	if (sb->firstline != newfst) {
+		moveCursorPos(term, 0, sb->firstline - newfst);
+		sb->firstline = newfst;
+	}
+}
+
+void
 reportMouse(Term *term, int btn, int release, int mx, int my)
 {
 	char buf[40];
@@ -867,37 +898,6 @@ reportMouse(Term *term, int btn, int release, int mx, int my)
 				(release ? 3 : btn) + 32, mx + 32, my + 32);
 	}
 	writePty(term, buf, len);
-}
-
-void
-setScrBufSize(Term *term, int row, int col)
-{
-	struct ScreenBuffer *sb = term->sb;
-	int newfst = sb->firstline;
-
-	/* 行数が減ってカーソルが画面外に出たとき */
-	if (row < sb->rows && row - 1 < term->cy) {
-		newfst = sb->firstline + (sb->rows - row);
-		newfst = MIN(sb->firstline + term->cy, newfst);
-	}
-	/* 行数が増えたとき */
-	if (sb->rows < row) {
-		newfst = MAX(sb->firstline - (row - sb->rows), 0);
-		newfst = MAX(sb->totallines - sb->maxlines, newfst);
-		sb->totallines = MAX(newfst + row, sb->totallines);
-	}
-
-	/* 画面サイズ変更 */
-	sb->rows = row;
-	sb->cols = col;
-	sb->scrs = 0;
-	sb->scre = row - 1;
-
-	/* firstlineの変更とカーソル移動を実行 */
-	if (sb->firstline != newfst) {
-		moveCursorPos(term, 0, sb->firstline - newfst);
-		sb->firstline = newfst;
-	}
 }
 
 void
