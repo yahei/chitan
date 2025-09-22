@@ -24,6 +24,7 @@ typedef struct Term {
 		int totallines; /* ログの総行数 */
 		int rows, cols; /* 画面の行数と列数 */
 		int scrs, scre; /* スクロール範囲 */
+		int am;         /* 自動改行 */
 	} ori, alt, *sb;
 	int cx, cy;             /* カーソル位置 */
 	int svx, svy;           /* 保存したカーソル位置 */

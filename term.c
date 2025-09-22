@@ -26,6 +26,7 @@ static const char *procCSI(Term *, const char *, const char *);
 static const char *procSOS(Term *, const char *, const char *);
 static const char *procOSC(Term *, const char *, const char *);
 static const char *procCStr(Term *, const char *, const char *);
+static void linefeed(Term *);
 static void setCursorPos(Term *, int, int);
 static void moveCursorPos(Term *, int, int);
 static void areaScroll(Term *, int, int, int);
@@ -229,9 +230,10 @@ const char *
 procNCCs(Term *term, const char *head)
 {
 	const int len = strlen(head) + 1;
-	char32_t decoded[len];
+	char32_t decoded[len], *dp;
 	const char *rest;
 	Line *line;
+	int max = term->sb->cols - term->cx, wlen;
 	int i;
 
 	/* UTF32に変換 */
@@ -243,11 +245,24 @@ procNCCs(Term *term, const char *head)
 			if (BETWEEN(decoded[i], 0x21, 0x7f))
 				decoded[i] = term->g[0][decoded[i] - 0x21];
 
-	/* 書き込む */
-	if ((line = getLine(term, term->cy)))
-		term->cx += putU32s(line, term->cx, decoded, term->attr,
-				term->fg, term->bg, u32slen(decoded));
-	/* 自動改行の処理に関わるので、ここだけ直接term->cxを変更する書き方のままにしている */
+	for (dp = decoded; *dp != L'\0'; dp += MAX(0, wlen)) {
+		/* 自動改行 */
+		if (term->sb->am) {
+			term->sb->am = 0;
+			max = term->sb->cols;
+			setCursorPos(term, 0, term->cy);
+			linefeed(term);
+		}
+
+		/* 行が埋まる場合は自動改行を設定して行末までを書く */
+		term->sb->am = max < u32swidth(dp, u32slen(dp));
+		wlen = term->sb->am ? getCharCnt(dp, max).index : u32slen(dp);
+
+		/* 書き込む */
+		if ((line = getLine(term, term->cy)))
+			term->cx += putU32s(line, term->cx, dp, term->attr,
+					term->fg, term->bg, wlen);
+	}
 
 	return rest;
 }
@@ -255,9 +270,6 @@ procNCCs(Term *term, const char *head)
 const char *
 procCC(Term *term, const char *head, const char *tail)
 {
-	struct ScreenBuffer *sb = term->sb;
-	Line *line;
-
 	if (!BETWEEN(*head, 0x00, 0x20) && *head != 0x7f)
 		return head;
 
@@ -279,17 +291,7 @@ procCC(Term *term, const char *head, const char *tail)
 		break;
 
 	case 0x0a: /* LF */
-		if (term->cy < sb->scre) {
-			term->cy++;
-		} else if (0 < sb->scrs || sb->scre < sb->rows - 1) {
-			areaScroll(term, sb->scrs, sb->scre, 1);
-		} else {
-			sb->firstline++;
-			if (sb->totallines < sb->firstline + sb->rows)
-				sb->totallines++;
-			if ((line = getLine(term, term->cy)))
-				PUT_NUL(line, 0);
-		}
+		linefeed(term);
 		break;
 
 	case 0x0d: /* CR */
@@ -659,6 +661,27 @@ procCStr(Term *term, const char *head, const char *tail)
 	/* 未対応 */
 	fprintf(stderr, "Not Supported CtrlStr: %s\n", err);
 	return p + 1;
+}
+
+void
+linefeed(Term *term)
+{
+	struct ScreenBuffer *sb = term->sb;
+	Line *line;
+
+	if (term->cy < sb->scre) {
+		term->cy++;
+	} else if (0 < sb->scrs || sb->scre < sb->rows - 1) {
+		areaScroll(term, sb->scrs, sb->scre, 1);
+	} else {
+		sb->firstline++;
+		if (sb->totallines < sb->firstline + sb->rows)
+			sb->totallines++;
+		if ((line = getLine(term, term->cy)))
+			PUT_NUL(line, 0);
+	}
+
+	term->sb->am = 0;
 }
 
 void
