@@ -47,3 +47,7 @@ chitan|chitan-256color|chitan terminal emulator,
 	setab=\e[48;5;%p1%dm,
 	op=\e[39;49m,
 	oc=\e[39;49m,
+
+# tmux
+	Se=\e[2 q,
+	Ss=\e[%p1%d q,

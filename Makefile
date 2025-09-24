@@ -20,7 +20,7 @@ clean:
 
 install: chitan
 	install chitan /usr/local/bin
-	tic chitan.info
+	tic -x chitan.info
 
 uninstall:
 	rm /usr/local/bin/chitan
