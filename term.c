@@ -101,7 +101,7 @@ openTerm(void)
 		dup2(slave, 1);
 		dup2(slave, 2);
 		close(slave);
-		setenv("TERM", "chitan", 1);
+		setenv("TERM", "chitan-256color", 1);
 		if (setsid() < 0)
 			fatal("setsid failed.\n");
 		if (ioctl(0, TIOCSCTTY) < 0)
