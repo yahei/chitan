@@ -387,7 +387,31 @@ procXEvent(Win *win)
 void
 procKeyPress(Win *win, XEvent event, int bufsize)
 {
-	char buf[bufsize], str[16];
+	struct Key { int symbol; char *normal; char *app; } keys[] = {
+		{ XK_Up,        "\e[A",         "\eOA" },
+		{ XK_Down,      "\e[B",         "\eOB" },
+		{ XK_Right,     "\e[C",         "\eOC" },
+		{ XK_Left,      "\e[D",         "\eOD" },
+		{ XK_Home,      "\e[H",         "\eOH" },
+		{ XK_End,       "\e[F",         "\eOF" },
+		{ XK_Page_Up,   "\e[5~",        "\e[5~" },
+		{ XK_Page_Down, "\e[6~",        "\e[6~" },
+		{ XK_Insert,    "\e[2~",        "\e[2~" },
+		{ XK_F1,        "\eOP",         "\eOP" },
+		{ XK_F2,        "\eOQ",         "\eOQ" },
+		{ XK_F3,        "\eOR",         "\eOR" },
+		{ XK_F4,        "\eOS",         "\eOS" },
+		{ XK_F5,        "\e[15~",       "\e[15~" },
+		{ XK_F6,        "\e[17~",       "\e[17~" },
+		{ XK_F7,        "\e[18~",       "\e[18~" },
+		{ XK_F8,        "\e[19~",       "\e[19~" },
+		{ XK_F9,        "\e[20~",       "\e[20~" },
+		{ XK_F10,       "\e[21~",       "\e[21~" },
+		{ XK_F11,       "\e[23~",       "\e[23~" },
+		{ XK_F12,       "\e[24~",       "\e[24~" },
+		{ XK_VoidSymbol }
+	}, *key;
+	char buf[bufsize], *str;
 	int len;
 	KeySym keysym;
 	Status status = XLookupChars;
@@ -412,20 +436,14 @@ procKeyPress(Win *win, XEvent event, int bufsize)
 			writePty(win->term, "\e", 1);
 		writePty(win->term, buf, len);
 	} else {
-		/* カーソルキーを送る */
-		switch (keysym) {
-		case XK_Up:
-		case XK_Down:
-		case XK_Right:
-		case XK_Left:
-			snprintf(str, sizeof(str), "\e%c%c",
-					1 < win->term->dec[1] ? 'O' : '[',
-					"DACB"[keysym - XK_Left]);
+		/* カーソルキー等を送る */
+		for (key = keys; key->symbol != XK_VoidSymbol; key++) {
+			if (key->symbol != keysym)
+				continue;
+			str = win->term->dec[1] < 2 ? key->normal : key->app;
+			writePty(win->term, str, strlen(str));
 			break;
-		default:
-			return;
 		}
-		writePty(win->term, str, strlen(str));
 	}
 }
 
