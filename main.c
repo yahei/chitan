@@ -6,19 +6,13 @@
 #include <time.h>
 #include <wchar.h>
 #include <X11/Xlib.h>
-#include <X11/Xft/Xft.h>
 
 #include "term.h"
+#include "font.h"
 #include "util.h"
 
 #define CURSOR_X(win)   (win->xpad + win->term->cx * xfont->cw)
 #define CURSOR_Y(win)   (win->ypad + win->term->cy * xfont->ch + xfont->fonts[NONE]->ascent)
-
-typedef struct XFont {
-	Display *disp;
-	XftFont *fonts[8];
-	int cw, ch;
-} XFont;
 
 typedef struct Win {
 	Term *term;
@@ -54,10 +48,6 @@ static Win *win;
 static void init(void);
 static void run(void);
 static void fin(void);
-
-/* Font */
-static XFont *openFont(Display *, const char *, float);
-static void closeFont(XFont *);
 
 /* Win */
 static Win *openWindow(void);
@@ -179,52 +169,6 @@ fin(void)
 	if (xim)
 		XCloseIM(xim);
 	XCloseDisplay(disp);
-}
-
-XFont *
-openFont(Display *disp, const char *name, float size)
-{
-	XFont *xfont = xmalloc(sizeof(XFont));
-	XGlyphInfo ginfo;
-	int i, weight, slant;
-
-	xfont->disp = disp;
-
-	for (i = 0; i < 8; i++) {
-		weight = i & BOLD ? XFT_WEIGHT_BOLD : XFT_WEIGHT_MEDIUM;
-		slant = i & ITALIC ? XFT_SLANT_ITALIC : XFT_SLANT_ROMAN;
-		xfont->fonts[i] = XftFontOpen(
-				disp, 0,
-				XFT_FAMILY, XftTypeString, name,
-				XFT_SIZE, XftTypeDouble, size,
-				XFT_WEIGHT, XftTypeInteger, weight,
-				XFT_SLANT, XftTypeInteger, slant,
-				NULL);
-	}
-
-	for (i = 0; i < 8; i++) {
-		if (xfont->fonts[i] == NULL) {
-			closeFont(xfont);
-			return NULL;
-		}
-	}
-
-	/* テキストの高さや横幅を取得 */
-	xfont->ch = xfont->fonts[NONE]->height - 1.0;
-	XftTextExtents32(disp, xfont->fonts[NONE], (char32_t *)L"x", 1, &ginfo);
-	xfont->cw = ginfo.width;
-
-	return xfont;
-}
-
-void
-closeFont(XFont *xfont) {
-	int i;
-
-	for (i = 0; i < 8; i++)
-		if (xfont->fonts[i])
-			XftFontClose(xfont->disp, xfont->fonts[i]);
-	free(xfont);
 }
 
 Win *
@@ -496,9 +440,9 @@ void
 drawLine(Win *win, Line *line, int i, int len, int xoff, int yoff)
 {
 	int fg, bg;
-	int x, y, width;
-	int j, next;
-	XftFont *font;
+	int y, width;
+	int next;
+	int attr;
 	XftColor xc;
 	Color c;
 
@@ -526,9 +470,6 @@ drawLine(Win *win, Line *line, int i, int len, int xoff, int yoff)
 	XSetForeground(disp, win->gc, win->term->palette[bg]);
 	XFillRectangle(disp, win->window, win->gc, xoff, y, width, xfont->ch);
 
-	/* フォント */
-	font = xfont->fonts[line->attr[i] & (BOLD | ITALIC)];
-
 	/* 色 */
 	c = win->term->palette[fg];
 	xc.color.red   =   RED(c) << 8;
@@ -537,10 +478,10 @@ drawLine(Win *win, Line *line, int i, int len, int xoff, int yoff)
 	xc.color.alpha = 0xffff;
 
 	/* 文字を書く */
-	for (j = 0, x = xoff; j < next - i; j++) {
-		XftDrawString32(win->draw, &xc, font, x, yoff, &line->str[i + j], 1);
-		x += xfont->cw * wcwidth(line->str[i + j]);
-	}
+	attr = FONT_NONE;
+	attr |= line->attr[i] & BOLD   ? FONT_BOLD   : FONT_NONE;
+	attr |= line->attr[i] & ITALIC ? FONT_ITALIC : FONT_NONE;
+	drawXFontString(win->draw, &xc, xfont, attr, xoff, yoff, &line->str[i], next - i);
 
 	/* 後処理 */
 	if (line->attr[i] & ULINE) { /* 下線 */

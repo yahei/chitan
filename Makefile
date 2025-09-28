@@ -1,7 +1,7 @@
 .POSIX:
 
 CFLAGS  = -Wall -D_XOPEN_SOURCE=600 -I/usr/include/freetype2
-SRCS    = main.c term.c line.c util.c
+SRCS    = main.c term.c line.c font.c util.c
 OBJS    = $(SRCS:.c=.o)
 
 chitan: $(OBJS)
@@ -10,9 +10,10 @@ chitan: $(OBJS)
 .c.o:
 	$(CC) $(CFLAGS) -c $<
 
-main.o: util.h line.h term.h
+main.o: util.h line.h term.h font.h
 term.o: util.h line.h term.h
 line.o: util.h line.h
+font.o: util.h font.h
 util.o: util.h
 
 clean:

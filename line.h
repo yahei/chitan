@@ -7,7 +7,7 @@ typedef uint_least32_t char32_t;
 
 #define PUT_NUL(l,x)    (putU32s(l, x, (char32_t *)L"\0", 0, deffg, defbg, 1))
 
-enum sgt_attribute {
+enum sgr_attribute {
 	NONE    = 0,
 	BOLD    = 1 << 0,   /* 太字 */
 	FAINT   = 1 << 1,   /* 細字 */
