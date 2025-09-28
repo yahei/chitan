@@ -12,7 +12,7 @@
 #include "util.h"
 
 #define CURSOR_X(win)   (win->xpad + win->term->cx * xfont->cw)
-#define CURSOR_Y(win)   (win->ypad + win->term->cy * xfont->ch + xfont->fonts[NONE]->ascent)
+#define CURSOR_Y(win)   (win->ypad + win->term->cy * xfont->ch + xfont->ascent)
 
 typedef struct Win {
 	Term *term;
@@ -407,7 +407,7 @@ redraw(Win *win)
 	/* 端末の内容をウィンドウに表示 */
 	for (i = 0; (line = getLine(win->term, i)); i++)
 		drawLine(win, line, 0, win->col, win->xpad,
-				win->ypad + i * xfont->ch + xfont->fonts[NONE]->ascent);
+				win->ypad + i * xfont->ch + xfont->ascent);
 
 	/* カーソルかPreeditを表示 */
 	XSetForeground(disp, win->gc, win->term->palette[deffg]);
@@ -466,7 +466,7 @@ drawLine(Win *win, Line *line, int i, int len, int xoff, int yoff)
 		fg = fg < 8 ? fg + 8 : fg;
 
 	/* 背景を塗る */
-	y = yoff - xfont->fonts[NONE]->ascent + 1;
+	y = yoff - xfont->ascent + 1;
 	XSetForeground(disp, win->gc, win->term->palette[bg]);
 	XFillRectangle(disp, win->window, win->gc, xoff, y, width, xfont->ch);
 
@@ -513,7 +513,7 @@ drawCursor(Win *win, int x, int y, int type, Line *line, int index)
 		break;
 	case 5: /* 縦線 */
 	case 6:
-		y = y - xfont->fonts[NONE]->ascent + 1;
+		y = y - xfont->ascent + 1;
 		XFillRectangle(disp, win->window, win->gc, x, y, xfont->ch * 0.1, xfont->ch);
 		break;
 	}

@@ -1,5 +1,8 @@
 #include <X11/Xft/Xft.h>
 
+typedef uint_least32_t char32_t;
+typedef XftFont *(XftFontSuite[8]);
+
 enum font_attributes {
 	FONT_NONE    = 0,
 	FONT_BOLD    = 1 << 0,   /* 太字 */
@@ -9,8 +12,16 @@ enum font_attributes {
 
 typedef struct XFont {
 	Display *disp;
-	XftFont *fonts[8];
+	unsigned char *family;
+	float size;
 	int cw, ch;
+	int ascent;
+	struct FallbackGlyph {
+		char32_t codepoint;
+		XftFontSuite *font;
+	} *glyphs;
+	XftFontSuite **fonts;
+	int glyphs_len, fonts_len;
 } XFont;
 
 XFont *openFont(Display *, const char *, float);

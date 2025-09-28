@@ -1,54 +1,55 @@
 #include <stdint.h>
+#include <string.h>
 #include <wchar.h>
 
 #include "font.h"
 #include "util.h"
 
-typedef uint_least32_t char32_t;
+XftFontSuite *getFontSuiteGlyphs(XFont *, char32_t);
+XftFontSuite *getFontSuiteFonts(XFont *, const char *);
+char *getFontName(const unsigned char *, char32_t, char *, int);
 
 XFont *
-openFont(Display *disp, const char *name, float size)
+openFont(Display *disp, const char *family, float size)
 {
 	XFont *xfont = xmalloc(sizeof(XFont));
 	XGlyphInfo ginfo;
-	int i, weight, slant;
 
-	xfont->disp = disp;
+	*xfont = (XFont){ disp, NULL, size, 1, 1, 0, NULL, NULL, 0, 0 };
+	xfont->family = xmalloc(strlen(family) + 1);
+	strncpy((char *)xfont->family, family, strlen(family) + 1);
 
-	for (i = 0; i < 8; i++) {
-		weight = i & FONT_BOLD ? XFT_WEIGHT_BOLD : XFT_WEIGHT_MEDIUM;
-		slant = i & FONT_ITALIC ? XFT_SLANT_ITALIC : XFT_SLANT_ROMAN;
-		xfont->fonts[i] = XftFontOpen(
-				disp, 0,
-				XFT_FAMILY, XftTypeString, name,
-				XFT_SIZE, XftTypeDouble, size,
-				XFT_WEIGHT, XftTypeInteger, weight,
-				XFT_SLANT, XftTypeInteger, slant,
-				NULL);
+	/* メインフォントのロード */
+	getFontSuiteFonts(xfont, family);
+	if (!(*xfont->fonts[0])[FONT_NONE]) {
+		closeFont(xfont);
+		return NULL;
 	}
 
-	for (i = 0; i < 8; i++) {
-		if (xfont->fonts[i] == NULL) {
-			closeFont(xfont);
-			return NULL;
-		}
-	}
-
-	/* テキストの高さや横幅を取得 */
-	xfont->ch = xfont->fonts[FONT_NONE]->height - 1.0;
-	XftTextExtents32(disp, xfont->fonts[FONT_NONE], (char32_t *)L"x", 1, &ginfo);
-	xfont->cw = ginfo.width;
+	/* 文字の高さや横幅を取得 */
+	xfont->ch = (*xfont->fonts[0])[FONT_NONE]->height - 1.0;
+	XftTextExtents32(disp, (*xfont->fonts[0])[FONT_NONE], (char32_t *)L"x", 1, &ginfo);
+	xfont->cw = 0 < ginfo.width ? ginfo.width : xfont->ch / 2;
+	xfont->ascent = (*xfont->fonts[0])[FONT_NONE]->ascent;
 
 	return xfont;
 }
 
 void
 closeFont(XFont *xfont) {
-	int i;
+	int i, j;
 
-	for (i = 0; i < 8; i++)
-		if (xfont->fonts[i])
-			XftFontClose(xfont->disp, xfont->fonts[i]);
+	for (i = 0; i < xfont->fonts_len; i++) {
+		for (j = 0; j < 8; j++)
+			if ((*xfont->fonts[i])[j])
+				XftFontClose(xfont->disp, (*xfont->fonts[i])[j]);
+		free(xfont->fonts[i]);
+	}
+
+	free(xfont->family);
+	free(xfont->glyphs);
+	free(xfont->fonts);
+
 	free(xfont);
 }
 
@@ -56,10 +57,92 @@ void
 drawXFontString(XftDraw *draw, XftColor *color, XFont *xfont, int attr, int x, int y, const FcChar32 *str, int num)
 {
 	int i;
-	XftFont *font = xfont->fonts[attr];
+	XftFontSuite *font;
 
 	for (i = 0; i < num; i++) {
-		XftDrawString32(draw, color, font, x, y, &str[i], 1);
+		font = XftCharIndex(xfont->disp, (*xfont->fonts[0])[attr], str[i]) ?
+			xfont->fonts[0] : getFontSuiteGlyphs(xfont, str[i]);
+		if ((*font)[attr])
+			XftDrawString32(draw, color, (*font)[attr], x, y, &str[i], 1);
 		x += xfont->cw * wcwidth(str[i]);
 	}
+}
+
+XftFontSuite *
+getFontSuiteGlyphs(XFont *xfont, char32_t codepoint)
+{
+	int j;
+	char fontname[256];
+	XftFontSuite *font;
+
+	/* グリフリストにあればそのフォントを使う */
+	for (j = 0; j < xfont->glyphs_len; j++)
+		if (xfont->glyphs[j].codepoint == codepoint)
+			return xfont->glyphs[j].font;
+
+	/* グリフをリストに追加 */
+	getFontName(xfont->family, codepoint, fontname, 256);
+	font = getFontSuiteFonts(xfont, fontname);
+	struct FallbackGlyph fbg = { codepoint, font };
+	PUSH_BACK(xfont->glyphs, xfont->glyphs_len, fbg);
+
+	return font;
+}
+
+XftFontSuite *
+getFontSuiteFonts(XFont *xfont, const char *fontname)
+{
+	int i, j, weight, slant;
+	unsigned char *xftname;
+	XftFontSuite *font;
+
+	/* フォントリストにあればそれを使う */
+	for (j = 0; j < xfont->fonts_len; j++) {
+		FcPatternGetString((*xfont->fonts[j])[0]->pattern, FC_FAMILY, 0, &xftname);
+		if (strcmp((char *)xftname, fontname) == 0)
+			return (xfont->fonts[j]);
+	}
+
+	/* フォントをロードしてリストに追加 */
+	font = xmalloc(sizeof(XftFontSuite));
+	for (i = 0; i < 8; i++) {
+		weight = i & FONT_BOLD ? XFT_WEIGHT_BOLD : XFT_WEIGHT_MEDIUM;
+		slant = i & FONT_ITALIC ? XFT_SLANT_ITALIC : XFT_SLANT_ROMAN;
+		(*font)[i] = XftFontOpen(
+				xfont->disp, 0,
+				XFT_FAMILY, XftTypeString, fontname,
+				XFT_SIZE, XftTypeDouble, xfont->size,
+				XFT_WEIGHT, XftTypeInteger, weight,
+				XFT_SLANT, XftTypeInteger, slant,
+				NULL);
+	}
+	PUSH_BACK(xfont->fonts, xfont->fonts_len, font);
+
+	return font;
+}
+
+char *
+getFontName(const unsigned char *family, char32_t codepoint, char *buf, int buflen)
+{
+	FcPattern *matched, *pattern = FcPatternCreate();
+	FcCharSet *charset = FcCharSetCreate();
+	FcResult result;
+	unsigned char *fontname;
+
+	FcPatternAddString(pattern, FC_FAMILY, family);
+	FcCharSetAddChar(charset, codepoint);
+	FcPatternAddCharSet(pattern, FC_CHARSET, charset);
+	FcConfigSubstitute(NULL, pattern, FcMatchPattern);
+	FcDefaultSubstitute(pattern);
+	matched = FcFontMatch(NULL, pattern, &result);
+	FcPatternGetString(matched, FC_FAMILY, 0, &fontname);
+
+	strncpy(buf, (char *)fontname, buflen);
+	buf[buflen-1] = '\0';
+
+	FcCharSetDestroy(charset);
+	FcPatternDestroy(pattern);
+	FcPatternDestroy(matched);
+
+	return buf;
 }
