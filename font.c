@@ -36,7 +36,8 @@ openFont(Display *disp, const char *family, float size)
 }
 
 void
-closeFont(XFont *xfont) {
+closeFont(XFont *xfont)
+{
 	int i, j;
 
 	for (i = 0; i < xfont->fonts_len; i++) {
@@ -56,8 +57,8 @@ closeFont(XFont *xfont) {
 void
 drawXFontString(XftDraw *draw, XftColor *color, XFont *xfont, int attr, int x, int y, const FcChar32 *str, int num)
 {
-	int i;
 	XftFontSuite *font;
+	int i;
 
 	for (i = 0; i < num; i++) {
 		font = XftCharIndex(xfont->disp, (*xfont->fonts[0])[attr], str[i]) ?
@@ -71,9 +72,9 @@ drawXFontString(XftDraw *draw, XftColor *color, XFont *xfont, int attr, int x, i
 XftFontSuite *
 getFontSuiteGlyphs(XFont *xfont, char32_t codepoint)
 {
-	int j;
-	char fontname[256];
 	XftFontSuite *font;
+	char fontname[256];
+	int j;
 
 	/* グリフリストにあればそのフォントを使う */
 	for (j = 0; j < xfont->glyphs_len; j++)
@@ -92,9 +93,9 @@ getFontSuiteGlyphs(XFont *xfont, char32_t codepoint)
 XftFontSuite *
 getFontSuiteFonts(XFont *xfont, const char *fontname)
 {
-	int i, j, weight, slant;
-	unsigned char *xftname;
 	XftFontSuite *font;
+	unsigned char *xftname;
+	int i, j, weight, slant;
 
 	/* フォントリストにあればそれを使う */
 	for (j = 0; j < xfont->fonts_len; j++) {
