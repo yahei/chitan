@@ -36,6 +36,8 @@ typedef struct Win {
 		Line *peline;
 		int caret;
 	} ime;
+	int redraw_flag;
+	int redraw_cnt;
 } Win;
 
 static Display *disp;
@@ -139,8 +141,11 @@ run(void)
 		ptimeout = FD_ISSET(tfd, &rfds) ? &timeout : NULL;
 
 		/* 再描画 */
-		if (!ptimeout)
+		if ((!ptimeout || 127 < win->redraw_cnt++) && win->redraw_flag) {
 			redraw(win);
+			win->redraw_flag = 0;
+			win->redraw_cnt = 0;
+		}
 
 		/* 端末のread */
 		if (FD_ISSET(tfd, &rfds)) {
@@ -152,6 +157,7 @@ run(void)
 				win->ime.spot.y = CURSOR_Y(win);
 				XSetICValues(win->ime.xic, XNPreeditAttributes, win->ime.spotlist, NULL);
 			}
+			win->redraw_flag = 1;
 		}
 
 		/* ウィンドウのイベント処理 */
@@ -296,7 +302,7 @@ procXEvent(Win *win)
 
 		case Expose:
 			/* 画面を再描画する */
-			redraw(win);
+			win->redraw_flag = 1;
 			break;
 
 		case ConfigureNotify:
@@ -366,6 +372,10 @@ procKeyPress(Win *win, XEvent event, int bufsize)
 		XLookupString(&event.xkey, buf, bufsize, &keysym, NULL);
 	if (status == XBufferOverflow)
 		return procKeyPress(win, event, len);
+
+	/* IMEの確定っぽい場合(コールバックがすぐ来ない場合があるため) */
+	if (1 < strlen(buf))
+		PUT_NUL(win->ime.peline, 0);
 
 	/* C-S-vで貼り付け */
 	if (keysym == XK_V && event.xkey.state & ControlMask) {
