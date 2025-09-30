@@ -863,7 +863,7 @@ void
 reportMouse(Term *term, int btn, int release, int mx, int my)
 {
 	char buf[40];
-	int len;
+	int len = 0;
 	enum { normal, button, any } type;
 
 	/* ホイールのreleaseは報告しない */
@@ -897,7 +897,8 @@ reportMouse(Term *term, int btn, int release, int mx, int my)
 		len = snprintf(buf, sizeof(buf), "\e[M%c%c%c",
 				(release ? 3 : btn) + 32, mx + 32, my + 32);
 	}
-	writePty(term, buf, len);
+	if (0 < len)
+		writePty(term, buf, len);
 }
 
 void

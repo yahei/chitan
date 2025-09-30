@@ -17,7 +17,7 @@ openFont(Display *disp, const char *family, float size)
 
 	*xfont = (XFont){ disp, NULL, size, 1, 1, 0, NULL, NULL, 0, 0 };
 	xfont->family = xmalloc(strlen(family) + 1);
-	strncpy((char *)xfont->family, family, strlen(family) + 1);
+	strcpy((char *)xfont->family, family);
 
 	/* メインフォントのロード */
 	getFontSuiteFonts(xfont, family);
