@@ -279,7 +279,8 @@ procCC(Term *term, const char *head, const char *tail)
 		break;
 
 	case 0x07: /* BEL */
-		fprintf(stdout, "<BELL>\n");
+		if (term->bell)
+			term->bell(term->bellp);
 		break;
 
 	case 0x08: /* BS */

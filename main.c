@@ -14,6 +14,12 @@
 #define CURSOR_X(win)   (win->xpad + win->term->cx * xfont->cw)
 #define CURSOR_Y(win)   (win->ypad + win->term->cy * xfont->ch + xfont->ascent)
 
+#define NEXT_TIMER(now, a, b) (timespeccmp(&now, &a, <) && timespeccmp(&a, &b, <) ? a : b)
+#define BELLCOLOR(color) (timespeccmp(&win->belltime, &now, <) ? color :\
+		((int)(  RED(color) * 0.85 + 0xff * 0.15) << 16) +\
+		((int)(GREEN(color) * 0.85 + 0xff * 0.15) <<  8) +\
+		((int)( BLUE(color) * 0.85 + 0xff * 0.15) <<  0))
+
 typedef struct Win {
 	Term *term;
 	Window window;
@@ -38,6 +44,7 @@ typedef struct Win {
 	} ime;
 	int redraw_flag;
 	int redraw_cnt;
+	struct timespec belltime;
 } Win;
 
 static Display *disp;
@@ -46,6 +53,7 @@ static Colormap cmap;
 static XFont *xfont;
 static XIM xim;
 static Win *win;
+static struct timespec now;
 
 static void init(void);
 static void run(void);
@@ -59,6 +67,7 @@ static void procKeyPress(Win *, XEvent, int);
 static void redraw(Win *);
 static void drawLine(Win *, Line *, int, int, int, int);
 static void drawCursor(Win *, int, int, int, Line *, int);
+static void bell(void *);
 
 /* IME */
 static void ximOpen(Display *, XPointer, XPointer);
@@ -123,7 +132,7 @@ void
 run(void)
 {
 	fd_set rfds;
-	struct timespec timeout = { 0, 1000 }, *ptimeout = NULL;
+	struct timespec timeout = { 0, 1000 }, nexttime;
 	int tfd = win->term->master;
 	int xfd = XConnectionNumber(disp);
 
@@ -132,16 +141,26 @@ run(void)
 		FD_ZERO(&rfds);
 		FD_SET(tfd, &rfds);
 		FD_SET(xfd, &rfds);
-		if (pselect(MAX(tfd, xfd) + 1, &rfds, NULL, NULL, ptimeout, NULL) < 0) {
+		if (pselect(MAX(tfd, xfd) + 1, &rfds, NULL, NULL, &timeout, NULL) < 0) {
 			if (errno == EINTR)
 				fprintf(stderr, "signal.\n");
 			else
 				errExit("pselect failed.\n");
 		}
-		ptimeout = FD_ISSET(tfd, &rfds) ? &timeout : NULL;
+
+		/* タイムアウトの設定 */
+		clock_gettime(CLOCK_MONOTONIC, &now);
+		timeout = (struct timespec){ 0, 1000 };
+		if (!FD_ISSET(tfd, &rfds)) {
+			nexttime = (struct timespec){ 1 << 16, 0 };
+			timespecadd(&now, &nexttime, &nexttime);
+			nexttime = NEXT_TIMER(now, win->belltime, nexttime);
+			timespecsub(&nexttime, &now, &timeout);
+			win->redraw_flag = 1;
+		}
 
 		/* 再描画 */
-		if ((!ptimeout || 127 < win->redraw_cnt++) && win->redraw_flag) {
+		if ((!FD_ISSET(tfd, &rfds) || 127 < win->redraw_cnt++) && win->redraw_flag) {
 			redraw(win);
 			win->redraw_flag = 0;
 			win->redraw_cnt = 0;
@@ -186,6 +205,8 @@ openWindow(void)
 	win->term = openTerm();
 	if (!win->term)
 		errExit("newTerm failed.\n");
+	win->term->bell = bell;
+	clock_gettime(CLOCK_MONOTONIC, &win->belltime);
 
 	/* ウィンドウ作成 */
 	win->width = 800;
@@ -412,6 +433,7 @@ redraw(Win *win)
 
 	/* 画面をクリア */
 	XGetWindowAttributes(disp, win->window, &wattr);
+	XSetWindowBackground(disp, win->window, BELLCOLOR(win->term->palette[defbg]));
 	XClearArea(disp, win->window, 0, 0, wattr.width, wattr.height, False);
 
 	/* 端末の内容をウィンドウに表示 */
@@ -477,7 +499,7 @@ drawLine(Win *win, Line *line, int i, int len, int xoff, int yoff)
 
 	/* 背景を塗る */
 	y = yoff - xfont->ascent + 1;
-	XSetForeground(disp, win->gc, win->term->palette[bg]);
+	XSetForeground(disp, win->gc, BELLCOLOR(win->term->palette[bg]));
 	XFillRectangle(disp, win->window, win->gc, xoff, y, width, xfont->ch);
 
 	/* 色 */
@@ -527,6 +549,14 @@ drawCursor(Win *win, int x, int y, int type, Line *line, int index)
 		XFillRectangle(disp, win->window, win->gc, x, y, xfont->ch * 0.1, xfont->ch);
 		break;
 	}
+}
+
+void
+bell(void *term)
+{
+	static const struct timespec belld = { 0, 150 * 1000 * 1000 };
+	clock_gettime(CLOCK_MONOTONIC, &win->belltime);
+	timespecadd(&win->belltime, &belld, &win->belltime);
 }
 
 void

@@ -37,6 +37,8 @@ typedef struct Term {
 	Color *palette;         /* カラーパレット */
 	int oldmx, oldmy;       /* 前回のマウス座標 */
 	const char32_t *g[4];   /* 文字集合 */
+	void (*bell)(void *);   /* ベルのcallback */
+	void *bellp;            /* ベルのcallbackに渡す */
 } Term;
 
 Term *openTerm(void);

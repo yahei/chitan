@@ -36,6 +36,7 @@ chitan|chitan-256color|chitan terminal emulator,
 	kmous=\e[M,
 
 # 端末制御コード
+	bel=^G,
 	civis=\e[?25l,
 	cnorm=\e[?25h,
 	smcup=\e[?1049h,
