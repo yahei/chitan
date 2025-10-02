@@ -14,6 +14,12 @@
 #define CURSOR_X(win)   (win->xpad + win->term->cx * xfont->cw)
 #define CURSOR_Y(win)   (win->ypad + win->term->cy * xfont->ch + xfont->ascent)
 
+#define BLINK(time, duration, flag)\
+	if (timespeccmp(&time, &now, <)) {\
+		timespecadd(&time, &duration, &time);\
+		time = timespeccmp(&now, &time, <) ? time : now;\
+		flag = !flag;\
+	}
 #define NEXT_TIMER(now, a, b) (timespeccmp(&now, &a, <) && timespeccmp(&a, &b, <) ? a : b)
 #define BELLCOLOR(color) (timespeccmp(&win->belltime, &now, <) ? color :\
 		((int)(  RED(color) * 0.85 + 0xff * 0.15) << 16) +\
@@ -45,6 +51,8 @@ typedef struct Win {
 	int redraw_flag;
 	int redraw_cnt;
 	struct timespec belltime;
+	struct timespec blinktime, rapidtime, carettime;
+	int blink, rapid, caret;
 } Win;
 
 static Display *disp;
@@ -133,6 +141,9 @@ run(void)
 {
 	fd_set rfds;
 	struct timespec timeout = { 0, 1000 }, nexttime;
+	static const struct timespec blinkd = { 0, 600 * 1000 * 1000 },
+		                     rapidd = { 0, 200 * 1000 * 1000 },
+		                     caretd = { 0, 500 * 1000 * 1000 };
 	int tfd = win->term->master;
 	int xfd = XConnectionNumber(disp);
 
@@ -154,7 +165,16 @@ run(void)
 		if (!FD_ISSET(tfd, &rfds)) {
 			nexttime = (struct timespec){ 1 << 16, 0 };
 			timespecadd(&now, &nexttime, &nexttime);
+
+			BLINK(win->blinktime, blinkd, win->blink);
+			BLINK(win->rapidtime, rapidd, win->rapid);
+			BLINK(win->carettime, caretd, win->caret);
+
 			nexttime = NEXT_TIMER(now, win->belltime, nexttime);
+			nexttime = NEXT_TIMER(now, win->blinktime, nexttime);
+			nexttime = NEXT_TIMER(now, win->rapidtime, nexttime);
+			nexttime = NEXT_TIMER(now, win->carettime, nexttime);
+
 			timespecsub(&nexttime, &now, &timeout);
 			win->redraw_flag = 1;
 		}
@@ -207,6 +227,8 @@ openWindow(void)
 		errExit("newTerm failed.\n");
 	win->term->bell = bell;
 	clock_gettime(CLOCK_MONOTONIC, &win->belltime);
+	win->blinktime = win->rapidtime = win->carettime = win->belltime;
+	win->blink = win->rapid = win->caret = 1;
 
 	/* ウィンドウ作成 */
 	win->width = 800;
@@ -387,6 +409,10 @@ procKeyPress(Win *win, XEvent event, int bufsize)
 	KeySym keysym;
 	Status status = XLookupChars;
 
+	/* 点滅をリセット */
+	win->caret = 1;
+	clock_gettime(CLOCK_MONOTONIC, &win->carettime);
+
 	/* 入力文字列を取得 */
 	len = win->ime.xic ?
 		Xutf8LookupString(win->ime.xic, &event.xkey, buf, bufsize, &keysym, &status) :
@@ -487,6 +513,9 @@ drawLine(Win *win, Line *line, int i, int len, int xoff, int yoff)
 	drawLine(win, line, next, len, xoff + width, yoff);
 
 	/* 前処理 */
+	if (((line->attr[i] & BLINK) && win->blink) || /* 点滅 */
+	    ((line->attr[i] & RAPID) && win->rapid)) /* 高速点滅 */
+			return;
 	if (line->attr[i] & NEGA) { /* 反転 */
 		fg = line->bg[i];
 		bg = line->fg[i];
@@ -527,6 +556,9 @@ drawCursor(Win *win, int x, int y, int type, Line *line, int index)
 {
 	int width = xfont->cw * u32swidth(&line->str[index], 1);
 	Line cursor;
+
+	if ((!type || type % 2) && win->caret)
+		return;
 
 	switch (type) {
 	default: /* ブロック */
