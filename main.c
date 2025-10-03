@@ -578,7 +578,9 @@ drawLine(Win *win, Line *line, int i, int len, int xoff, int yoff)
 void
 drawCursor(Win *win, int x, int y, int type, Line *line, int index)
 {
-	int width = xfont->cw * MAX(u32swidth(&line->str[index], 1), 1);
+	char32_t *c = index < u32slen(line->str) ? &line->str[index] : (char32_t *)L" ";
+	int width = xfont->cw * u32swidth(c, 1) - 1;
+	int attr;
 	Line cursor;
 
 	/* 点滅 */
@@ -593,16 +595,14 @@ drawCursor(Win *win, int x, int y, int type, Line *line, int index)
 	case 0:
 	case 1:
 	case 2:
-		if (index < u32slen(line->str))
-			cursor = (Line){&line->str[index], &line->attr[index],
-				win->focus ? &defbg : &deffg, win->focus ? &deffg : &defbg};
-		else
-			cursor = (Line){(char32_t *)L" ", &(int){0},
-				win->focus ? &defbg : &deffg, win->focus ? &deffg : &defbg};
-		drawLine(win, &cursor, 0, 1, x, y);
-		XSetForeground(disp, win->gc, BELLCOLOR(win->term->palette[deffg]));
-		if (!win->focus)
-			XDrawRectangle(disp, win->window, win->gc, x, y - xfont->ascent + 1, width, xfont->ch);
+		if (win->focus) {
+			attr = index < u32slen(line->str) ? line->attr[index] : 0;
+			cursor = (Line){c, &attr, &defbg, &deffg};
+			drawLine(win, &cursor, 0, 1, x, y);
+		} else {
+			XSetForeground(disp, win->gc, BELLCOLOR(win->term->palette[deffg]));
+			XDrawRectangle(disp, win->window, win->gc, x, y - xfont->ascent + 1, width, xfont->ch - 1);
+		}
 		break;
 	case 3: /* 下線 */
 	case 4:
