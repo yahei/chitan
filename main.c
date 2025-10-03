@@ -55,6 +55,7 @@ typedef struct Win {
 	int redraw_cnt;
 	struct timespec belltime, blinktime, rapidtime, carettime;
 	char blink_status;
+	char focus;
 } Win;
 
 static Display *disp;
@@ -198,12 +199,14 @@ run(void)
 				XSetICValues(win->ime.xic, XNPreeditAttributes, win->ime.spotlist, NULL);
 			}
 			win->redraw_flag = 1;
-			timeout = (struct timespec){ 0, 1000 };
 		}
 
 		/* ウィンドウのイベント処理 */
 		if (XPending(disp))
 			procXEvent(win);
+
+		if (win->redraw_flag)
+			timeout = (struct timespec){ 0, 1000 };
 	}
 }
 
@@ -255,7 +258,7 @@ openWindow(void)
 
 	/* イベントマスク */
 	XSelectInput(disp, win->window,
-			ExposureMask | StructureNotifyMask |
+			FocusChangeMask | ExposureMask | StructureNotifyMask |
 			KeyPressMask | KeyReleaseMask |
 			ButtonPressMask | ButtonReleaseMask |
 			ButtonMotionMask | PointerMotionMask);
@@ -375,6 +378,15 @@ procXEvent(Win *win)
 					writePty(win->term, "\e[201~", 6);
 				XFree(props);
 			}
+
+		case FocusIn:
+			win->focus = 1;
+			win->redraw_flag = 1;
+			break;
+		case FocusOut:
+			win->focus = 0;
+			win->redraw_flag = 1;
+			break;
 		}
 	}
 }
@@ -566,11 +578,11 @@ drawLine(Win *win, Line *line, int i, int len, int xoff, int yoff)
 void
 drawCursor(Win *win, int x, int y, int type, Line *line, int index)
 {
-	int width = xfont->cw * u32swidth(&line->str[index], 1);
+	int width = xfont->cw * MAX(u32swidth(&line->str[index], 1), 1);
 	Line cursor;
 
 	/* 点滅 */
-	if (!type || type % 2) {
+	if (win->focus && (!type || type % 2)) {
 		win->blink_status |= BS_CARET * BS_TIMER;
 		if (win->blink_status & BS_CARET)
 			return;
@@ -582,10 +594,15 @@ drawCursor(Win *win, int x, int y, int type, Line *line, int index)
 	case 1:
 	case 2:
 		if (index < u32slen(line->str))
-			cursor = (Line){&line->str[index], &line->attr[index], &defbg, &deffg};
+			cursor = (Line){&line->str[index], &line->attr[index],
+				win->focus ? &defbg : &deffg, win->focus ? &deffg : &defbg};
 		else
-			cursor = (Line){(char32_t *)L" ", &(int){0}, &defbg, &deffg};
+			cursor = (Line){(char32_t *)L" ", &(int){0},
+				win->focus ? &defbg : &deffg, win->focus ? &deffg : &defbg};
 		drawLine(win, &cursor, 0, 1, x, y);
+		XSetForeground(disp, win->gc, BELLCOLOR(win->term->palette[deffg]));
+		if (!win->focus)
+			XDrawRectangle(disp, win->window, win->gc, x, y - xfont->ascent + 1, width, xfont->ch);
 		break;
 	case 3: /* 下線 */
 	case 4:
