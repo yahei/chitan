@@ -17,7 +17,8 @@
 #define BLINK(time, duration, flags, type)\
 	if ((flags & (type * BS_TIMER)) && timespeccmp(&time, &now, <)) {\
 		timespecadd(&time, &duration, &time);\
-		time = timespeccmp(&now, &time, <) ? time : now;\
+		if (timespeccmp(&time, &now, <=))\
+			timespecadd(&now, &duration, &time);\
 		flags ^= type;\
 	}
 #define NEXT_TIMER(now, a, b) (timespeccmp(&now, &a, <) && timespeccmp(&a, &b, <) ? a : b)
@@ -142,7 +143,7 @@ run(void)
 {
 	fd_set rfds;
 	struct timespec timeout = { 0, 1000 }, nexttime;
-	static const struct timespec blinkd = { 0, 600 * 1000 * 1000 },
+	static const struct timespec blinkd = { 0, 800 * 1000 * 1000 },
 		                     rapidd = { 0, 200 * 1000 * 1000 },
 		                     caretd = { 0, 500 * 1000 * 1000 };
 	int tfd = win->term->master;
@@ -162,7 +163,6 @@ run(void)
 
 		/* タイムアウトの設定 */
 		clock_gettime(CLOCK_MONOTONIC, &now);
-		timeout = (struct timespec){ 0, 1000 };
 		if (!FD_ISSET(tfd, &rfds)) {
 			nexttime = (struct timespec){ 1 << 16, 0 };
 			timespecadd(&now, &nexttime, &nexttime);
@@ -198,6 +198,7 @@ run(void)
 				XSetICValues(win->ime.xic, XNPreeditAttributes, win->ime.spotlist, NULL);
 			}
 			win->redraw_flag = 1;
+			timeout = (struct timespec){ 0, 1000 };
 		}
 
 		/* ウィンドウのイベント処理 */

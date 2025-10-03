@@ -27,7 +27,7 @@ openFont(Display *disp, const char *family, float size)
 	}
 
 	/* 文字の高さや横幅を取得 */
-	xfont->ch = (*xfont->fonts[0])[FONT_NONE]->height - 1.0;
+	xfont->ch = (*xfont->fonts[0])[FONT_NONE]->height;
 	XftTextExtents32(disp, (*xfont->fonts[0])[FONT_NONE], (char32_t *)L"x", 1, &ginfo);
 	xfont->cw = 0 < ginfo.width ? ginfo.width : xfont->ch / 2;
 	xfont->ascent = (*xfont->fonts[0])[FONT_NONE]->ascent;

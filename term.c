@@ -46,7 +46,7 @@ openTerm(void)
 
 	/* 構造体の初期化 */
 	term = xmalloc(sizeof(Term));
-	*term = (Term){ .master = -1, .attr = NONE, .fg = deffg, .bg = defbg };
+	*term = (Term){ .master = -1, .ctype = 2, .fg = deffg, .bg = defbg };
 
 	/* スクリーンバッファの初期化 */
 	term->ori = term->alt = (struct ScreenBuffer){
