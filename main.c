@@ -15,7 +15,7 @@
 #define CURSOR_Y(win)   (win->ypad + win->term->cy * xfont->ch + xfont->ascent)
 
 #define BLINK(time, duration, flags, type)\
-	if ((flags & (type * BS_TIMER)) && timespeccmp(&time, &now, <)) {\
+	if ((flags & (type * BS_TIMER)) && timespeccmp(&time, &now, <=)) {\
 		timespecadd(&time, &duration, &time);\
 		if (timespeccmp(&time, &now, <=))\
 			timespecadd(&now, &duration, &time);\
@@ -161,32 +161,7 @@ run(void)
 			else
 				errExit("pselect failed.\n");
 		}
-
-		/* タイムアウトの設定 */
 		clock_gettime(CLOCK_MONOTONIC, &now);
-		if (!FD_ISSET(tfd, &rfds)) {
-			nexttime = (struct timespec){ 1 << 16, 0 };
-			timespecadd(&now, &nexttime, &nexttime);
-
-			BLINK(win->blinktime, blinkd, win->blink_status, BS_BLINK);
-			BLINK(win->rapidtime, rapidd, win->blink_status, BS_RAPID);
-			BLINK(win->carettime, caretd, win->blink_status, BS_CARET);
-
-			nexttime = NEXT_TIMER(now, win->belltime, nexttime);
-			nexttime = NEXT_TIMER(now, win->blinktime, nexttime);
-			nexttime = NEXT_TIMER(now, win->rapidtime, nexttime);
-			nexttime = NEXT_TIMER(now, win->carettime, nexttime);
-
-			timespecsub(&nexttime, &now, &timeout);
-			win->redraw_flag = 1;
-		}
-
-		/* 再描画 */
-		if ((!FD_ISSET(tfd, &rfds) || 127 < win->redraw_cnt++) && win->redraw_flag) {
-			redraw(win);
-			win->redraw_flag = 0;
-			win->redraw_cnt = 0;
-		}
 
 		/* 端末のread */
 		if (FD_ISSET(tfd, &rfds)) {
@@ -205,8 +180,35 @@ run(void)
 		if (XPending(disp))
 			procXEvent(win);
 
-		if (win->redraw_flag)
+		/* 点滅 */
+		if (win->focus && (!win->term->ctype || win->term->ctype % 2))
+			win->blink_status |= BS_CARET * BS_TIMER;
+		else
+			win->blink_status &= ~(BS_CARET * BS_TIMER);
+		BLINK(win->blinktime, blinkd, win->blink_status, BS_BLINK);
+		BLINK(win->rapidtime, rapidd, win->blink_status, BS_RAPID);
+		BLINK(win->carettime, caretd, win->blink_status, BS_CARET);
+
+		/* 再描画 */
+		if ((!FD_ISSET(tfd, &rfds) || 127 < win->redraw_cnt++) && win->redraw_flag) {
+			redraw(win);
+			win->redraw_flag = 0;
+			win->redraw_cnt = 0;
+		}
+
+		/* タイムアウトの設定 */
+		if (win->redraw_flag || XPending(disp)) {
 			timeout = (struct timespec){ 0, 1000 };
+		} else {
+			nexttime = (struct timespec){ 1 << 16, 0 };
+			timespecadd(&now, &nexttime, &nexttime);
+			nexttime = NEXT_TIMER(now, win->belltime,  nexttime);
+			nexttime = NEXT_TIMER(now, win->blinktime, nexttime);
+			nexttime = NEXT_TIMER(now, win->rapidtime, nexttime);
+			nexttime = NEXT_TIMER(now, win->carettime, nexttime);
+			timespecsub(&nexttime, &now, &timeout);
+			win->redraw_flag = 1;
+		}
 	}
 }
 
@@ -233,7 +235,6 @@ openWindow(void)
 	win->term->bell = bell;
 	clock_gettime(CLOCK_MONOTONIC, &win->belltime);
 	win->blinktime = win->rapidtime = win->carettime = win->belltime;
-	win->blink_status = 0b111;
 
 	/* ウィンドウ作成 */
 	win->width = 800;
@@ -425,7 +426,8 @@ procKeyPress(Win *win, XEvent event, int bufsize)
 
 	/* 点滅をリセット */
 	win->blink_status |= BS_CARET;
-	clock_gettime(CLOCK_MONOTONIC, &win->carettime);
+	win->carettime = now;
+	win->redraw_flag = 1;
 
 	/* 入力文字列を取得 */
 	len = win->ime.xic ?
@@ -472,7 +474,7 @@ redraw(Win *win)
 	int i;
 
 	/* 点滅中フラグをクリア */
-	win->blink_status &= 0b1111;
+	win->blink_status &= ~((BS_BLINK | BS_RAPID) * BS_TIMER);
 
 	/* 画面をクリア */
 	XGetWindowAttributes(disp, win->window, &wattr);
@@ -584,11 +586,8 @@ drawCursor(Win *win, int x, int y, int type, Line *line, int index)
 	Line cursor;
 
 	/* 点滅 */
-	if (win->focus && (!type || type % 2)) {
-		win->blink_status |= BS_CARET * BS_TIMER;
-		if (win->blink_status & BS_CARET)
-			return;
-	}
+	if (win->focus && (!type || type % 2) && (win->blink_status & BS_CARET))
+		return;
 
 	switch (type) {
 	default: /* ブロック */
