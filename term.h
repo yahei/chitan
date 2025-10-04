@@ -1,9 +1,9 @@
 #include "line.h"
 
 typedef uint_least32_t Color;
-#define RED(c)   (c >> 16 & 0xff)
-#define GREEN(c) (c >>  8 & 0xff)
-#define BLUE(c)  (c >>  0 & 0xff)
+#define RED(c)   ((c) >> 16 & 0xff)
+#define GREEN(c) ((c) >>  8 & 0xff)
+#define BLUE(c)  ((c) >>  0 & 0xff)
 
 enum mouse_event_type {
 	SHIFT   = 4,

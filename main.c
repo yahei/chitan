@@ -22,10 +22,12 @@
 		flags ^= type;\
 	}
 #define NEXT_TIMER(now, a, b) (timespeccmp(&now, &a, <) && timespeccmp(&a, &b, <) ? a : b)
-#define BELLCOLOR(color) (timespeccmp(&win->belltime, &now, <) ? color :\
-		((int)(  RED(color) * 0.85 + 0xff * 0.15) << 16) +\
-		((int)(GREEN(color) * 0.85 + 0xff * 0.15) <<  8) +\
-		((int)( BLUE(color) * 0.85 + 0xff * 0.15) <<  0))
+#define BLEND_COLOR(c1, a1, c2, a2) (\
+		((int)(  RED(c1) * (a1) +   RED(c2) * (a2)) << 16) +\
+		((int)(GREEN(c1) * (a1) + GREEN(c2) * (a2)) <<  8) +\
+		((int)( BLUE(c1) * (a1) +  BLUE(c2) * (a2)) <<  0))
+#define BELLCOLOR(color) (timespeccmp(&win->belltime, &now, <) ?\
+		color : BLEND_COLOR(color, 0.85, 0xffffffff, 0.15))
 
 enum blink_status { BS_BLINK = 1, BS_RAPID = 2, BS_CARET = 4, BS_TIMER = 16 };
 
@@ -551,18 +553,20 @@ drawLine(Win *win, Line *line, int i, int len, int xoff, int yoff)
 	}
 	if (line->attr[i] & BOLD) /* 太字 */
 		fg = fg < 8 ? fg + 8 : fg;
+	c = win->term->palette[fg]; /* 色を取得 */
+	if (line->attr[i] & FAINT) /* 細字 */
+		c = BLEND_COLOR(c, 0.6, win->term->palette[bg], 0.4);
+
+	/* 色をXftColorに変換 */
+	xc.color.red   =   RED(c) << 8;
+	xc.color.green = GREEN(c) << 8;
+	xc.color.blue  =  BLUE(c) << 8;
+	xc.color.alpha = 0xffff;
 
 	/* 背景を塗る */
 	y = yoff - xfont->ascent + 1;
 	XSetForeground(disp, win->gc, BELLCOLOR(win->term->palette[bg]));
 	XFillRectangle(disp, win->window, win->gc, xoff, y, width, xfont->ch);
-
-	/* 色 */
-	c = win->term->palette[fg];
-	xc.color.red   =   RED(c) << 8;
-	xc.color.green = GREEN(c) << 8;
-	xc.color.blue  =  BLUE(c) << 8;
-	xc.color.alpha = 0xffff;
 
 	/* 文字を書く */
 	attr = FONT_NONE;
