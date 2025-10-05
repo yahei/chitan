@@ -499,10 +499,11 @@ redraw(Win *win)
 		pepos = MIN(pepos, win->term->cx);
 
 		/* Preeditとカーソルの描画 */
-		drawLine(win, win->ime.peline, 0, win->col, win->xpad + xfont->cw * pepos, y);
+		drawLine(win, win->ime.peline, 0, u32slen(win->ime.peline->str),
+				win->xpad + xfont->cw * pepos, y);
 		drawCursor(win, win->xpad + xfont->cw * (pepos + pecaretpos),
 				y, 6, win->ime.peline, win->ime.caret);
-	} else if (1 <= win->term->dec[25]) {
+	} else if (1 <= win->term->dec[25] && win->term->cx < win->col) {
 		/* カーソルの描画 */
 		line = getLine(win->term, win->term->cy);
 		drawCursor(win, x, y, win->term->ctype,
