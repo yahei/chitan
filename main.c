@@ -229,6 +229,8 @@ Win *
 openWindow(void)
 {
 	Win *win = xmalloc(sizeof(Win));
+	*win = (Win) { .width = 800, .height = 600};
+	win->xpad = win->ypad = xfont->cw / 2;
 
 	/* 端末をオープン */
 	win->term = openTerm();
@@ -239,14 +241,9 @@ openWindow(void)
 	win->blinktime = win->rapidtime = win->carettime = win->belltime;
 
 	/* ウィンドウ作成 */
-	win->width = 800;
-	win->height = 600;
-	win->xpad = 10;
-	win->ypad = 10;
 	win->window = XCreateSimpleWindow(
-			disp,
-			DefaultRootWindow(disp),
-			10, 10, win->width, win->height, 1,
+			disp, DefaultRootWindow(disp),
+			0, 0, win->width, win->height, 1,
 			win->term->palette[deffg],
 			win->term->palette[defbg]);
 	win->col = (win->width - win->xpad * 2) / xfont->cw;
