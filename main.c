@@ -58,6 +58,11 @@ typedef struct Win {
 	struct timespec belltime, blinktime, rapidtime, carettime;
 	char blink_status;
 	char focus;
+	struct Selection{
+		int aline, acol, bline, bcol;
+		int rect;
+		int dragging;
+	} selection;
 } Win;
 
 static Display *disp;
@@ -76,10 +81,12 @@ static void fin(void);
 static Win *openWindow(void);
 static void closeWindow(Win *);
 static void procXEvent(Win *);
+static void mouseEvent(Win *, XEvent *);
 static void procKeyPress(Win *, XEvent, int);
 static void redraw(Win *);
 static void drawLine(Win *, Line *, int, int, int, int);
 static void drawCursor(Win *, int, int, int, Line *, int);
+static void drawSelection(Win *, struct Selection *);
 static void bell(void *);
 
 /* IME */
@@ -304,11 +311,12 @@ procXEvent(Win *win)
 {
 	XEvent event;
 	XConfigureEvent *e;
-	int state, mb;
+	int mx, my, state, mb = 0;
 	Atom prop, type;
 	int format;
 	unsigned long ntimes, after;
 	unsigned char *props;
+	char32_t *str;
 
 	while (0 < XPending(disp)) {
 		XNextEvent(disp, &event);
@@ -326,26 +334,48 @@ procXEvent(Win *win)
 			break;
 
 		case ButtonPress:
-		case ButtonRelease:
-		case MotionNotify:
-			/* マウス操作 */
+			/* 擬似端末に通知 */
 			state = event.xbutton.state;
-			if (event.type == MotionNotify) {
-				mb = (state & Button1Mask ?  0 :
-				      state & Button2Mask ?  1 :
-				      state & Button3Mask ?  2 : 3) + MOVE;
-			} else {
-				mb = event.xbutton.button;
-				mb = BETWEEN(mb, 1, 4)  ? (mb - 1) :
-				     BETWEEN(mb, 4, 8)  ? (mb - 4) + WHEEL :
-				     BETWEEN(mb, 8, 12) ? (mb - 8) + OTHER : 3;
+			mb = event.xbutton.button;
+			if ((mb != 1 && mb != 3) || (state & ~(ShiftMask | Mod1Mask)) ||
+					(win->term->sb == &win->term->alt && !(state & ShiftMask))) {
+				mouseEvent(win, &event);
+				break;
 			}
-			mb += state & ShiftMask   ? SHIFT : 0;
-			mb += state & Mod1Mask    ? ALT   : 0;
-			mb += state & ControlMask ? CTRL  : 0;
-			reportMouse(win->term, mb, event.type == ButtonRelease,
-					(event.xbutton.x - win->xpad) / xfont->cw + 1,
-					(event.xbutton.y - win->ypad) / xfont->ch + 1);
+			/* 範囲選択のドラッグを開始 */
+			win->selection.rect = 0 < (state & Mod1Mask);
+			win->selection.dragging = 1;
+
+		case MotionNotify:
+			/* 疑似端末に通知 */
+			if (!win->selection.dragging) {
+				mouseEvent(win, &event);
+				break;
+			}
+
+			/* ここからPress/Motion共通の処理 */
+			/* 範囲選択の終点を設定 */
+			mx = (event.xbutton.x - win->xpad) / xfont->cw;
+			my = (event.xbutton.y - win->ypad) / xfont->ch;
+			str = getLine(win->term, my)->str;
+			mx = MIN(mx, u32swidth(str, u32slen(str)));
+			win->selection.bcol = mx;
+			win->selection.bline = my + win->term->sb->firstline;
+			/* 範囲選択の始点を設定 */
+			if (mb == 1) {
+				win->selection.acol = mx;
+				win->selection.aline = my + win->term->sb->firstline;
+			}
+			break;
+
+		case ButtonRelease:
+			/* 疑似端末に通知 */
+			if (!win->selection.dragging) {
+				mouseEvent(win, &event);
+				break;
+			}
+			/* 範囲選択のドラッグを終了 */
+			win->selection.dragging = 0;
 			break;
 
 		case Expose:
@@ -389,6 +419,29 @@ procXEvent(Win *win)
 			break;
 		}
 	}
+}
+
+void
+mouseEvent(Win *win, XEvent *event)
+{
+	int mb, state = event->xbutton.state;
+
+	if (event->type == MotionNotify) {
+		mb = (state & Button1Mask ?  0 :
+		      state & Button2Mask ?  1 :
+		      state & Button3Mask ?  2 : 3) + MOVE;
+	} else {
+		mb = event->xbutton.button;
+		mb = BETWEEN(mb, 1, 4)  ? (mb - 1) :
+		     BETWEEN(mb, 4, 8)  ? (mb - 4) + WHEEL :
+		     BETWEEN(mb, 8, 12) ? (mb - 8) + OTHER : 3;
+	}
+	mb += state & ShiftMask   ? SHIFT : 0;
+	mb += state & Mod1Mask    ? ALT   : 0;
+	mb += state & ControlMask ? CTRL  : 0;
+	reportMouse(win->term, mb, event->type == ButtonRelease,
+			(event->xbutton.x - win->xpad) / xfont->cw + 1,
+			(event->xbutton.y - win->ypad) / xfont->ch + 1);
 }
 
 void
@@ -510,6 +563,9 @@ redraw(Win *win)
 				line, getCharCnt(line->str, win->term->cx).index);
 	}
 
+	/* 選択範囲を書く */
+	drawSelection(win, &win->selection);
+
 	XSync(disp, False);
 }
 
@@ -618,6 +674,94 @@ drawCursor(Win *win, int x, int y, int type, Line *line, int index)
 }
 
 void
+drawSelection(Win *win, struct Selection *sel)
+{
+	const int s = MIN(sel->aline, sel->bline) - win->term->sb->firstline;
+	const int e = MAX(sel->aline, sel->bline) - win->term->sb->firstline;
+	Color c = win->term->palette[defbg];
+	XftColor xc;
+	Line *line;
+	char32_t *str;
+	CharCnt ccl, ccr;
+	int xoff, yoff, len, w;
+	int i;
+
+#define DRAW(col, row, li, ri) do {\
+	xoff = win->xpad + (col) * xfont->cw;\
+	yoff = win->ypad + (row) * xfont->ch;\
+	len = MIN(u32slen(str + li), ri - li);\
+	w = u32swidth(str + li, len) * xfont->cw;\
+	XSetForeground(disp, win->gc, BELLCOLOR(win->term->palette[deffg]));\
+	XFillRectangle(disp, win->window, win->gc, xoff, yoff, w, xfont->ch);\
+	drawXFontString(win->draw, &xc, xfont, 0, xoff, yoff + xfont->ascent, str + li, len);\
+} while (0);
+
+	/* 色をXftColorに変換 */
+	xc.color.red   =   RED(c) << 8;
+	xc.color.green = GREEN(c) << 8;
+	xc.color.blue  =  BLUE(c) << 8;
+	xc.color.alpha = 0xffff;
+
+	if (sel->rect) {
+		/* 矩形選択 */
+		for (i = MAX(s, 0); i < MIN(e + 1, win->row); i++) {
+			if ((line = getLine(win->term, i))) {
+				str = line->str;
+				ccl = getCharCnt(str, MIN(sel->acol, sel->bcol));
+				ccr = getCharCnt(str, MAX(sel->acol, sel->bcol));
+				DRAW(ccl.col, i,
+						MIN(ccl.index, u32slen(str)),
+						MIN(ccr.index, u32slen(str)));
+			}
+		}
+	} else {
+		/* 通常 */
+		if (sel->aline == sel->bline) { /* 始点と終点が同じ行 */
+			if ((line = getLine(win->term, s))) {
+				str = line->str;
+				ccl = getCharCnt(str, MIN(sel->acol, sel->bcol));
+				ccr = getCharCnt(str, MAX(sel->acol, sel->bcol));
+				DRAW(ccl.col, s, ccl.index, ccr.index);
+			}
+		} else {
+			/* 始点の行 */
+			if ((line = getLine(win->term, s))) {
+				str = line->str;
+				ccl = getCharCnt(str, sel->aline < sel->bline ? sel->acol : sel->bcol);
+				DRAW(ccl.col, s, ccl.index, u32slen(str));
+			}
+
+			/* 終点の行 */
+			if ((line = getLine(win->term, e))) {
+				str = line->str;
+				ccr = getCharCnt(str, sel->aline < sel->bline ? sel->bcol : sel->acol);
+				DRAW(0, e, 0, ccr.index);
+			}
+
+			/* 途中の行 */
+			for (i = MAX(s + 1, 0); i < MIN(e, win->row); i++) {
+				if ((line = getLine(win->term, i))) {
+					str = line->str;
+					DRAW(0, i, 0, u32slen(str));
+				}
+			}
+		}
+	}
+#undef DRAW
+
+	/* 始点と終点を四角形で表示 */
+	XSetForeground(disp, win->gc, BELLCOLOR(win->term->palette[1]));
+	XDrawRectangle(disp, win->window, win->gc,
+			sel->acol * xfont->cw + win->xpad,
+			(sel->aline - win->term->sb->firstline) * xfont->ch + win->ypad,
+			xfont->cw, xfont->ch);
+	XDrawRectangle(disp, win->window, win->gc,
+			sel->bcol * xfont->cw + win->xpad,
+			(sel->bline - win->term->sb->firstline) * xfont->ch + win->ypad,
+			xfont->cw, xfont->ch);
+}
+
+	void
 bell(void *term)
 {
 	static const struct timespec belld = { 0, 150 * 1000 * 1000 };
