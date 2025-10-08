@@ -317,7 +317,6 @@ procXEvent(Win *win)
 	int format;
 	unsigned long ntimes, after;
 	unsigned char *props;
-	char32_t *str;
 
 	while (0 < XPending(disp)) {
 		XNextEvent(disp, &event);
@@ -358,8 +357,6 @@ procXEvent(Win *win)
 			/* 範囲選択の終点を設定 */
 			mx = (event.xbutton.x - win->xpad) / xfont->cw;
 			my = (event.xbutton.y - win->ypad) / xfont->ch;
-			str = getLine(win->term, my)->str;
-			mx = MIN(mx, u32swidth(str, u32slen(str)));
 			win->selection.bcol = mx;
 			win->selection.bline = my + win->term->sb->firstline;
 			/* 範囲選択の始点を設定 */
