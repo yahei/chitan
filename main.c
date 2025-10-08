@@ -87,6 +87,7 @@ static void redraw(Win *);
 static void drawLine(Win *, Line *, int, int, int, int);
 static void drawCursor(Win *, int, int, int, Line *, int);
 static void drawSelection(Win *, struct Selection *);
+static void drawLineRev(Win *, Line *, int, int, int, int, int);
 static void bell(void *);
 
 /* IME */
@@ -678,73 +679,22 @@ drawSelection(Win *win, struct Selection *sel)
 {
 	const int s = MIN(sel->aline, sel->bline) - win->term->sb->firstline;
 	const int e = MAX(sel->aline, sel->bline) - win->term->sb->firstline;
-	Color c = win->term->palette[defbg];
-	XftColor xc;
-	Line *line;
-	char32_t *str;
-	CharCnt ccl, ccr;
-	int xoff, yoff, len, w;
 	int i;
 
-#define DRAW(col, row, li, ri) do {\
-	xoff = win->xpad + (col) * xfont->cw;\
-	yoff = win->ypad + (row) * xfont->ch;\
-	len = MIN(u32slen(str + li), ri - li);\
-	w = u32swidth(str + li, len) * xfont->cw;\
-	XSetForeground(disp, win->gc, BELLCOLOR(win->term->palette[deffg]));\
-	XFillRectangle(disp, win->window, win->gc, xoff, yoff, w, xfont->ch);\
-	drawXFontString(win->draw, &xc, xfont, 0, xoff, yoff + xfont->ascent, str + li, len);\
-} while (0);
-
-	/* 色をXftColorに変換 */
-	xc.color.red   =   RED(c) << 8;
-	xc.color.green = GREEN(c) << 8;
-	xc.color.blue  =  BLUE(c) << 8;
-	xc.color.alpha = 0xffff;
-
+#define DRAW(n, a, b)   drawLineRev(win, getLine(win->term, n), a, b, win->xpad, win->ypad, n)
 	if (sel->rect) {
 		/* 矩形選択 */
-		for (i = MAX(s, 0); i < MIN(e + 1, win->row); i++) {
-			if ((line = getLine(win->term, i))) {
-				str = line->str;
-				ccl = getCharCnt(str, MIN(sel->acol, sel->bcol));
-				ccr = getCharCnt(str, MAX(sel->acol, sel->bcol));
-				DRAW(ccl.col, i,
-						MIN(ccl.index, u32slen(str)),
-						MIN(ccr.index, u32slen(str)));
-			}
-		}
+		for (i = MAX(s, 0); i < MIN(e + 1, win->row); i++)
+			DRAW(i, sel->acol, sel->bcol);
 	} else {
 		/* 通常 */
-		if (sel->aline == sel->bline) { /* 始点と終点が同じ行 */
-			if ((line = getLine(win->term, s))) {
-				str = line->str;
-				ccl = getCharCnt(str, MIN(sel->acol, sel->bcol));
-				ccr = getCharCnt(str, MAX(sel->acol, sel->bcol));
-				DRAW(ccl.col, s, ccl.index, ccr.index);
-			}
+		if (sel->aline == sel->bline) {
+			DRAW(s, sel->acol, sel->bcol);
 		} else {
-			/* 始点の行 */
-			if ((line = getLine(win->term, s))) {
-				str = line->str;
-				ccl = getCharCnt(str, sel->aline < sel->bline ? sel->acol : sel->bcol);
-				DRAW(ccl.col, s, ccl.index, u32slen(str));
-			}
-
-			/* 終点の行 */
-			if ((line = getLine(win->term, e))) {
-				str = line->str;
-				ccr = getCharCnt(str, sel->aline < sel->bline ? sel->bcol : sel->acol);
-				DRAW(0, e, 0, ccr.index);
-			}
-
-			/* 途中の行 */
-			for (i = MAX(s + 1, 0); i < MIN(e, win->row); i++) {
-				if ((line = getLine(win->term, i))) {
-					str = line->str;
-					DRAW(0, i, 0, u32slen(str));
-				}
-			}
+			DRAW(s, (sel->aline < sel->bline ? sel->acol : sel->bcol), win->col + 1);
+			DRAW(e, 0, (sel->aline < sel->bline ? sel->bcol : sel->acol));
+			for (i = MAX(s + 1, 0); i < MIN(e, win->row); i++)
+				DRAW(i, 0, win->col +1);
 		}
 	}
 #undef DRAW
@@ -761,7 +711,32 @@ drawSelection(Win *win, struct Selection *sel)
 			xfont->cw, xfont->ch);
 }
 
-	void
+void
+drawLineRev(Win *win, Line *line, int col1, int col2, int xpad, int ypad, int row)
+{
+	const Color c = win->term->palette[defbg];
+	XftColor xc = { 0, { RED(c) << 8, GREEN(c) << 8, BLUE(c) << 8, 0xffff } };
+	int li, ri;
+	int xoff, yoff, len;
+
+	if (!line)
+		return;
+
+	li = MIN(getCharCnt(line->str, MIN(col1, col2)).index, u32slen(line->str));
+	ri = MIN(getCharCnt(line->str, MAX(col1, col2)).index, u32slen(line->str));
+
+	xoff = xpad + getCharCnt(line->str, MIN(col1, col2)).col * xfont->cw;
+	yoff = ypad + row * xfont->ch;
+	len = MIN(u32slen(line->str + li), ri - li);
+
+	XSetForeground(disp, win->gc, BELLCOLOR(win->term->palette[deffg]));
+	XFillRectangle(disp, win->window, win->gc, xoff, yoff,
+			u32swidth(line->str + li, len) * xfont->cw, xfont->ch);
+	drawXFontString(win->draw, &xc, xfont, 0, xoff, yoff + xfont->ascent,
+			line->str + li, len);
+}
+
+void
 bell(void *term)
 {
 	static const struct timespec belld = { 0, 150 * 1000 * 1000 };
