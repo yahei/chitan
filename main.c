@@ -60,8 +60,7 @@ typedef struct Win {
 	char focus;
 	struct Selection{
 		int aline, acol, bline, bcol;
-		int rect;
-		int dragging;
+		int rect, altbuf, dragging;
 	} selection;
 } Win;
 
@@ -344,6 +343,7 @@ procXEvent(Win *win)
 			}
 			/* 範囲選択のドラッグを開始 */
 			win->selection.rect = 0 < (state & Mod1Mask);
+			win->selection.altbuf = win->term->sb == &win->term->alt;
 			win->selection.dragging = 1;
 
 		case MotionNotify:
@@ -562,7 +562,8 @@ redraw(Win *win)
 	}
 
 	/* 選択範囲を書く */
-	drawSelection(win, &win->selection);
+	if (win->selection.altbuf == (win->term->sb == &win->term->alt))
+		drawSelection(win, &win->selection);
 
 	XSync(disp, False);
 }
