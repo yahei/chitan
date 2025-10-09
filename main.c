@@ -61,7 +61,7 @@ typedef struct Win {
 	struct Selection{
 		int aline, acol, bline, bcol;
 		int rect, altbuf, dragging;
-		char *str;
+		char *str, *clip;
 	} selection;
 } Win;
 
@@ -296,6 +296,7 @@ void
 closeWindow(Win *win)
 {
 	free(win->selection.str);
+	free(win->selection.clip);
 	freeLine(win->ime.peline);
 	XFree(win->ime.spotlist);
 	XFree(win->ime.peattrs);
@@ -314,6 +315,7 @@ procXEvent(Win *win)
 {
 	XEvent event;
 	XConfigureEvent *e;
+	XSelectionRequestEvent *sre;
 	int mx, my, state, mb = 0;
 	Atom prop, type;
 	int format;
@@ -398,8 +400,25 @@ procXEvent(Win *win)
 			setWinSize(win->term, win->row, win->col, win->width, win->height);
 			break;
 
+		case SelectionRequest:
+			/* 貼り付ける文字列を送る */
+			if (!win->selection.clip || strlen(win->selection.clip) == 0)
+				break;
+			sre = &event.xselectionrequest;
+			if (sre->property == None)
+				sre->property = sre->target;
+			XChangeProperty(disp, sre->requestor, sre->property,
+					atoms[UTF8_STRING], 8, PropModeReplace,
+					(unsigned char *)win->selection.clip,
+					strlen(win->selection.clip));
+			XSelectionEvent se = { SelectionNotify, 0, True, disp,
+				sre->requestor, sre->selection, sre->target,
+				sre->property, sre->time };
+			XSendEvent(disp, event.xselectionrequest.requestor, False, 0, (XEvent *)&se);
+			break;
+
 		case SelectionNotify:
-			/* 貼り付け */
+			/* 貼り付ける文字列が届いた */
 			if ((prop = event.xselection.property) != None) {
 				XGetWindowProperty(disp, win->window, prop, 0, 256,
 						False, atoms[UTF8_STRING], &type,
@@ -541,6 +560,14 @@ procKeyPress(Win *win, XEvent event, int bufsize)
 	/* IMEの確定っぽい場合(コールバックがすぐ来ない場合があるため) */
 	if (1 < strlen(buf))
 		PUT_NUL(win->ime.peline, 0);
+
+	/* C-S-cでコピー */
+	if (keysym == XK_C && event.xkey.state & ControlMask) {
+		XSetSelectionOwner(disp, atoms[CLIPBOARD], win->window, event.xkey.time);
+		win->selection.clip = xrealloc(win->selection.clip, strlen(win->selection.str) + 1);
+		strcpy(win->selection.clip, win->selection.str);
+		return;
+	}
 
 	/* C-S-vで貼り付け */
 	if (keysym == XK_V && event.xkey.state & ControlMask) {
