@@ -61,6 +61,7 @@ typedef struct Win {
 	struct Selection{
 		int aline, acol, bline, bcol;
 		int rect, altbuf, dragging;
+		char *str;
 	} selection;
 } Win;
 
@@ -81,6 +82,7 @@ static Win *openWindow(void);
 static void closeWindow(Win *);
 static void procXEvent(Win *);
 static void mouseEvent(Win *, XEvent *);
+static void copySelection(Win *);
 static void procKeyPress(Win *, XEvent, int);
 static void redraw(Win *);
 static void drawLine(Win *, Line *, int, int, int, int);
@@ -293,6 +295,7 @@ openWindow(void)
 void
 closeWindow(Win *win)
 {
+	free(win->selection.str);
 	freeLine(win->ime.peline);
 	XFree(win->ime.spotlist);
 	XFree(win->ime.peattrs);
@@ -374,6 +377,8 @@ procXEvent(Win *win)
 			}
 			/* 範囲選択のドラッグを終了 */
 			win->selection.dragging = 0;
+			copySelection(win);
+			printf("copy: {%s}\n", win->selection.str);
 			break;
 
 		case Expose:
@@ -440,6 +445,53 @@ mouseEvent(Win *win, XEvent *event)
 	reportMouse(win->term, mb, event->type == ButtonRelease,
 			(event->xbutton.x - win->xpad) / xfont->cw + 1,
 			(event->xbutton.y - win->ypad) / xfont->ch + 1);
+}
+
+void
+copySelection(Win *win)
+{
+	int len = 256;
+	char32_t *cp, *copy = xmalloc(len * sizeof(copy[0]));
+	int firstline = MIN(win->selection.aline, win->selection.bline);
+	int lastline  = MAX(win->selection.aline, win->selection.bline);
+	int left      = MIN(win->selection.acol,  win->selection.bcol);
+	int right     = MAX(win->selection.acol,  win->selection.bcol);
+	Line *line;
+	int i, l, r;
+
+	copy[0] = L'\0';
+
+	/* 選択範囲の文字列(UTF32)を読み出してコピー */
+	for(i = firstline; i <= lastline; i++) {
+		if (!(line = getLine(win->term, i - win->term->sb->firstline)))
+			continue;
+
+		if (win->selection.rect) {
+			l = MIN(getCharCnt(line->str,  left).index, u32slen(line->str));
+			r = MIN(getCharCnt(line->str, right).index, u32slen(line->str));
+		} else {
+			l = (i != firstline) ? 0 :
+				MIN(getCharCnt(line->str, left).index, u32slen(line->str));
+			r = (i != lastline) ? u32slen(line->str) + 1 :
+				MIN(getCharCnt(line->str, right).index, u32slen(line->str));
+		}
+
+		while (len < u32slen(copy) + r - l + 2) {
+			len += 256;
+			copy = xrealloc(copy, len * sizeof(copy[0]));
+		}
+		cp = copy + u32slen(copy);
+		wcsncpy((wchar_t *)cp, (wchar_t *)line->str + l, r - l);
+		cp[r - l] = L'\0';
+		if (i < lastline)
+			wcscat((wchar_t *)copy, L"\n");
+	}
+
+	/* UTF8に変換して保存 */
+	win->selection.str = xrealloc(win->selection.str, len * 4);
+	wcstombs(win->selection.str, (wchar_t *)copy, len * 4);
+
+	free(copy);
 }
 
 void
