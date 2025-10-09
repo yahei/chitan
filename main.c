@@ -380,7 +380,6 @@ procXEvent(Win *win)
 			/* 範囲選択のドラッグを終了 */
 			win->selection.dragging = 0;
 			copySelection(win);
-			printf("copy: {%s}\n", win->selection.str);
 			break;
 
 		case Expose:
@@ -775,17 +774,6 @@ drawSelection(Win *win, struct Selection *sel)
 		}
 	}
 #undef DRAW
-
-	/* 始点と終点を四角形で表示 */
-	XSetForeground(disp, win->gc, BELLCOLOR(win->term->palette[1]));
-	XDrawRectangle(disp, win->window, win->gc,
-			sel->acol * xfont->cw + win->xpad,
-			(sel->aline - win->term->sb->firstline) * xfont->ch + win->ypad,
-			xfont->cw, xfont->ch);
-	XDrawRectangle(disp, win->window, win->gc,
-			sel->bcol * xfont->cw + win->xpad,
-			(sel->bline - win->term->sb->firstline) * xfont->ch + win->ypad,
-			xfont->cw, xfont->ch);
 }
 
 void
@@ -807,7 +795,7 @@ drawLineRev(Win *win, Line *line, int col1, int col2, int xpad, int ypad, int ro
 	len = MIN(u32slen(line->str + li), ri - li);
 
 	XSetForeground(disp, win->gc, BELLCOLOR(win->term->palette[deffg]));
-	XFillRectangle(disp, win->window, win->gc, xoff, yoff,
+	XFillRectangle(disp, win->window, win->gc, xoff, yoff + 1,
 			u32swidth(line->str + li, len) * xfont->cw, xfont->ch);
 	drawXFontString(win->draw, &xc, xfont, 0, xoff, yoff + xfont->ascent,
 			line->str + li, len);
