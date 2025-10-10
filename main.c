@@ -11,9 +11,6 @@
 #include "font.h"
 #include "util.h"
 
-#define CURSOR_X(win)   (win->xpad + win->term->cx * xfont->cw)
-#define CURSOR_Y(win)   (win->ypad + win->term->cy * xfont->ch + xfont->ascent)
-
 #define CHOOSE(a, b, c) (timespeccmp((a), (b), c) ? (a) : (b))
 #define BLEND_COLOR(c1, a1, c2, a2) (\
 		((int)(  RED(c1) * (a1) +   RED(c2) * (a2)) << 16) +\
@@ -77,8 +74,8 @@ static void mouseEvent(Win *, XEvent *);
 static void copySelection(Win *);
 static void procKeyPress(Win *, XEvent, int);
 static void redraw(Win *);
-static void drawLine(Win *, Line *, int, int, int, int);
-static void drawCursor(Win *, int, int, int, Line *, int);
+static void drawLine(Win *, Line *, int, int, int, int, int);
+static void drawCursor(Win *, Line *, int, int, int, int, int);
 static void drawSelection(Win *, struct Selection *);
 static void drawLineRev(Win *, Line *, int, int, int, int, int);
 static void bell(void *);
@@ -179,8 +176,8 @@ run(void)
 			win->redraw_flag = 1;
 			/* IMEスポット移動 */
 			if (win->ime.xic) {
-				win->ime.spot.x = CURSOR_X(win);
-				win->ime.spot.y = CURSOR_Y(win);
+				win->ime.spot.x = win->xpad + win->term->cx * xfont->cw;
+				win->ime.spot.y = win->ypad + win->term->cy * xfont->ch + xfont->ascent;
 				XSetICValues(win->ime.xic, XNPreeditAttributes, win->ime.spotlist, NULL);
 			}
 		} else if (errno == EIO) {
@@ -592,7 +589,6 @@ redraw(Win *win)
 {
 	XWindowAttributes wattr;
 	Line *line;
-	const int x = CURSOR_X(win), y = CURSOR_Y(win);
 	int pepos, pewidth, pecaretpos;
 	int i;
 
@@ -606,8 +602,7 @@ redraw(Win *win)
 
 	/* 端末の内容をウィンドウに表示 */
 	for (i = 0; (line = getLine(win->term, i)); i++)
-		drawLine(win, line, 0, win->col, win->xpad,
-				win->ypad + i * xfont->ch + xfont->ascent);
+		drawLine(win, line, i, 0, win->col, win->xpad, win->ypad);
 
 	/* カーソルかPreeditを表示 */
 	XSetForeground(disp, win->gc, win->term->palette[deffg]);
@@ -623,15 +618,15 @@ redraw(Win *win)
 		pepos = MIN(pepos, win->term->cx);
 
 		/* Preeditとカーソルの描画 */
-		drawLine(win, win->ime.peline, 0, u32slen(win->ime.peline->str),
-				win->xpad + xfont->cw * pepos, y);
-		drawCursor(win, win->xpad + xfont->cw * (pepos + pecaretpos),
-				y, 6, win->ime.peline, win->ime.caret);
+		drawLine(win, win->ime.peline, win->term->cy, 0, pewidth,
+				win->xpad + pepos * xfont->cw, win->ypad);
+		drawCursor(win, win->ime.peline, win->term->cy, pepos + pecaretpos,
+				win->xpad, win->ypad, 6);
 	} else if (1 <= win->term->dec[25] && win->term->cx < win->col) {
 		/* カーソルの描画 */
 		line = getLine(win->term, win->term->cy);
-		drawCursor(win, x, y, win->term->ctype,
-				line, getCharCnt(line->str, win->term->cx).index);
+		drawCursor(win, line, win->term->cy, win->term->cx,
+				win->xpad, win->ypad, win->term->ctype);
 	}
 
 	/* 選択範囲を書く */
@@ -642,22 +637,20 @@ redraw(Win *win)
 }
 
 void
-drawLine(Win *win, Line *line, int i, int len, int xoff, int yoff)
+drawLine(Win *win, Line *line, int row, int col, int width, int xoff, int yoff)
 {
-	int fg, bg;
-	int y, width;
-	int next;
-	int attr;
+	int next, i = getCharCnt(line->str, col).index;
+	int x, y, w;
+	int attr, fg, bg;
 	XftColor xc;
 	Color c;
 
-	if (len <= i || line->str[i] == L'\0')
+	if (width <= col || line->str[i] == L'\0')
 		return;
 
 	/* 同じ属性の文字はまとめて処理する */
-	next = MIN(findNextSGR(line, i), len);
-	width = xfont->cw * u32swidth(&line->str[i], next - i);
-	drawLine(win, line, next, len, xoff + width, yoff);
+	next = MIN(findNextSGR(line, i), width);
+	drawLine(win, line, row, col + u32swidth(&line->str[i], next - i), width, xoff, yoff);
 
 	/* 点滅 */
 	if (line->attr[i] & BLINK)
@@ -668,6 +661,11 @@ drawLine(Win *win, Line *line, int i, int len, int xoff, int yoff)
 	      ((line->attr[i] & RAPID) && win->timer_lit[RAPID_TIMER]) ||
 	      (!(line->attr[i] & BLINK) && !(line->attr[i] & RAPID))))
 		return;
+
+	/* 座標 */
+	x = xoff + col * xfont->cw;
+	y = yoff + row * xfont->ch;
+	w = xfont->cw * u32swidth(&line->str[i], next - i);
 
 	/* 前処理 */
 	if (line->attr[i] & NEGA) { /* 反転 */
@@ -690,28 +688,32 @@ drawLine(Win *win, Line *line, int i, int len, int xoff, int yoff)
 	xc.color.alpha = 0xffff;
 
 	/* 背景を塗る */
-	y = yoff - xfont->ascent + 1;
 	XSetForeground(disp, win->gc, BELLCOLOR(win->term->palette[bg]));
-	XFillRectangle(disp, win->window, win->gc, xoff, y, width, xfont->ch);
+	XFillRectangle(disp, win->window, win->gc, x, y, w, xfont->ch);
+
+	y += xfont->ascent;
 
 	/* 文字を書く */
 	attr = FONT_NONE;
 	attr |= line->attr[i] & BOLD   ? FONT_BOLD   : FONT_NONE;
 	attr |= line->attr[i] & ITALIC ? FONT_ITALIC : FONT_NONE;
-	drawXFontString(win->draw, &xc, xfont, attr, xoff, yoff, &line->str[i], next - i);
+	drawXFontString(win->draw, &xc, xfont, attr, x, y, &line->str[i], next - i);
 
 	/* 後処理 */
 	if (line->attr[i] & ULINE) { /* 下線 */
 		XSetForeground(disp, win->gc, win->term->palette[fg]);
-		XDrawLine(disp, win->window, win->gc, xoff, yoff + 1, xoff + width, yoff + 1);
+		XDrawLine(disp, win->window, win->gc, x, y + 1, x + w, y + 1);
 	}
 }
 
 void
-drawCursor(Win *win, int x, int y, int type, Line *line, int index)
+drawCursor(Win *win, Line *line, int row, int col, int xoff, int yoff, int type)
 {
+	const int index = getCharCnt(line->str, col).index;
 	char32_t *c = index < u32slen(line->str) ? &line->str[index] : (char32_t *)L" ";
-	int width = xfont->cw * u32swidth(c, 1) - 1;
+	const int x = xoff + col * xfont->cw;
+	const int y = yoff + row * xfont->ch;
+	const int width = xfont->cw * u32swidth(c, 1) - 1;
 	int attr;
 	Line cursor;
 
@@ -727,20 +729,19 @@ drawCursor(Win *win, int x, int y, int type, Line *line, int index)
 		if (win->focus) {
 			attr = index < u32slen(line->str) ? line->attr[index] : 0;
 			cursor = (Line){c, &attr, &defbg, &deffg};
-			drawLine(win, &cursor, 0, 1, x, y);
+			drawLine(win, &cursor, 0, 0, 1, x, y);
 		} else {
 			XSetForeground(disp, win->gc, BELLCOLOR(win->term->palette[deffg]));
-			XDrawRectangle(disp, win->window, win->gc, x, y - xfont->ascent + 1, width, xfont->ch - 1);
+			XDrawRectangle(disp, win->window, win->gc, x, y, width, xfont->ch - 1);
 		}
 		break;
 	case 3: /* 下線 */
 	case 4:
-		XFillRectangle(disp, win->window, win->gc, x, y + 1, width, xfont->ch * 0.1);
+		XFillRectangle(disp, win->window, win->gc, x, y + 1 + xfont->ascent, width, xfont->ch * 0.1);
 		break;
 	case 5: /* 縦線 */
 	case 6:
-		y = y - xfont->ascent + 1;
-		XFillRectangle(disp, win->window, win->gc, x, y, xfont->ch * 0.1, xfont->ch);
+		XFillRectangle(disp, win->window, win->gc, x - 1, y, xfont->ch * 0.1, xfont->ch);
 		break;
 	}
 }
@@ -752,7 +753,7 @@ drawSelection(Win *win, struct Selection *sel)
 	const int e = MAX(sel->aline, sel->bline) - win->term->sb->firstline;
 	int i;
 
-#define DRAW(n, a, b)   drawLineRev(win, getLine(win->term, n), a, b, win->xpad, win->ypad, n)
+#define DRAW(n, a, b)   drawLineRev(win, getLine(win->term, n), n, a, b, win->xpad, win->ypad)
 	if (sel->rect) {
 		/* 矩形選択 */
 		for (i = MAX(s, 0); i < MIN(e + 1, win->row); i++)
@@ -765,14 +766,14 @@ drawSelection(Win *win, struct Selection *sel)
 			DRAW(s, (sel->aline < sel->bline ? sel->acol : sel->bcol), win->col + 1);
 			DRAW(e, 0, (sel->aline < sel->bline ? sel->bcol : sel->acol));
 			for (i = MAX(s + 1, 0); i < MIN(e, win->row); i++)
-				DRAW(i, 0, win->col +1);
+				DRAW(i, 0, win->col + 1);
 		}
 	}
 #undef DRAW
 }
 
 void
-drawLineRev(Win *win, Line *line, int col1, int col2, int xpad, int ypad, int row)
+drawLineRev(Win *win, Line *line, int row, int col1, int col2, int xpad, int ypad)
 {
 	const Color c = win->term->palette[defbg];
 	XftColor xc = { 0, { RED(c) << 8, GREEN(c) << 8, BLUE(c) << 8, 0xffff } };
@@ -790,7 +791,7 @@ drawLineRev(Win *win, Line *line, int col1, int col2, int xpad, int ypad, int ro
 	len = MIN(u32slen(line->str + li), ri - li);
 
 	XSetForeground(disp, win->gc, BELLCOLOR(win->term->palette[deffg]));
-	XFillRectangle(disp, win->window, win->gc, xoff, yoff + 1,
+	XFillRectangle(disp, win->window, win->gc, xoff, yoff,
 			u32swidth(line->str + li, len) * xfont->cw, xfont->ch);
 	drawXFontString(win->draw, &xc, xfont, 0, xoff, yoff + xfont->ascent,
 			line->str + li, len);
