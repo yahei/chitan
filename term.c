@@ -889,15 +889,15 @@ reportMouse(Term *term, int btn, int release, int mx, int my)
 	if (1 < term->dec[1006]) {
 		/* SGR */
 		len = snprintf(buf, sizeof(buf), "\e[<%d;%d;%d%c",
-				btn, mx, my, release ? 'm' : 'M');
+				btn, mx + 1, my + 1, release ? 'm' : 'M');
 	} else if (1 <= term->dec[9]) {
 		/* X10 */
-		if (!BETWEEN(btn, 0, 256 - 32) ||
-		    !BETWEEN( mx, 0, 256 - 32) ||
-		    !BETWEEN( my, 0, 256 - 32))
+		if (!BETWEEN(btn, 0, 255 - 32) ||
+		    !BETWEEN( mx, 0, 255 - 32) ||
+		    !BETWEEN( my, 0, 255 - 32))
 			return;
 		len = snprintf(buf, sizeof(buf), "\e[M%c%c%c",
-				(release ? 3 : btn) + 32, mx + 32, my + 32);
+				(release ? 3 : btn) + 32, mx + 33, my + 33);
 	}
 	if (0 < len)
 		writePty(term, buf, len);

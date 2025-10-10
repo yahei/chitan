@@ -454,8 +454,8 @@ mouseEvent(Win *win, XEvent *event)
 	mb += state & Mod1Mask    ? ALT   : 0;
 	mb += state & ControlMask ? CTRL  : 0;
 	reportMouse(win->term, mb, event->type == ButtonRelease,
-			(event->xbutton.x - win->xpad) / xfont->cw + 1,
-			(event->xbutton.y - win->ypad) / xfont->ch + 1);
+			(event->xbutton.x - win->xpad) / xfont->cw,
+			(event->xbutton.y - win->ypad) / xfont->ch);
 }
 
 void
