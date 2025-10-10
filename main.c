@@ -14,22 +14,15 @@
 #define CURSOR_X(win)   (win->xpad + win->term->cx * xfont->cw)
 #define CURSOR_Y(win)   (win->ypad + win->term->cy * xfont->ch + xfont->ascent)
 
-#define BLINK(time, duration, flags, type)\
-	if ((flags & (type * BS_TIMER)) && timespeccmp(&time, &now, <=)) {\
-		timespecadd(&time, &duration, &time);\
-		if (timespeccmp(&time, &now, <=))\
-			timespecadd(&now, &duration, &time);\
-		flags ^= type;\
-	}
-#define NEXT_TIMER(now, a, b) (timespeccmp(&now, &a, <) && timespeccmp(&a, &b, <) ? a : b)
+#define CHOOSE(a, b, c) (timespeccmp((a), (b), c) ? (a) : (b))
 #define BLEND_COLOR(c1, a1, c2, a2) (\
 		((int)(  RED(c1) * (a1) +   RED(c2) * (a2)) << 16) +\
 		((int)(GREEN(c1) * (a1) + GREEN(c2) * (a2)) <<  8) +\
 		((int)( BLUE(c1) * (a1) +  BLUE(c2) * (a2)) <<  0))
-#define BELLCOLOR(color) (timespeccmp(&win->belltime, &now, <) ?\
-		color : BLEND_COLOR(color, 0.85, 0xffffffff, 0.15))
+#define BELLCOLOR(color) (win->timer_lit[BELL_TIMER] ?\
+		BLEND_COLOR(color, 0.85, 0xffffffff, 0.15) : color)
 
-enum blink_status { BS_BLINK = 1, BS_RAPID = 2, BS_CARET = 4, BS_TIMER = 16 };
+enum timer_names { BELL_TIMER, BLINK_TIMER, RAPID_TIMER, CARET_TIMER, TIMER_NUM };
 
 typedef struct Win {
 	Term *term;
@@ -54,9 +47,8 @@ typedef struct Win {
 		int caret;
 	} ime;
 	int redraw_flag;
-	int redraw_cnt;
-	struct timespec belltime, blinktime, rapidtime, carettime;
-	char blink_status;
+	struct timespec timers[TIMER_NUM];
+	char timer_active[TIMER_NUM], timer_lit[TIMER_NUM];
 	char focus;
 	struct Selection{
 		int aline, acol, bline, bcol;
@@ -153,13 +145,17 @@ init(void)
 void
 run(void)
 {
-	fd_set rfds;
 	struct timespec timeout = { 0, 1000 }, nexttime;
-	static const struct timespec blinkd = { 0, 800 * 1000 * 1000 },
-		                     rapidd = { 0, 200 * 1000 * 1000 },
-		                     caretd = { 0, 500 * 1000 * 1000 };
+	static const struct timespec duration[] = {
+		[BELL_TIMER]  = { 0, 150 * 1000 * 1000 },
+		[BLINK_TIMER] = { 0, 800 * 1000 * 1000 },
+		[RAPID_TIMER] = { 0, 200 * 1000 * 1000 },
+		[CARET_TIMER] = { 0, 500 * 1000 * 1000 },
+	};
+	fd_set rfds;
 	int tfd = win->term->master;
 	int xfd = XConnectionNumber(disp);
+	int i;
 
 	while (1) {
 		/* ファイルディスクリプタの監視 */
@@ -174,51 +170,51 @@ run(void)
 		}
 		clock_gettime(CLOCK_MONOTONIC, &now);
 
+		/* ウィンドウのイベント処理 */
+		if (XPending(disp))
+			procXEvent(win);
+
 		/* 端末のread */
-		if (FD_ISSET(tfd, &rfds)) {
-			if (readPty(win->term) < 0)
-				return;
+		if (0 < readPty(win->term)) {
+			win->redraw_flag = 1;
 			/* IMEスポット移動 */
 			if (win->ime.xic) {
 				win->ime.spot.x = CURSOR_X(win);
 				win->ime.spot.y = CURSOR_Y(win);
 				XSetICValues(win->ime.xic, XNPreeditAttributes, win->ime.spotlist, NULL);
 			}
-			win->redraw_flag = 1;
+		} else if (errno == EIO) {
+			return;
 		}
 
-		/* ウィンドウのイベント処理 */
-		if (XPending(disp))
-			procXEvent(win);
-
-		/* 点滅 */
-		if (win->focus && (!win->term->ctype || win->term->ctype % 2))
-			win->blink_status |= BS_CARET * BS_TIMER;
-		else
-			win->blink_status &= ~(BS_CARET * BS_TIMER);
-		BLINK(win->blinktime, blinkd, win->blink_status, BS_BLINK);
-		BLINK(win->rapidtime, rapidd, win->blink_status, BS_RAPID);
-		BLINK(win->carettime, caretd, win->blink_status, BS_CARET);
-
-		/* 再描画 */
-		if ((!FD_ISSET(tfd, &rfds) || 127 < win->redraw_cnt++) && win->redraw_flag) {
-			redraw(win);
-			win->redraw_flag = 0;
-			win->redraw_cnt = 0;
-		}
+		/* フォーカスが外れているときはキャレットのタイマーを止める */
+		win->timer_active[CARET_TIMER] = win->focus && (!win->term->ctype || win->term->ctype % 2);
 
 		/* タイムアウトの設定 */
-		if (win->redraw_flag || XPending(disp)) {
-			timeout = (struct timespec){ 0, 1000 };
-		} else {
-			nexttime = (struct timespec){ 1 << 16, 0 };
-			timespecadd(&now, &nexttime, &nexttime);
-			nexttime = NEXT_TIMER(now, win->belltime,  nexttime);
-			nexttime = NEXT_TIMER(now, win->blinktime, nexttime);
-			nexttime = NEXT_TIMER(now, win->rapidtime, nexttime);
-			nexttime = NEXT_TIMER(now, win->carettime, nexttime);
-			timespecsub(&nexttime, &now, &timeout);
-			win->redraw_flag = 1;
+		nexttime = (struct timespec){ 1 << 16, 0 };
+		timespecadd(&now, &nexttime, &nexttime);
+		for (i = 0; i < TIMER_NUM; i++) {
+			if (!win->timer_active[i])
+				continue;
+			if (timespeccmp(&win->timers[i], &now, <=)) {
+				win->timer_lit[i] = !win->timer_lit[i];
+				win->redraw_flag = 1;
+				timespecadd(&win->timers[i], &duration[i], &win->timers[i]);
+				if (timespeccmp(&win->timers[i], &now, <=))
+					timespecadd(&now, &duration[i], &win->timers[i]);
+			}
+			nexttime = *CHOOSE(CHOOSE(&win->timers[i], &nexttime, <), &now, >);
+		}
+		timespecsub(&nexttime, &now, &timeout);
+
+		/* ベルは繰り返さない */
+		if (win->timer_lit[BELL_TIMER] == 0)
+			win->timer_active[BELL_TIMER] = 0;
+
+		/* 再描画 */
+		if (win->redraw_flag) {
+			redraw(win);
+			win->redraw_flag = 0;
 		}
 	}
 }
@@ -238,6 +234,7 @@ Win *
 openWindow(void)
 {
 	Win *win = xmalloc(sizeof(Win));
+
 	*win = (Win) { .width = 800, .height = 600};
 	win->xpad = win->ypad = xfont->cw / 2;
 
@@ -246,8 +243,6 @@ openWindow(void)
 	if (!win->term)
 		errExit("newTerm failed.\n");
 	win->term->bell = bell;
-	clock_gettime(CLOCK_MONOTONIC, &win->belltime);
-	win->blinktime = win->rapidtime = win->carettime = win->belltime;
 
 	/* ウィンドウ作成 */
 	win->window = XCreateSimpleWindow(
@@ -369,6 +364,7 @@ procXEvent(Win *win)
 				win->selection.acol = mx;
 				win->selection.aline = my + win->term->sb->firstline;
 			}
+			win->redraw_flag = 1;
 			break;
 
 		case ButtonRelease:
@@ -545,9 +541,8 @@ procKeyPress(Win *win, XEvent event, int bufsize)
 	Status status = XLookupChars;
 
 	/* 点滅をリセット */
-	win->blink_status |= BS_CARET;
-	win->carettime = now;
-	win->redraw_flag = 1;
+	win->timer_lit[CARET_TIMER] = 1;
+	win->timers[CARET_TIMER] = now;
 
 	/* 入力文字列を取得 */
 	len = win->ime.xic ?
@@ -602,7 +597,7 @@ redraw(Win *win)
 	int i;
 
 	/* 点滅中フラグをクリア */
-	win->blink_status &= ~((BS_BLINK | BS_RAPID) * BS_TIMER);
+	win->timer_active[BLINK_TIMER] = win->timer_active[RAPID_TIMER] = 0;
 
 	/* 画面をクリア */
 	XGetWindowAttributes(disp, win->window, &wattr);
@@ -666,11 +661,11 @@ drawLine(Win *win, Line *line, int i, int len, int xoff, int yoff)
 
 	/* 点滅 */
 	if (line->attr[i] & BLINK)
-		win->blink_status |= BS_BLINK * BS_TIMER;
+		win->timer_active[BLINK_TIMER] = 1;
 	if (line->attr[i] & RAPID)
-		win->blink_status |= BS_RAPID * BS_TIMER;
-	if (!(((line->attr[i] & BLINK) && win->blink_status & BS_BLINK) ||
-	      ((line->attr[i] & RAPID) && win->blink_status & BS_RAPID) ||
+		win->timer_active[RAPID_TIMER] = 1;
+	if (!(((line->attr[i] & BLINK) && win->timer_lit[BLINK_TIMER]) ||
+	      ((line->attr[i] & RAPID) && win->timer_lit[RAPID_TIMER]) ||
 	      (!(line->attr[i] & BLINK) && !(line->attr[i] & RAPID))))
 		return;
 
@@ -721,7 +716,7 @@ drawCursor(Win *win, int x, int y, int type, Line *line, int index)
 	Line cursor;
 
 	/* 点滅 */
-	if (win->focus && (!type || type % 2) && (win->blink_status & BS_CARET))
+	if (win->focus && (!type || type % 2) && (win->timer_lit[CARET_TIMER]))
 		return;
 
 	switch (type) {
@@ -804,9 +799,8 @@ drawLineRev(Win *win, Line *line, int col1, int col2, int xpad, int ypad, int ro
 void
 bell(void *term)
 {
-	static const struct timespec belld = { 0, 150 * 1000 * 1000 };
-	clock_gettime(CLOCK_MONOTONIC, &win->belltime);
-	timespecadd(&win->belltime, &belld, &win->belltime);
+	win->timer_active[BELL_TIMER] = 1;
+	win->timers[BELL_TIMER] = now;
 }
 
 void
