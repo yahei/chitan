@@ -74,10 +74,10 @@ static void mouseEvent(Win *, XEvent *);
 static void copySelection(Win *);
 static void procKeyPress(Win *, XEvent, int);
 static void redraw(Win *);
-static void drawLine(Win *, Line *, int, int, int, int, int);
-static void drawCursor(Win *, Line *, int, int, int, int, int);
+static void drawLine(Win *, Line *, int, int, int, int);
+static void drawCursor(Win *, Line *, int, int, int);
 static void drawSelection(Win *, struct Selection *);
-static void drawLineRev(Win *, Line *, int, int, int, int, int);
+static void drawLineRev(Win *, Line *, int, int, int);
 static void bell(void *);
 
 /* IME */
@@ -602,7 +602,7 @@ redraw(Win *win)
 
 	/* 端末の内容をウィンドウに表示 */
 	for (i = 0; (line = getLine(win->term, i)); i++)
-		drawLine(win, line, i, 0, win->col, win->xpad, win->ypad);
+		drawLine(win, line, i, 0, win->col, 0);
 
 	/* カーソルかPreeditを表示 */
 	XSetForeground(disp, win->gc, win->term->palette[deffg]);
@@ -618,15 +618,12 @@ redraw(Win *win)
 		pepos = MIN(pepos, win->term->cx);
 
 		/* Preeditとカーソルの描画 */
-		drawLine(win, win->ime.peline, win->term->cy, 0, pewidth,
-				win->xpad + pepos * xfont->cw, win->ypad);
-		drawCursor(win, win->ime.peline, win->term->cy, pepos + pecaretpos,
-				win->xpad, win->ypad, 6);
+		drawLine(win, win->ime.peline, win->term->cy, pepos, pewidth, 0);
+		drawCursor(win, win->ime.peline, win->term->cy, pepos + pecaretpos, 6);
 	} else if (1 <= win->term->dec[25] && win->term->cx < win->col) {
 		/* カーソルの描画 */
 		line = getLine(win->term, win->term->cy);
-		drawCursor(win, line, win->term->cy, win->term->cx,
-				win->xpad, win->ypad, win->term->ctype);
+		drawCursor(win, line, win->term->cy, win->term->cx, win->term->ctype);
 	}
 
 	/* 選択範囲を書く */
@@ -637,20 +634,20 @@ redraw(Win *win)
 }
 
 void
-drawLine(Win *win, Line *line, int row, int col, int width, int xoff, int yoff)
+drawLine(Win *win, Line *line, int row, int col, int width, int pos)
 {
-	int next, i = getCharCnt(line->str, col).index;
+	int next, i = getCharCnt(line->str, pos).index;
 	int x, y, w;
 	int attr, fg, bg;
 	XftColor xc;
 	Color c;
 
-	if (width <= col || line->str[i] == L'\0')
+	if (width <= pos || line->str[i] == L'\0')
 		return;
 
 	/* 同じ属性の文字はまとめて処理する */
 	next = MIN(findNextSGR(line, i), width);
-	drawLine(win, line, row, col + u32swidth(&line->str[i], next - i), width, xoff, yoff);
+	drawLine(win, line, row, col, width, pos + u32swidth(&line->str[i], next - i));
 
 	/* 点滅 */
 	if (line->attr[i] & BLINK)
@@ -663,8 +660,8 @@ drawLine(Win *win, Line *line, int row, int col, int width, int xoff, int yoff)
 		return;
 
 	/* 座標 */
-	x = xoff + col * xfont->cw;
-	y = yoff + row * xfont->ch;
+	x = win->xpad + (col + pos) * xfont->cw;
+	y = win->ypad + row * xfont->ch;
 	w = xfont->cw * u32swidth(&line->str[i], next - i);
 
 	/* 前処理 */
@@ -707,12 +704,12 @@ drawLine(Win *win, Line *line, int row, int col, int width, int xoff, int yoff)
 }
 
 void
-drawCursor(Win *win, Line *line, int row, int col, int xoff, int yoff, int type)
+drawCursor(Win *win, Line *line, int row, int col, int type)
 {
 	const int index = getCharCnt(line->str, col).index;
 	char32_t *c = index < u32slen(line->str) ? &line->str[index] : (char32_t *)L" ";
-	const int x = xoff + col * xfont->cw;
-	const int y = yoff + row * xfont->ch;
+	const int x = win->xpad + col * xfont->cw;
+	const int y = win->ypad + row * xfont->ch;
 	const int width = xfont->cw * u32swidth(c, 1) - 1;
 	int attr;
 	Line cursor;
@@ -729,7 +726,7 @@ drawCursor(Win *win, Line *line, int row, int col, int xoff, int yoff, int type)
 		if (win->focus) {
 			attr = index < u32slen(line->str) ? line->attr[index] : 0;
 			cursor = (Line){c, &attr, &defbg, &deffg};
-			drawLine(win, &cursor, 0, 0, 1, x, y);
+			drawLine(win, &cursor, row, col, 1, 0);
 		} else {
 			XSetForeground(disp, win->gc, BELLCOLOR(win->term->palette[deffg]));
 			XDrawRectangle(disp, win->window, win->gc, x, y, width, xfont->ch - 1);
@@ -753,7 +750,7 @@ drawSelection(Win *win, struct Selection *sel)
 	const int e = MAX(sel->aline, sel->bline) - win->term->sb->firstline;
 	int i;
 
-#define DRAW(n, a, b)   drawLineRev(win, getLine(win->term, n), n, a, b, win->xpad, win->ypad)
+#define DRAW(n, a, b)   drawLineRev(win, getLine(win->term, n), n, a, b)
 	if (sel->rect) {
 		/* 矩形選択 */
 		for (i = MAX(s, 0); i < MIN(e + 1, win->row); i++)
@@ -773,7 +770,7 @@ drawSelection(Win *win, struct Selection *sel)
 }
 
 void
-drawLineRev(Win *win, Line *line, int row, int col1, int col2, int xpad, int ypad)
+drawLineRev(Win *win, Line *line, int row, int col1, int col2)
 {
 	const Color c = win->term->palette[defbg];
 	XftColor xc = { 0, { RED(c) << 8, GREEN(c) << 8, BLUE(c) << 8, 0xffff } };
@@ -786,8 +783,8 @@ drawLineRev(Win *win, Line *line, int row, int col1, int col2, int xpad, int ypa
 	li = MIN(getCharCnt(line->str, MIN(col1, col2)).index, u32slen(line->str));
 	ri = MIN(getCharCnt(line->str, MAX(col1, col2)).index, u32slen(line->str));
 
-	xoff = xpad + getCharCnt(line->str, MIN(col1, col2)).col * xfont->cw;
-	yoff = ypad + row * xfont->ch;
+	xoff = win->xpad + getCharCnt(line->str, MIN(col1, col2)).col * xfont->cw;
+	yoff = win->ypad + row * xfont->ch;
 	len = MIN(u32slen(line->str + li), ri - li);
 
 	XSetForeground(disp, win->gc, BELLCOLOR(win->term->palette[deffg]));
