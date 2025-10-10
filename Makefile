@@ -19,11 +19,14 @@ util.o: util.h
 clean:
 	rm chitan $(OBJS)
 
-install: chitan
-	install chitan /usr/local/bin
+release: CC += -O3 -s
+release: clean chitan
+
+install: release
+	sudo install chitan /usr/local/bin
 	tic -x chitan.info
 
 uninstall:
 	rm /usr/local/bin/chitan
 
-.PHONY: clean install uninstall
+.PHONY: clean release install uninstall
