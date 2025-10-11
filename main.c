@@ -234,11 +234,13 @@ openWindow(void)
 
 	*win = (Win) { .width = 800, .height = 600};
 	win->xpad = win->ypad = xfont->cw / 2;
+	win->col = (win->width - win->xpad * 2) / xfont->cw;
+	win->row = (win->height - win->ypad * 2) / xfont->ch;
 
 	/* 端末をオープン */
-	win->term = openTerm();
+	win->term = openTerm(win->row, win->col, 256);
 	if (!win->term)
-		errExit("newTerm failed.\n");
+		errExit("openTerm failed.\n");
 	win->term->bell = bell;
 
 	/* ウィンドウ作成 */
@@ -247,9 +249,6 @@ openWindow(void)
 			0, 0, win->width, win->height, 1,
 			win->term->palette[deffg],
 			win->term->palette[defbg]);
-	win->col = (win->width - win->xpad * 2) / xfont->cw;
-	win->row = (win->height - win->ypad * 2) / xfont->ch;
-	setWinSize(win->term, win->row, win->col, win->width, win->height);
 
 	/* プロパティ */
 	win->hint = XAllocClassHint();
@@ -631,8 +630,8 @@ redraw(Win *win)
 		drawCursor(win, win->ime.peline, win->term->cy, pepos + pecaretpos, 6);
 	} else if (1 <= win->term->dec[25] && win->term->cx < win->col) {
 		/* カーソルの描画 */
-		line = getLine(win->term, win->term->cy);
-		drawCursor(win, line, win->term->cy, win->term->cx, win->term->ctype);
+		if ((line = getLine(win->term, win->term->cy)))
+			drawCursor(win, line, win->term->cy, win->term->cx, win->term->ctype);
 	}
 
 	/* 選択範囲を書く */

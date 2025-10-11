@@ -37,7 +37,7 @@ static void setSGR(Term *, char *);
 static const char *designateCharSet(Term *, const char *, const char *);
 
 Term *
-openTerm(void)
+openTerm(int row, int col, int bufsize)
 {
 	Term *term;
 	char *sname;
@@ -51,10 +51,10 @@ openTerm(void)
 	/* スクリーンバッファの初期化 */
 	term->ori = term->alt = (struct ScreenBuffer){
 		.firstline = 0,
-		.totallines = 24,
-		.maxlines = 256,
-		.rows = 24, .cols = 80,
-		.scrs = 0, .scre = 23,
+		.totallines = row,
+		.maxlines = row < bufsize ? bufsize : row,
+		.rows = row, .cols = col,
+		.scrs = 0, .scre = row - 1,
 	};
 	term->ori.lines = xmalloc(term->ori.maxlines * sizeof(Line *));
 	term->alt.lines = xmalloc(term->alt.maxlines * sizeof(Line *));
@@ -112,6 +112,7 @@ openTerm(void)
 
 	default: /* master側 */
 		close(slave);
+		setWinSize(term, row, col, 0, 0);
 	}
 
 	return term;
