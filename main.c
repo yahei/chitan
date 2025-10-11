@@ -50,7 +50,7 @@ typedef struct Win {
 	struct Selection{
 		int aline, acol, bline, bcol;
 		int rect, altbuf, dragging;
-		char *str, *clip;
+		char *primary, *clip;
 	} selection;
 } Win;
 
@@ -71,7 +71,7 @@ static Win *openWindow(void);
 static void closeWindow(Win *);
 static void procXEvent(Win *);
 static void mouseEvent(Win *, XEvent *);
-static void copySelection(Win *);
+static void copySelection(Win *, char **);
 static void procKeyPress(Win *, XEvent, int);
 static void redraw(Win *);
 static void drawLine(Win *, Line *, int, int, int, int);
@@ -287,7 +287,7 @@ openWindow(void)
 void
 closeWindow(Win *win)
 {
-	free(win->selection.str);
+	free(win->selection.primary);
 	free(win->selection.clip);
 	freeLine(win->ime.peline);
 	XFree(win->ime.spotlist);
@@ -313,6 +313,7 @@ procXEvent(Win *win)
 	int format;
 	unsigned long ntimes, after;
 	unsigned char *props;
+	char *sel;
 
 	while (0 < XPending(disp)) {
 		XNextEvent(disp, &event);
@@ -333,9 +334,15 @@ procXEvent(Win *win)
 			/* 擬似端末に通知 */
 			state = event.xbutton.state;
 			mb = event.xbutton.button;
-			if ((mb != 1 && mb != 3) || (state & ~(ShiftMask | Mod1Mask)) ||
+			if (!BETWEEN(mb, 1, 4) || (state & ~(ShiftMask | Mod1Mask)) ||
 					(win->term->sb == &win->term->alt && !(state & ShiftMask))) {
 				mouseEvent(win, &event);
+				break;
+			}
+			/* 貼り付け */
+			if (mb == 2) {
+				XConvertSelection(disp, atoms[PRIMARY], atoms[UTF8_STRING],
+						atoms[MY_SELECTION], win->window, event.xkey.time);
 				break;
 			}
 			/* 範囲選択のドラッグを開始 */
@@ -372,7 +379,11 @@ procXEvent(Win *win)
 			}
 			/* 範囲選択のドラッグを終了 */
 			win->selection.dragging = 0;
-			copySelection(win);
+			if (win->selection.aline == win->selection.bline &&
+			    win->selection.acol  == win->selection.bcol)
+				break;
+			XSetSelectionOwner(disp, atoms[PRIMARY], win->window, event.xkey.time);
+			copySelection(win, &win->selection.primary);
 			break;
 
 		case Expose:
@@ -394,18 +405,17 @@ procXEvent(Win *win)
 
 		case SelectionRequest:
 			/* 貼り付ける文字列を送る */
-			if (!win->selection.clip || strlen(win->selection.clip) == 0)
-				break;
 			sre = &event.xselectionrequest;
+			sel = sre->selection == atoms[PRIMARY] ?
+				win->selection.primary : win->selection.clip;
+			if (!sel)
+				sel = "";
 			if (sre->property == None)
 				sre->property = sre->target;
-			XChangeProperty(disp, sre->requestor, sre->property,
-					atoms[UTF8_STRING], 8, PropModeReplace,
-					(unsigned char *)win->selection.clip,
-					strlen(win->selection.clip));
-			XSelectionEvent se = { SelectionNotify, 0, True, disp,
-				sre->requestor, sre->selection, sre->target,
-				sre->property, sre->time };
+			XChangeProperty(disp, sre->requestor, sre->property, atoms[UTF8_STRING],
+					8, PropModeReplace, (unsigned char *)sel, strlen(sel));
+			XSelectionEvent se = { SelectionNotify, 0, True, disp, sre->requestor,
+				sre->selection, sre->target, sre->property, sre->time };
 			XSendEvent(disp, event.xselectionrequest.requestor, False, 0, (XEvent *)&se);
 			break;
 
@@ -459,7 +469,7 @@ mouseEvent(Win *win, XEvent *event)
 }
 
 void
-copySelection(Win *win)
+copySelection(Win *win, char **dst)
 {
 	int len = 256;
 	char32_t *cp, *copy = xmalloc(len * sizeof(copy[0]));
@@ -499,8 +509,8 @@ copySelection(Win *win)
 	}
 
 	/* UTF8に変換して保存 */
-	win->selection.str = xrealloc(win->selection.str, len * 4);
-	wcstombs(win->selection.str, (wchar_t *)copy, len * 4);
+	*dst = xrealloc(*dst, len * 4);
+	wcstombs(*dst, (wchar_t *)copy, len * 4);
 
 	free(copy);
 }
@@ -555,8 +565,7 @@ procKeyPress(Win *win, XEvent event, int bufsize)
 	/* C-S-cでコピー */
 	if (keysym == XK_C && event.xkey.state & ControlMask) {
 		XSetSelectionOwner(disp, atoms[CLIPBOARD], win->window, event.xkey.time);
-		win->selection.clip = xrealloc(win->selection.clip, strlen(win->selection.str) + 1);
-		strcpy(win->selection.clip, win->selection.str);
+		copySelection(win, &win->selection.clip);
 		return;
 	}
 
