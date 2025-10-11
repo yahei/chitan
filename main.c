@@ -636,7 +636,9 @@ redraw(Win *win)
 	}
 
 	/* 選択範囲を書く */
-	if (win->selection.altbuf == (win->term->sb == &win->term->alt))
+	if ((win->selection.aline != win->selection.bline ||
+	     win->selection.acol  != win->selection.bcol) &&
+	    win->selection.altbuf == (win->term->sb == &win->term->alt))
 		drawSelection(win, &win->selection);
 
 	XSync(disp, False);
@@ -708,7 +710,7 @@ drawLine(Win *win, Line *line, int row, int col, int width, int pos)
 	/* 後処理 */
 	if (line->attr[i] & ULINE) { /* 下線 */
 		XSetForeground(disp, win->gc, win->term->palette[fg]);
-		XDrawLine(disp, win->window, win->gc, x, y + 1, x + w, y + 1);
+		XDrawLine(disp, win->window, win->gc, x, y + 1, x + w - 1, y + 1);
 	}
 }
 
@@ -739,6 +741,7 @@ drawCursor(Win *win, Line *line, int row, int col, int type)
 		} else {
 			XSetForeground(disp, win->gc, BELLCOLOR(win->term->palette[deffg]));
 			XDrawRectangle(disp, win->window, win->gc, x, y, width, xfont->ch - 1);
+			XDrawPoint(disp, win->window, win->gc, x + width, y + xfont->ch - 1);
 		}
 		break;
 	case 3: /* 下線 */
