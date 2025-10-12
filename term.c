@@ -334,6 +334,9 @@ procESC(Term *term, const char *head, const char *tail)
 	case 0x4d: /* RI */
 		if (sb->scrs < term->cy)
 			term->cy--;
+		else if (MAX(sb->totallines - sb->maxlines, 0) < sb->firstline &&
+				sb->scrs == 0 && sb->scre == sb->rows - 1)
+			sb->firstline--;
 		else
 			areaScroll(term, sb->scrs, sb->scre, -1);
 		break;
@@ -713,12 +716,12 @@ areaScroll(Term *term, int first, int last, int num)
 		return;
 
 	for (i = 0; i < area; i++) {
-		index = sb->totallines - sb->rows + first + i;
+		index = sb->firstline + first + i;
 		tmp[i] = LINE(sb, index);
 	}
 
 	for (i = 0; i < area; i++) {
-		index = sb->totallines - sb->rows + first + i;
+		index = sb->firstline + first + i;
 
 		if (i - num < 0 || area <= i - num)
 			freeLine(LINE(sb, index));
