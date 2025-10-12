@@ -17,7 +17,7 @@ font.o: util.h font.h
 util.o: util.h
 
 clean:
-	rm chitan $(OBJS)
+	rm -f chitan $(OBJS)
 
 release: CC += -O3 -s
 release: clean chitan
