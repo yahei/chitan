@@ -18,6 +18,7 @@
 		((int)( BLUE(c1) * (a1) +  BLUE(c2) * (a2)) <<  0))
 #define BELLCOLOR(color) (win->timer_lit[BELL_TIMER] ?\
 		BLEND_COLOR(color, 0.85, 0xffffffff, 0.15) : color)
+#define SCROLLMAX(sb)   (sb->firstline - MAX(sb->totallines - sb->maxlines, 0))
 
 enum timer_names { BELL_TIMER, BLINK_TIMER, RAPID_TIMER, CARET_TIMER, TIMER_NUM };
 
@@ -30,7 +31,8 @@ typedef struct Win {
 	int width, height;
 	int xpad, ypad;
 	int col, row;
-	int scr;
+	int scr, prevfst;
+	struct ScreenBuffer *prevbuf;
 	struct {
 		XIC xic;
 		XICCallback icdestroy;
@@ -211,6 +213,13 @@ run(void)
 		if (win->timer_lit[BELL_TIMER] == 0)
 			win->timer_active[BELL_TIMER] = 0;
 
+		/* スクロール量の更新 */
+		win->scr = (win->prevbuf != win->term->sb) ? 0 : win->scr;
+		win->scr += (0 < win->scr) ? win->term->sb->firstline - win->prevfst : 0;
+		win->scr = CLIP(win->scr, 0, SCROLLMAX(win->term->sb));
+		win->prevbuf = win->term->sb;
+		win->prevfst = win->term->sb->firstline;
+
 		/* 再描画 */
 		if (win->redraw_flag) {
 			redraw(win);
@@ -310,7 +319,7 @@ procXEvent(Win *win)
 	XEvent event;
 	XConfigureEvent *e;
 	XSelectionRequestEvent *sre;
-	int mx, my, state, mb = 0, scrmax, oldrow;
+	int mx, my, state, mb = 0;
 	Atom prop, type;
 	int format;
 	unsigned long ntimes, after;
@@ -343,9 +352,7 @@ procXEvent(Win *win)
 			if ((mb == 4 || mb == 5) && win->term->sb == &win->term->ori) {
 				win->redraw_flag = 1;
 				win->scr += (mb == 4 ? 1 : -1) * 3;
-				scrmax = win->term->sb->firstline -
-					MAX(win->term->sb->totallines - win->term->sb->maxlines, 0);
-				win->scr = CLIP(win->scr, 0, scrmax);
+				win->scr = CLIP(win->scr, 0, SCROLLMAX(win->term->sb));
 				break;
 			}
 			/* 擬似端末に通知 */
@@ -412,13 +419,10 @@ procXEvent(Win *win)
 			e = (XConfigureEvent *)&event;
 			if (win->width == e->width && win->height == e->height)
 				break;
-			oldrow = win->row;
 			win->width = e->width;
 			win->height = e->height;
 			win->col = (win->width - win->xpad * 2) / xfont->cw;
 			win->row = (win->height - win->ypad * 2) / xfont->ch;
-			if (0 < win->scr)
-				win->scr = MAX(win->scr - (win->row - oldrow), 0);
 			setWinSize(win->term, win->row, win->col, win->width, win->height);
 			break;
 
