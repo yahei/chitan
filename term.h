@@ -1,6 +1,7 @@
 #include "line.h"
 
 typedef uint_least32_t Color;
+#define ALPHA(c) ((c) >> 24 & 0xff)
 #define RED(c)   ((c) >> 16 & 0xff)
 #define GREEN(c) ((c) >>  8 & 0xff)
 #define BLUE(c)  ((c) >>  0 & 0xff)

@@ -129,38 +129,38 @@ setDefaultPalette(Term *term)
 	int i;
 
 	/* Selenized Black (https://github.com/jan-warchol/selenized) */
-	term->palette[  0] = 0x3b3b3b;
-	term->palette[  1] = 0xed4a46;
-	term->palette[  2] = 0x70b433;
-	term->palette[  3] = 0xdbb32d;
-	term->palette[  4] = 0x368aeb;
-	term->palette[  5] = 0xeb6eb7;
-	term->palette[  6] = 0x3fc5b7;
-	term->palette[  7] = 0xb9b9b9;
+	term->palette[  0] = 0xff3b3b3b;
+	term->palette[  1] = 0xffed4a46;
+	term->palette[  2] = 0xff70b433;
+	term->palette[  3] = 0xffdbb32d;
+	term->palette[  4] = 0xff368aeb;
+	term->palette[  5] = 0xffeb6eb7;
+	term->palette[  6] = 0xff3fc5b7;
+	term->palette[  7] = 0xffb9b9b9;
 
-	term->palette[  8] = 0x545454;
-	term->palette[  9] = 0xff5e56;
-	term->palette[ 10] = 0x83c746;
-	term->palette[ 11] = 0xefc541;
-	term->palette[ 12] = 0x4f9cfe;
-	term->palette[ 13] = 0xff81ca;
-	term->palette[ 14] = 0x56d8c9;
-	term->palette[ 15] = 0xdedede;
+	term->palette[  8] = 0xff545454;
+	term->palette[  9] = 0xffff5e56;
+	term->palette[ 10] = 0xff83c746;
+	term->palette[ 11] = 0xffefc541;
+	term->palette[ 12] = 0xff4f9cfe;
+	term->palette[ 13] = 0xffff81ca;
+	term->palette[ 14] = 0xff56d8c9;
+	term->palette[ 15] = 0xffdedede;
 
 	/* 216 colors */
 	for (i = 0; i < 216; i++)
-		term->palette[i + 16] =
+		term->palette[i + 16] = (0xff << 24) +
 			(vals[(i / 36) % 6] << 16) +
 			(vals[(i /  6) % 6] <<  8) +
 			(vals[(i /  1) % 6] <<  0);
 
 	/* Grayscale colors */
 	for (i = 0; i < 24; i++)
-		term->palette[i + 232] = 0x0a0a0a * i + 0x080808;
+		term->palette[i + 232] = 0x0a0a0a * i + 0xff080808;
 
 	/* fg bg */
-	term->palette[deffg] = 0xb9b9b9;
-	term->palette[defbg] = 0x181818;
+	term->palette[deffg] = 0xffb9b9b9;
+	term->palette[defbg] = 0xff181818;
 }
 
 void

@@ -13,6 +13,7 @@
 
 #define CHOOSE(a, b, c) (timespeccmp((a), (b), c) ? (a) : (b))
 #define BLEND_COLOR(c1, a1, c2, a2) (\
+		((int)(ALPHA(c1) * (a1) + ALPHA(c2) * (a2)) << 24) +\
 		((int)(  RED(c1) * (a1) +   RED(c2) * (a2)) << 16) +\
 		((int)(GREEN(c1) * (a1) + GREEN(c2) * (a2)) <<  8) +\
 		((int)( BLUE(c1) * (a1) +  BLUE(c2) * (a2)) <<  0))
@@ -110,6 +111,7 @@ main(int argc, char *args[])
 void
 init(void)
 {
+	XVisualInfo vinfo;
 	char **names;
 	int i;
 
@@ -121,8 +123,9 @@ init(void)
 	disp= XOpenDisplay(NULL);
 	if (disp== NULL)
 		fatal("XOpenDisplay failed.\n");
-	visual = DefaultVisual(disp, 0);
-	cmap = DefaultColormap(disp, 0);
+	XMatchVisualInfo(disp, XDefaultScreen(disp), 32, TrueColor, &vinfo);
+	visual = vinfo.visual;
+	cmap = XCreateColormap(disp, DefaultRootWindow(disp), visual, None);
 
 	/* XIM */
 	XRegisterIMInstantiateCallback(disp, NULL, NULL, NULL,
@@ -255,17 +258,19 @@ openWindow(void)
 	if (!win->term)
 		errExit("openTerm failed.\n");
 	win->term->bell = bell;
+	win->term->palette[defbg] = 0xcc000000 + (0x00ffffff & win->term->palette[defbg]);
 
 	/* ウィンドウの属性 */
 	win->attr.event_mask = KeyPressMask | KeyReleaseMask |
 		ExposureMask | FocusChangeMask | StructureNotifyMask |
 		ButtonPressMask | ButtonReleaseMask | ButtonMotionMask;
+	win->attr.colormap = cmap;
+	win->attr.border_pixel = win->term->palette[defbg];
 
 	/* ウィンドウ作成 */
 	win->window = XCreateWindow(disp, DefaultRootWindow(disp),
-			0, 0, win->width, win->height, 1,
-			DefaultDepth(disp, 0), InputOutput, visual,
-			CWEventMask, &win->attr);
+			0, 0, win->width, win->height, 1, 32, InputOutput, visual,
+			CWEventMask | CWColormap | CWBorderPixel, &win->attr);
 
 	/* プロパティ */
 	win->hint = XAllocClassHint();
