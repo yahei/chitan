@@ -77,7 +77,7 @@ static void fin(void);
 /* Win */
 static Win *openWindow(void);
 static void closeWindow(Win *);
-static void handleXEvent(Win *);
+static char handleXEvent(Win *);
 static void mouseEvent(Win *, XEvent *);
 static void copySelection(Win *, char **);
 static char keyPressEvent(Win *, XEvent, int);
@@ -178,7 +178,8 @@ run(void)
 		clock_gettime(CLOCK_MONOTONIC, &now);
 
 		/* ウィンドウのイベント処理 */
-		handleXEvent(win);
+		if (handleXEvent(win) < 0)
+			return;
 
 		/* 端末のread */
 		if (0 < readPty(win->term)) {
@@ -293,6 +294,10 @@ openWindow(void)
 			NULL);
 	win->ime.peline = allocLine();
 
+	/* ウィンドウが閉じられたときイベントを受け取る */
+	Atom atom = XInternAtom(disp, "WM_DELETE_WINDOW", False);
+	XSetWMProtocols(disp, win->window, &atom, 1);
+
 	/* ウィンドウを表示 */
 	XMapWindow(disp, win->window);
 	XSync(disp, False);
@@ -318,7 +323,7 @@ closeWindow(Win *win)
 	free(win);
 }
 
-void
+char
 handleXEvent(Win *win)
 {
 	XEvent event;
@@ -438,6 +443,10 @@ handleXEvent(Win *win)
 			win->redraw_flag = 1;
 			break;
 
+		case ClientMessage:
+			/* ウィンドウが閉じられた */
+			return -1;
+
 		case SelectionRequest:
 			/* 貼り付ける文字列を送る */
 			sre = &event.xselectionrequest;
@@ -469,6 +478,8 @@ handleXEvent(Win *win)
 			}
 		}
 	}
+
+	return 0;
 }
 
 void
