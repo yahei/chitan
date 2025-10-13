@@ -23,40 +23,43 @@
 
 enum timer_names { BELL_TIMER, BLINK_TIMER, RAPID_TIMER, CARET_TIMER, TIMER_NUM };
 
+typedef struct IME {
+	XIC xic;
+	XICCallback icdestroy;
+	XIMCallback pestart;
+	XIMCallback pedone;
+	XIMCallback pedraw;
+	XIMCallback pecaret;
+	XPoint spot;
+	XVaNestedList spotlist;
+	XVaNestedList peattrs;
+	Line *peline;
+	int caret;
+} IME;
+
 typedef struct Win {
-	Term *term;
 	Window window;
-	GC gc;
-	XftDraw *draw;
 	XClassHint *hint;
 	XSetWindowAttributes attr;
-	int width, height;
 	int xpad, ypad;
+	IME ime;
+	GC gc;
+	XftDraw *draw;
+	int width, height;
+	char focus;
+
+	Term *term;
 	int col, row;
+	int redraw_flag;
 	int scr, prevfst;
 	struct ScreenBuffer *prevbuf;
-	struct {
-		XIC xic;
-		XICCallback icdestroy;
-		XIMCallback pestart;
-		XIMCallback pedone;
-		XIMCallback pedraw;
-		XIMCallback pecaret;
-		XPoint spot;
-		XVaNestedList spotlist;
-		XVaNestedList peattrs;
-		Line *peline;
-		int caret;
-	} ime;
-	int redraw_flag;
-	struct timespec timers[TIMER_NUM];
-	char timer_active[TIMER_NUM], timer_lit[TIMER_NUM];
-	char focus;
 	struct Selection{
 		int aline, acol, bline, bcol;
 		int rect, altbuf, dragging;
 		char *primary, *clip;
 	} selection;
+	struct timespec timers[TIMER_NUM];
+	char timer_active[TIMER_NUM], timer_lit[TIMER_NUM];
 } Win;
 
 static Display *disp;
@@ -74,10 +77,10 @@ static void fin(void);
 /* Win */
 static Win *openWindow(void);
 static void closeWindow(Win *);
-static void procXEvent(Win *);
+static void handleXEvent(Win *);
 static void mouseEvent(Win *, XEvent *);
 static void copySelection(Win *, char **);
-static int procKeyPress(Win *, XEvent, int);
+static char keyPressEvent(Win *, XEvent, int);
 static void redraw(Win *);
 static void drawLine(Win *, Line *, int, int, int, int);
 static void drawCursor(Win *, Line *, int, int, int);
@@ -175,8 +178,7 @@ run(void)
 		clock_gettime(CLOCK_MONOTONIC, &now);
 
 		/* ウィンドウのイベント処理 */
-		if (XPending(disp))
-			procXEvent(win);
+		handleXEvent(win);
 
 		/* 端末のread */
 		if (0 < readPty(win->term)) {
@@ -317,7 +319,7 @@ closeWindow(Win *win)
 }
 
 void
-procXEvent(Win *win)
+handleXEvent(Win *win)
 {
 	XEvent event;
 	XConfigureEvent *e;
@@ -340,8 +342,8 @@ procXEvent(Win *win)
 
 		switch (event.type) {
 		case KeyPress:
-			/* 端末に文字を送る */
-			if (procKeyPress(win, event, 64)) {
+			/* キーボード入力 */
+			if (keyPressEvent(win, event, 64)) {
 				win->timer_lit[CARET_TIMER] = 1;
 				win->timers[CARET_TIMER] = now;
 				win->scr = 0;
@@ -413,7 +415,7 @@ procXEvent(Win *win)
 			break;
 
 		case Expose:
-			/* 画面を再描画する */
+			/* 再描画 */
 			win->redraw_flag = 1;
 			break;
 
@@ -427,6 +429,13 @@ procXEvent(Win *win)
 			win->col = (win->width - win->xpad * 2) / xfont->cw;
 			win->row = (win->height - win->ypad * 2) / xfont->ch;
 			setWinSize(win->term, win->row, win->col, win->width, win->height);
+			break;
+
+		case FocusIn:
+		case FocusOut:
+			/* フォーカスの変化 */
+			win->focus = event.type == FocusIn;
+			win->redraw_flag = 1;
 			break;
 
 		case SelectionRequest:
@@ -458,15 +467,6 @@ procXEvent(Win *win)
 					writePty(win->term, "\e[201~", 6);
 				XFree(props);
 			}
-
-		case FocusIn:
-			win->focus = 1;
-			win->redraw_flag = 1;
-			break;
-		case FocusOut:
-			win->focus = 0;
-			win->redraw_flag = 1;
-			break;
 		}
 	}
 }
@@ -541,8 +541,8 @@ copySelection(Win *win, char **dst)
 	free(copy);
 }
 
-int
-procKeyPress(Win *win, XEvent event, int bufsize)
+char
+keyPressEvent(Win *win, XEvent event, int bufsize)
 {
 	struct Key { int symbol; char *normal; char *app; } keys[] = {
 		{ XK_Up,        "\e[A",         "\eOA" },
@@ -578,7 +578,7 @@ procKeyPress(Win *win, XEvent event, int bufsize)
 		Xutf8LookupString(win->ime.xic, &event.xkey, buf, bufsize, &keysym, &status) :
 		XLookupString(&event.xkey, buf, bufsize, &keysym, NULL);
 	if (status == XBufferOverflow)
-		return procKeyPress(win, event, len);
+		return keyPressEvent(win, event, len);
 
 	/* IMEの確定っぽい場合(コールバックがすぐ来ない場合があるため) */
 	if (1 < strlen(buf))
