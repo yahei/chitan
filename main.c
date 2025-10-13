@@ -28,6 +28,7 @@ typedef struct Win {
 	GC gc;
 	XftDraw *draw;
 	XClassHint *hint;
+	XSetWindowAttributes attr;
 	int width, height;
 	int xpad, ypad;
 	int col, row;
@@ -255,25 +256,22 @@ openWindow(void)
 		errExit("openTerm failed.\n");
 	win->term->bell = bell;
 
+	/* ウィンドウの属性 */
+	win->attr.event_mask = KeyPressMask | KeyReleaseMask |
+		ExposureMask | FocusChangeMask | StructureNotifyMask |
+		ButtonPressMask | ButtonReleaseMask | ButtonMotionMask;
+
 	/* ウィンドウ作成 */
-	win->window = XCreateSimpleWindow(
-			disp, DefaultRootWindow(disp),
+	win->window = XCreateWindow(disp, DefaultRootWindow(disp),
 			0, 0, win->width, win->height, 1,
-			win->term->palette[deffg],
-			win->term->palette[defbg]);
+			DefaultDepth(disp, 0), InputOutput, visual,
+			CWEventMask, &win->attr);
 
 	/* プロパティ */
 	win->hint = XAllocClassHint();
 	win->hint->res_name = "chitan";
 	win->hint->res_class = "chitan";
 	XSetClassHint(disp, win->window, win->hint);
-
-	/* イベントマスク */
-	XSelectInput(disp, win->window,
-			FocusChangeMask | ExposureMask | StructureNotifyMask |
-			KeyPressMask | KeyReleaseMask |
-			ButtonPressMask | ButtonReleaseMask |
-			ButtonMotionMask | PointerMotionMask);
 
 	/* 描画の準備 */
 	win->gc = XCreateGC(disp, win->window, 0, NULL);
