@@ -256,18 +256,27 @@ createPane(Display *disp, Drawable d, int width, int height, int depth)
 {
 	Pane *pane = xmalloc(sizeof(Pane));
 
-	pane->pixmap = XCreatePixmap(disp, d, width, height, depth);
-	pane->gc = XCreateGC(disp, pane->pixmap, 0, NULL);
-	pane->draw = XftDrawCreate(disp, pane->pixmap, visual, cmap);
-	pane->d = d;
-	pane->depth = depth;
-	pane->width = width;
-	pane->height = height;
-	pane->xpad = xfont->cw / 2;
-	pane->ypad = xfont->cw / 2;
+	*pane = (Pane){
+		.d = d, .depth = depth,
+		.width = width, .height = height,
+		.xpad = xfont->cw / 2, .ypad = xfont->cw / 2
+	};
 	memset(&pane->timers, 0, TIMER_NUM * sizeof(struct timespec));
 	memset(&pane->timer_active, 0, TIMER_NUM);
 	memset(&pane->timer_lit, 0, TIMER_NUM);
+
+	/* 端末をオープン */
+	pane->term = openTerm((height - pane->ypad * 2) / xfont->ch,
+			(width - pane->xpad * 2) / xfont->cw, 256);
+	if (!pane->term)
+		errExit("openTerm failed.\n");
+	pane->term->bell = bell;
+	pane->term->palette[defbg] = 0xcc000000 + (0x00ffffff & pane->term->palette[defbg]);
+
+	/* 描画の準備 */
+	pane->pixmap = XCreatePixmap(disp, d, width, height, depth);
+	pane->gc = XCreateGC(disp, pane->pixmap, 0, NULL);
+	pane->draw = XftDrawCreate(disp, pane->pixmap, visual, cmap);
 
 	return pane;
 }
@@ -275,6 +284,7 @@ createPane(Display *disp, Drawable d, int width, int height, int depth)
 void
 destroyPane(Pane *pane)
 {
+	closeTerm(pane->term);
 	XftDrawDestroy(pane->draw);
 	XFreeGC(disp, pane->gc);
 	XFreePixmap(disp, pane->pixmap);
@@ -293,6 +303,9 @@ setPaneSize(Pane *pane, int width, int height)
 	pane->draw = XftDrawCreate(disp, pane->pixmap, visual, cmap);
 	pane->width = width;
 	pane->height = height;
+
+	setWinSize(pane->term, (height - pane->ypad * 2) / xfont->ch,
+			(width - pane->xpad * 2) / xfont->cw, width, height);
 }
 
 Win *
@@ -302,14 +315,6 @@ openWindow(void)
 	Win *win = xmalloc(sizeof(Win));
 
 	*win = (Win) { .width = 800, .height = 600, .pane = pane };
-
-	/* 端末をオープン */
-	pane->term = openTerm( (win->height - pane->ypad * 2) / xfont->ch,
-			(win->width - pane->xpad * 2) / xfont->cw, 256);
-	if (!pane->term)
-		errExit("openTerm failed.\n");
-	pane->term->bell = bell;
-	pane->term->palette[defbg] = 0xcc000000 + (0x00ffffff & pane->term->palette[defbg]);
 
 	/* ウィンドウの属性 */
 	win->attr.event_mask = KeyPressMask | KeyReleaseMask |
@@ -368,7 +373,6 @@ closeWindow(Win *win)
 	XFreeGC(disp, win->gc);
 	XFree(win->hint);
 	XDestroyWindow(disp, win->window);
-	closeTerm(win->pane->term);
 	free(win);
 }
 
@@ -482,10 +486,6 @@ handleXEvent(Win *win)
 			win->width = e->width;
 			win->height = e->height;
 			setPaneSize(pane, e->width, e->height);
-			setWinSize(pane->term,
-					(win->height - pane->ypad * 2) / xfont->ch,
-					(win->width - pane->xpad * 2) / xfont->cw,
-					e->width, e->height);
 			break;
 
 		case FocusIn:
