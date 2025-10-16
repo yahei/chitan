@@ -17,7 +17,7 @@
 		((int)(  RED(c1) * (a1) +   RED(c2) * (a2)) << 16) +\
 		((int)(GREEN(c1) * (a1) + GREEN(c2) * (a2)) <<  8) +\
 		((int)( BLUE(c1) * (a1) +  BLUE(c2) * (a2)) <<  0))
-#define BELLCOLOR(color) (win->pane->timer_lit[BELL_TIMER] ?\
+#define BELLCOLOR(color) (pane->timer_lit[BELL_TIMER] ?\
 		BLEND_COLOR(color, 0.85, 0xffffffff, 0.15) : color)
 #define SCROLLMAX(sb)   (sb->firstline - MAX(sb->totallines - sb->maxlines, 0))
 
@@ -38,10 +38,13 @@ typedef struct IME {
 } IME;
 
 typedef struct Pane {
-	int width, height;
-	int xpad, ypad;
-	char focus;
-	int redraw_flag;
+	Pixmap pixmap;
+	Drawable d;
+	unsigned int depth;
+	GC gc;
+	XftDraw *draw;
+	int width, height, xpad, ypad;
+	char focus, redraw_flag;
 	Term *term;
 	int scr, prevfst;
 	struct ScreenBuffer *prevbuf;
@@ -51,7 +54,8 @@ typedef struct Pane {
 		char *primary, *clip;
 	} selection;
 	struct timespec timers[TIMER_NUM];
-	char timer_active[TIMER_NUM], timer_lit[TIMER_NUM];
+	char timer_active[TIMER_NUM];
+	char timer_lit[TIMER_NUM];
 } Pane;
 
 typedef struct Win {
@@ -80,19 +84,21 @@ static void fin(void);
 /* Pane */
 static Pane *createPane(Display *, Drawable, int, int, int);
 static void destroyPane(Pane *);
+static void setPaneSize(Pane *, int, int);
 
 /* Win */
 static Win *openWindow(void);
 static void closeWindow(Win *);
 static char handleXEvent(Win *);
-static void mouseEvent(Win *, XEvent *);
-static void copySelection(Win *, char **);
+static void mouseEvent(Pane *, XEvent *);
+static void copySelection(Pane *, char **);
 static char keyPressEvent(Win *, XEvent, int);
 static void redraw(Win *);
-static void drawLine(Win *, Line *, int, int, int, int);
-static void drawCursor(Win *, Line *, int, int, int);
-static void drawSelection(Win *, struct Selection *);
-static void drawLineRev(Win *, Line *, int, int, int);
+static void drawPane(Pane *, const IME *);
+static void drawLine(Pane *, Line *, int, int, int, int);
+static void drawCursor(Pane *, Line *, int, int, int);
+static void drawSelection(Pane *, struct Selection *);
+static void drawLineRev(Pane *, Line *, int, int, int);
 static void bell(void *);
 
 /* IME */
@@ -159,6 +165,7 @@ init(void)
 void
 run(void)
 {
+	Pane *pane = win->pane;
 	struct timespec timeout = { 0, 1000 }, nexttime;
 	static const struct timespec duration[] = {
 		[BELL_TIMER]  = { 0, 150 * 1000 * 1000 },
@@ -167,7 +174,7 @@ run(void)
 		[CARET_TIMER] = { 0, 500 * 1000 * 1000 },
 	};
 	fd_set rfds;
-	int tfd = win->pane->term->master;
+	int tfd = pane->term->master;
 	int xfd = XConnectionNumber(disp);
 	int i;
 
@@ -189,12 +196,12 @@ run(void)
 			return;
 
 		/* 端末のread */
-		if (0 < readPty(win->pane->term)) {
-			win->pane->redraw_flag = 1;
+		if (0 < readPty(pane->term)) {
+			pane->redraw_flag = 1;
 			/* IMEスポット移動 */
 			if (win->ime.xic) {
-				win->ime.spot.x = win->pane->xpad + win->pane->term->cx * xfont->cw;
-				win->ime.spot.y = win->pane->ypad + win->pane->term->cy * xfont->ch + xfont->ascent;
+				win->ime.spot.x = pane->xpad + pane->term->cx * xfont->cw;
+				win->ime.spot.y = pane->ypad + pane->term->cy * xfont->ch + xfont->ascent;
 				XSetICValues(win->ime.xic, XNPreeditAttributes, win->ime.spotlist, NULL);
 			}
 		} else if (errno == EIO) {
@@ -202,43 +209,34 @@ run(void)
 		}
 
 		/* 点滅させる必要がないときはキャレットのタイマーを止める */
-		win->pane->timer_active[CARET_TIMER] = win->pane->focus &&
-			(win->pane->term->cy + win->pane->scr <= win->pane->term->sb->rows) &&
-			(!win->pane->term->ctype || win->pane->term->ctype % 2);
+		pane->timer_active[CARET_TIMER] = pane->focus &&
+			(pane->term->cy + pane->scr <= pane->term->sb->rows) &&
+			(!pane->term->ctype || pane->term->ctype % 2);
 
 		/* タイムアウトの設定 */
 		nexttime = (struct timespec){ 1 << 16, 0 };
 		timespecadd(&now, &nexttime, &nexttime);
 		for (i = 0; i < TIMER_NUM; i++) {
-			if (!win->pane->timer_active[i])
+			if (!pane->timer_active[i])
 				continue;
-			if (timespeccmp(&win->pane->timers[i], &now, <=)) {
-				win->pane->timer_lit[i] = !win->pane->timer_lit[i];
-				win->pane->redraw_flag = 1;
-				timespecadd(&win->pane->timers[i], &duration[i], &win->pane->timers[i]);
-				if (timespeccmp(&win->pane->timers[i], &now, <=))
-					timespecadd(&now, &duration[i], &win->pane->timers[i]);
+			if (timespeccmp(&pane->timers[i], &now, <=)) {
+				pane->timer_lit[i] = !pane->timer_lit[i];
+				pane->redraw_flag = 1;
+				timespecadd(&pane->timers[i], &duration[i], &pane->timers[i]);
+				if (timespeccmp(&pane->timers[i], &now, <=))
+					timespecadd(&now, &duration[i], &pane->timers[i]);
 			}
-			nexttime = *CHOOSE(CHOOSE(&win->pane->timers[i], &nexttime, <), &now, >);
+			nexttime = *CHOOSE(CHOOSE(&pane->timers[i], &nexttime, <), &now, >);
 		}
 		timespecsub(&nexttime, &now, &timeout);
 
 		/* ベルは繰り返さない */
-		if (win->pane->timer_lit[BELL_TIMER] == 0)
-			win->pane->timer_active[BELL_TIMER] = 0;
-
-		/* スクロール量の更新 */
-		win->pane->scr = (win->pane->prevbuf != win->pane->term->sb) ? 0 : win->pane->scr;
-		win->pane->scr += (0 < win->pane->scr) ? win->pane->term->sb->firstline - win->pane->prevfst : 0;
-		win->pane->scr = CLIP(win->pane->scr, 0, SCROLLMAX(win->pane->term->sb));
-		win->pane->prevbuf = win->pane->term->sb;
-		win->pane->prevfst = win->pane->term->sb->firstline;
+		if (pane->timer_lit[BELL_TIMER] == 0)
+			pane->timer_active[BELL_TIMER] = 0;
 
 		/* 再描画 */
-		if (win->pane->redraw_flag) {
+		if (pane->redraw_flag)
 			redraw(win);
-			win->pane->redraw_flag = 0;
-		}
 	}
 }
 
@@ -254,14 +252,22 @@ fin(void)
 }
 
 Pane *
-createPane(Display *disp, Drawable screen, int width, int height, int depth)
+createPane(Display *disp, Drawable d, int width, int height, int depth)
 {
 	Pane *pane = xmalloc(sizeof(Pane));
 
+	pane->pixmap = XCreatePixmap(disp, d, width, height, depth);
+	pane->gc = XCreateGC(disp, pane->pixmap, 0, NULL);
+	pane->draw = XftDrawCreate(disp, pane->pixmap, visual, cmap);
+	pane->d = d;
+	pane->depth = depth;
 	pane->width = width;
 	pane->height = height;
 	pane->xpad = xfont->cw / 2;
 	pane->ypad = xfont->cw / 2;
+	memset(&pane->timers, 0, TIMER_NUM * sizeof(struct timespec));
+	memset(&pane->timer_active, 0, TIMER_NUM);
+	memset(&pane->timer_lit, 0, TIMER_NUM);
 
 	return pane;
 }
@@ -269,31 +275,48 @@ createPane(Display *disp, Drawable screen, int width, int height, int depth)
 void
 destroyPane(Pane *pane)
 {
+	XftDrawDestroy(pane->draw);
+	XFreeGC(disp, pane->gc);
+	XFreePixmap(disp, pane->pixmap);
 	free(pane);
+}
+
+void
+setPaneSize(Pane *pane, int width, int height)
+{
+	XftDrawDestroy(pane->draw);
+	XFreeGC(disp, pane->gc);
+	XFreePixmap(disp, pane->pixmap);
+
+	pane->pixmap = XCreatePixmap(disp, pane->d, width, height, pane->depth);
+	pane->gc = XCreateGC(disp, pane->pixmap, 0, NULL);
+	pane->draw = XftDrawCreate(disp, pane->pixmap, visual, cmap);
+	pane->width = width;
+	pane->height = height;
 }
 
 Win *
 openWindow(void)
 {
+	Pane *pane = createPane(disp, DefaultRootWindow(disp), 800, 600, 32);
 	Win *win = xmalloc(sizeof(Win));
 
-	*win = (Win) { .width = 800, .height = 600};
-	win->pane = createPane(disp, DefaultRootWindow(disp), 800, 600, 32);
+	*win = (Win) { .width = 800, .height = 600, .pane = pane };
 
 	/* 端末をオープン */
-	win->pane->term = openTerm( (win->height - win->pane->ypad * 2) / xfont->ch,
-			(win->width - win->pane->xpad * 2) / xfont->cw, 256);
-	if (!win->pane->term)
+	pane->term = openTerm( (win->height - pane->ypad * 2) / xfont->ch,
+			(win->width - pane->xpad * 2) / xfont->cw, 256);
+	if (!pane->term)
 		errExit("openTerm failed.\n");
-	win->pane->term->bell = bell;
-	win->pane->term->palette[defbg] = 0xcc000000 + (0x00ffffff & win->pane->term->palette[defbg]);
+	pane->term->bell = bell;
+	pane->term->palette[defbg] = 0xcc000000 + (0x00ffffff & pane->term->palette[defbg]);
 
 	/* ウィンドウの属性 */
 	win->attr.event_mask = KeyPressMask | KeyReleaseMask |
 		ExposureMask | FocusChangeMask | StructureNotifyMask |
 		ButtonPressMask | ButtonReleaseMask | ButtonMotionMask;
 	win->attr.colormap = cmap;
-	win->attr.border_pixel = win->pane->term->palette[defbg];
+	win->attr.border_pixel = pane->term->palette[defbg];
 
 	/* ウィンドウ作成 */
 	win->window = XCreateWindow(disp, DefaultRootWindow(disp),
@@ -309,8 +332,8 @@ openWindow(void)
 	/* 描画の準備 */
 	win->gc = XCreateGC(disp, win->window, 0, NULL);
 	win->draw = XftDrawCreate(disp, win->window, visual, cmap);
-	XSetForeground(disp, win->gc, win->pane->term->palette[deffg]);
-	XSetBackground(disp, win->gc, win->pane->term->palette[defbg]);
+	XSetForeground(disp, win->gc, pane->term->palette[deffg]);
+	XSetBackground(disp, win->gc, pane->term->palette[defbg]);
 
 	/* IME */
 	xicOpen(win);
@@ -352,6 +375,7 @@ closeWindow(Win *win)
 char
 handleXEvent(Win *win)
 {
+	Pane *pane = win->pane;
 	XEvent event;
 	XConfigureEvent *e;
 	XSelectionRequestEvent *sre;
@@ -375,9 +399,9 @@ handleXEvent(Win *win)
 		case KeyPress:
 			/* キーボード入力 */
 			if (keyPressEvent(win, event, 64)) {
-				win->pane->timer_lit[CARET_TIMER] = 1;
-				win->pane->timers[CARET_TIMER] = now;
-				win->pane->scr = 0;
+				pane->timer_lit[CARET_TIMER] = 1;
+				pane->timers[CARET_TIMER] = now;
+				pane->scr = 0;
 			}
 			break;
 
@@ -385,69 +409,69 @@ handleXEvent(Win *win)
 			state = event.xbutton.state;
 			mb = event.xbutton.button;
 			/* スクロール */
-			if ((mb == 4 || mb == 5) && win->pane->term->sb == &win->pane->term->ori) {
-				win->pane->redraw_flag = 1;
-				win->pane->scr += (mb == 4 ? 1 : -1) * 3;
-				win->pane->scr = CLIP(win->pane->scr, 0, SCROLLMAX(win->pane->term->sb));
+			if ((mb == 4 || mb == 5) && pane->term->sb == &pane->term->ori) {
+				pane->redraw_flag = 1;
+				pane->scr += (mb == 4 ? 1 : -1) * 3;
+				pane->scr = CLIP(pane->scr, 0, SCROLLMAX(pane->term->sb));
 				break;
 			}
 			/* 擬似端末に通知 */
 			if (!BETWEEN(mb, 1, 4) || (state & ~(ShiftMask | Mod1Mask)) ||
-					(win->pane->term->sb == &win->pane->term->alt && !(state & ShiftMask))) {
-				mouseEvent(win, &event);
+					(pane->term->sb == &pane->term->alt && !(state & ShiftMask))) {
+				mouseEvent(pane, &event);
 				break;
 			}
 			/* 貼り付け */
 			if (mb == 2) {
 				XConvertSelection(disp, atoms[PRIMARY], atoms[UTF8_STRING],
 						atoms[MY_SELECTION], win->window, event.xkey.time);
-				win->pane->scr = 0;
+				pane->scr = 0;
 				break;
 			}
 			/* 範囲選択のドラッグを開始 */
-			win->pane->selection.rect = 0 < (state & Mod1Mask);
-			win->pane->selection.altbuf = win->pane->term->sb == &win->pane->term->alt;
-			win->pane->selection.dragging = 1;
+			pane->selection.rect = 0 < (state & Mod1Mask);
+			pane->selection.altbuf = pane->term->sb == &pane->term->alt;
+			pane->selection.dragging = 1;
 
 		case MotionNotify:
 			/* 疑似端末に通知 */
-			if (!win->pane->selection.dragging) {
-				mouseEvent(win, &event);
+			if (!pane->selection.dragging) {
+				mouseEvent(pane, &event);
 				break;
 			}
 
 			/* ここからPress/Motion共通の処理 */
 			/* 範囲選択の終点を設定 */
-			mx = (event.xbutton.x - win->pane->xpad) / xfont->cw;
-			my = (event.xbutton.y - win->pane->ypad) / xfont->ch;
-			win->pane->selection.bcol = mx;
-			win->pane->selection.bline = my + win->pane->term->sb->firstline - win->pane->scr;
+			mx = (event.xbutton.x - pane->xpad) / xfont->cw;
+			my = (event.xbutton.y - pane->ypad) / xfont->ch;
+			pane->selection.bcol = mx;
+			pane->selection.bline = my + pane->term->sb->firstline - pane->scr;
 			/* 範囲選択の始点を設定 */
 			if (mb == 1) {
-				win->pane->selection.acol = mx;
-				win->pane->selection.aline = my + win->pane->term->sb->firstline- win->pane->scr;
+				pane->selection.acol = mx;
+				pane->selection.aline = my + pane->term->sb->firstline- pane->scr;
 			}
-			win->pane->redraw_flag = 1;
+			pane->redraw_flag = 1;
 			break;
 
 		case ButtonRelease:
 			/* 疑似端末に通知 */
-			if (!win->pane->selection.dragging) {
-				mouseEvent(win, &event);
+			if (!pane->selection.dragging) {
+				mouseEvent(pane, &event);
 				break;
 			}
 			/* 範囲選択のドラッグを終了 */
-			win->pane->selection.dragging = 0;
-			if (win->pane->selection.aline == win->pane->selection.bline &&
-			    win->pane->selection.acol  == win->pane->selection.bcol)
+			pane->selection.dragging = 0;
+			if (pane->selection.aline == pane->selection.bline &&
+			    pane->selection.acol  == pane->selection.bcol)
 				break;
 			XSetSelectionOwner(disp, atoms[PRIMARY], win->window, event.xkey.time);
-			copySelection(win, &win->pane->selection.primary);
+			copySelection(pane, &pane->selection.primary);
 			break;
 
 		case Expose:
 			/* 再描画 */
-			win->pane->redraw_flag = 1;
+			pane->redraw_flag = 1;
 			break;
 
 		case ConfigureNotify:
@@ -457,17 +481,18 @@ handleXEvent(Win *win)
 				break;
 			win->width = e->width;
 			win->height = e->height;
-			setWinSize(win->pane->term,
-					(win->height - win->pane->ypad * 2) / xfont->ch,
-					(win->width - win->pane->xpad * 2) / xfont->cw,
+			setPaneSize(pane, e->width, e->height);
+			setWinSize(pane->term,
+					(win->height - pane->ypad * 2) / xfont->ch,
+					(win->width - pane->xpad * 2) / xfont->cw,
 					e->width, e->height);
 			break;
 
 		case FocusIn:
 		case FocusOut:
 			/* フォーカスの変化 */
-			win->pane->focus = event.type == FocusIn;
-			win->pane->redraw_flag = 1;
+			pane->focus = event.type == FocusIn;
+			pane->redraw_flag = 1;
 			break;
 
 		case ClientMessage:
@@ -478,7 +503,7 @@ handleXEvent(Win *win)
 			/* 貼り付ける文字列を送る */
 			sre = &event.xselectionrequest;
 			sel = sre->selection == atoms[PRIMARY] ?
-				win->pane->selection.primary : win->pane->selection.clip;
+				pane->selection.primary : pane->selection.clip;
 			if (!sel)
 				sel = "";
 			if (sre->property == None)
@@ -496,11 +521,11 @@ handleXEvent(Win *win)
 				XGetWindowProperty(disp, win->window, prop, 0, 256,
 						False, atoms[UTF8_STRING], &type,
 						&format, &ntimes, &after, &props);
-				if (1 < win->pane->term->dec[2004])
-					writePty(win->pane->term, "\e[200~", 6);
-				writePty(win->pane->term, (char *)props, ntimes);
-				if (1 < win->pane->term->dec[2004])
-					writePty(win->pane->term, "\e[201~", 6);
+				if (1 < pane->term->dec[2004])
+					writePty(pane->term, "\e[200~", 6);
+				writePty(pane->term, (char *)props, ntimes);
+				if (1 < pane->term->dec[2004])
+					writePty(pane->term, "\e[201~", 6);
 				XFree(props);
 			}
 		}
@@ -510,7 +535,7 @@ handleXEvent(Win *win)
 }
 
 void
-mouseEvent(Win *win, XEvent *event)
+mouseEvent(Pane *pane, XEvent *event)
 {
 	int mb, state = event->xbutton.state;
 
@@ -527,20 +552,20 @@ mouseEvent(Win *win, XEvent *event)
 	mb += state & ShiftMask   ? SHIFT : 0;
 	mb += state & Mod1Mask    ? ALT   : 0;
 	mb += state & ControlMask ? CTRL  : 0;
-	reportMouse(win->pane->term, mb, event->type == ButtonRelease,
-			(event->xbutton.x - win->pane->xpad) / xfont->cw,
-			(event->xbutton.y - win->pane->ypad) / xfont->ch);
+	reportMouse(pane->term, mb, event->type == ButtonRelease,
+			(event->xbutton.x - pane->xpad) / xfont->cw,
+			(event->xbutton.y - pane->ypad) / xfont->ch);
 }
 
 void
-copySelection(Win *win, char **dst)
+copySelection(Pane *pane, char **dst)
 {
 	int len = 256;
 	char32_t *cp, *copy = xmalloc(len * sizeof(copy[0]));
-	int firstline = MIN(win->pane->selection.aline, win->pane->selection.bline);
-	int lastline  = MAX(win->pane->selection.aline, win->pane->selection.bline);
-	int left      = MIN(win->pane->selection.acol,  win->pane->selection.bcol);
-	int right     = MAX(win->pane->selection.acol,  win->pane->selection.bcol);
+	int firstline = MIN(pane->selection.aline, pane->selection.bline);
+	int lastline  = MAX(pane->selection.aline, pane->selection.bline);
+	int left      = MIN(pane->selection.acol,  pane->selection.bcol);
+	int right     = MAX(pane->selection.acol,  pane->selection.bcol);
 	Line *line;
 	int i, l, r;
 
@@ -548,10 +573,10 @@ copySelection(Win *win, char **dst)
 
 	/* 選択範囲の文字列(UTF32)を読み出してコピー */
 	for(i = firstline; i <= lastline; i++) {
-		if (!(line = getLine(win->pane->term, i - win->pane->term->sb->firstline)))
+		if (!(line = getLine(pane->term, i - pane->term->sb->firstline)))
 			continue;
 
-		if (win->pane->selection.rect) {
+		if (pane->selection.rect) {
 			l = MIN(getCharCnt(line->str,  left).index, u32slen(line->str));
 			r = MIN(getCharCnt(line->str, right).index, u32slen(line->str));
 		} else {
@@ -624,8 +649,8 @@ keyPressEvent(Win *win, XEvent event, int bufsize)
 
 	/* C-S-cでコピー */
 	if (keysym == XK_C && event.xkey.state & ControlMask) {
+		copySelection(win->pane, &win->pane->selection.clip);
 		XSetSelectionOwner(disp, atoms[CLIPBOARD], win->window, event.xkey.time);
-		copySelection(win, &win->pane->selection.clip);
 		return 0;
 	}
 
@@ -659,58 +684,72 @@ keyPressEvent(Win *win, XEvent event, int bufsize)
 void
 redraw(Win *win)
 {
-	XWindowAttributes wattr;
-	Line *line;
-	int pepos, pewidth, pecaretpos, caretrow;
-	int i;
-
-	/* 点滅中フラグをクリア */
-	win->pane->timer_active[BLINK_TIMER] = win->pane->timer_active[RAPID_TIMER] = 0;
-
-	/* 画面をクリア */
-	XGetWindowAttributes(disp, win->window, &wattr);
-	XSetWindowBackground(disp, win->window, BELLCOLOR(win->pane->term->palette[defbg]));
-	XClearArea(disp, win->window, 0, 0, wattr.width, wattr.height, False);
-
-	/* 端末の内容をウィンドウに表示 */
-	for (i = 0; i <= win->pane->term->sb->rows; i++)
-		if ((line = getLine(win->pane->term, i - win->pane->scr)))
-			drawLine(win, line, i, 0, win->pane->term->sb->cols, 0);
-
-	/* カーソルかPreeditを表示 */
-	XSetForeground(disp, win->gc, win->pane->term->palette[deffg]);
-	if (u32slen(win->ime.peline->str)) {
-		/* Preeditの幅とキャレットのPreedit内での位置を取得 */
-		pewidth = u32swidth(win->ime.peline->str, u32slen(win->ime.peline->str));
-		pecaretpos = u32swidth(win->ime.peline->str, win->ime.caret);
-
-		/* Preeditの画面上での描画位置を決める */
-		pepos = win->pane->term->cx - pecaretpos;
-		pepos = MIN(pepos, 0);
-		pepos = MAX(pepos, win->pane->term->sb->cols - pewidth);
-		pepos = MIN(pepos, win->pane->term->cx);
-
-		/* Preeditとカーソルの描画 */
-		drawLine(win, win->ime.peline, win->pane->term->cy, pepos, pewidth, 0);
-		drawCursor(win, win->ime.peline, win->pane->term->cy, pepos + pecaretpos, 6);
-	} else if (1 <= win->pane->term->dec[25] && win->pane->term->cx < win->pane->term->sb->cols) {
-		/* カーソルの描画 */
-		caretrow = win->pane->term->cy + win->pane->scr;
-		if (caretrow <= win->pane->term->sb->rows && (line = getLine(win->pane->term, win->pane->term->cy)))
-			drawCursor(win, line, caretrow, win->pane->term->cx, win->pane->term->ctype);
-	}
-
-	/* 選択範囲を書く */
-	if ((win->pane->selection.aline != win->pane->selection.bline ||
-	     win->pane->selection.acol  != win->pane->selection.bcol) &&
-	    win->pane->selection.altbuf == (win->pane->term->sb == &win->pane->term->alt))
-		drawSelection(win, &win->pane->selection);
-
+	drawPane(win->pane, &win->ime);
+	XCopyArea(disp, win->pane->pixmap, win->window, win->gc, 0, 0,
+			win->pane->width, win->pane->height, 0, 0);
 	XSync(disp, False);
 }
 
 void
-drawLine(Win *win, Line *line, int row, int col, int width, int pos)
+drawPane(Pane *pane, const IME *ime)
+{
+	Line *line;
+	int pepos, pewidth, pecaretpos, caretrow;
+	int i;
+
+	/* スクロール量の更新 */
+	pane->scr = (pane->prevbuf != pane->term->sb) ? 0 : pane->scr;
+	pane->scr += (0 < pane->scr) ? pane->term->sb->firstline - pane->prevfst : 0;
+	pane->scr = CLIP(pane->scr, 0, SCROLLMAX(pane->term->sb));
+	pane->prevbuf = pane->term->sb;
+	pane->prevfst = pane->term->sb->firstline;
+
+	/* 点滅中フラグをクリア */
+	pane->timer_active[BLINK_TIMER] = pane->timer_active[RAPID_TIMER] = 0;
+
+	/* 画面をクリア */
+	XSetForeground(disp, pane->gc, BELLCOLOR(pane->term->palette[defbg]));
+	XFillRectangle(disp, pane->pixmap, pane->gc, 0, 0, pane->width, pane->height);
+
+	/* 端末の内容をウィンドウに表示 */
+	for (i = 0; i <= pane->term->sb->rows; i++)
+		if ((line = getLine(pane->term, i - pane->scr)))
+			drawLine(pane, line, i, 0, pane->term->sb->cols, 0);
+
+	/* カーソルかPreeditを表示 */
+	XSetForeground(disp, pane->gc, pane->term->palette[deffg]);
+	if (u32slen(ime->peline->str)) {
+		/* Preeditの幅とキャレットのPreedit内での位置を取得 */
+		pewidth = u32swidth(ime->peline->str, u32slen(ime->peline->str));
+		pecaretpos = u32swidth(ime->peline->str, ime->caret);
+
+		/* Preeditの画面上での描画位置を決める */
+		pepos = pane->term->cx - pecaretpos;
+		pepos = MIN(pepos, 0);
+		pepos = MAX(pepos, pane->term->sb->cols - pewidth);
+		pepos = MIN(pepos, pane->term->cx);
+
+		/* Preeditとカーソルの描画 */
+		drawLine(pane, ime->peline, pane->term->cy, pepos, pewidth, 0);
+		drawCursor(pane, ime->peline, pane->term->cy, pepos + pecaretpos, 6);
+	} else if (1 <= pane->term->dec[25] && pane->term->cx < pane->term->sb->cols) {
+		/* カーソルの描画 */
+		caretrow = pane->term->cy + pane->scr;
+		if (caretrow <= pane->term->sb->rows && (line = getLine(pane->term, pane->term->cy)))
+			drawCursor(pane, line, caretrow, pane->term->cx, pane->term->ctype);
+	}
+
+	/* 選択範囲を書く */
+	if ((pane->selection.aline != pane->selection.bline ||
+	     pane->selection.acol  != pane->selection.bcol) &&
+	    pane->selection.altbuf == (pane->term->sb == &pane->term->alt))
+		drawSelection(pane, &pane->selection);
+
+	pane->redraw_flag = 0;
+}
+
+void
+drawLine(Pane *pane, Line *line, int row, int col, int width, int pos)
 {
 	int next, i = getCharCnt(line->str, pos).index;
 	int x, y, w;
@@ -723,21 +762,21 @@ drawLine(Win *win, Line *line, int row, int col, int width, int pos)
 
 	/* 同じ属性の文字はまとめて処理する */
 	next = MIN(findNextSGR(line, i), width);
-	drawLine(win, line, row, col, width, pos + u32swidth(&line->str[i], next - i));
+	drawLine(pane, line, row, col, width, pos + u32swidth(&line->str[i], next - i));
 
 	/* 点滅 */
 	if (line->attr[i] & BLINK)
-		win->pane->timer_active[BLINK_TIMER] = 1;
+		pane->timer_active[BLINK_TIMER] = 1;
 	if (line->attr[i] & RAPID)
-		win->pane->timer_active[RAPID_TIMER] = 1;
-	if (!(((line->attr[i] & BLINK) && win->pane->timer_lit[BLINK_TIMER]) ||
-	      ((line->attr[i] & RAPID) && win->pane->timer_lit[RAPID_TIMER]) ||
+		pane->timer_active[RAPID_TIMER] = 1;
+	if (!(((line->attr[i] & BLINK) && pane->timer_lit[BLINK_TIMER]) ||
+	      ((line->attr[i] & RAPID) && pane->timer_lit[RAPID_TIMER]) ||
 	      (!(line->attr[i] & BLINK) && !(line->attr[i] & RAPID))))
 		return;
 
 	/* 座標 */
-	x = win->pane->xpad + (col + pos) * xfont->cw;
-	y = win->pane->ypad + row * xfont->ch;
+	x = pane->xpad + (col + pos) * xfont->cw;
+	y = pane->ypad + row * xfont->ch;
 	w = xfont->cw * u32swidth(&line->str[i], next - i);
 
 	/* 前処理 */
@@ -750,9 +789,9 @@ drawLine(Win *win, Line *line, int row, int col, int width, int pos)
 	}
 	if (line->attr[i] & BOLD) /* 太字 */
 		fg = fg < 8 ? fg + 8 : fg;
-	c = win->pane->term->palette[fg]; /* 色を取得 */
+	c = pane->term->palette[fg]; /* 色を取得 */
 	if (line->attr[i] & FAINT) /* 細字 */
-		c = BLEND_COLOR(c, 0.6, win->pane->term->palette[bg], 0.4);
+		c = BLEND_COLOR(c, 0.6, pane->term->palette[bg], 0.4);
 
 	/* 色をXftColorに変換 */
 	xc.color.red   =   RED(c) << 8;
@@ -761,8 +800,8 @@ drawLine(Win *win, Line *line, int row, int col, int width, int pos)
 	xc.color.alpha = 0xffff;
 
 	/* 背景を塗る */
-	XSetForeground(disp, win->gc, BELLCOLOR(win->pane->term->palette[bg]));
-	XFillRectangle(disp, win->window, win->gc, x, y, w, xfont->ch);
+	XSetForeground(disp, pane->gc, BELLCOLOR(pane->term->palette[bg]));
+	XFillRectangle(disp, pane->pixmap, pane->gc, x, y, w, xfont->ch);
 
 	y += xfont->ascent;
 
@@ -770,28 +809,28 @@ drawLine(Win *win, Line *line, int row, int col, int width, int pos)
 	attr = FONT_NONE;
 	attr |= line->attr[i] & BOLD   ? FONT_BOLD   : FONT_NONE;
 	attr |= line->attr[i] & ITALIC ? FONT_ITALIC : FONT_NONE;
-	drawXFontString(win->draw, &xc, xfont, attr, x, y, &line->str[i], next - i);
+	drawXFontString(pane->draw, &xc, xfont, attr, x, y, &line->str[i], next - i);
 
 	/* 後処理 */
 	if (line->attr[i] & ULINE) { /* 下線 */
-		XSetForeground(disp, win->gc, win->pane->term->palette[fg]);
-		XDrawLine(disp, win->window, win->gc, x, y + 1, x + w - 1, y + 1);
+		XSetForeground(disp, pane->gc, pane->term->palette[fg]);
+		XDrawLine(disp, pane->pixmap, pane->gc, x, y + 1, x + w - 1, y + 1);
 	}
 }
 
 void
-drawCursor(Win *win, Line *line, int row, int col, int type)
+drawCursor(Pane *pane, Line *line, int row, int col, int type)
 {
 	const int index = getCharCnt(line->str, col).index;
 	char32_t *c = index < u32slen(line->str) ? &line->str[index] : (char32_t *)L" ";
-	const int x = win->pane->xpad + col * xfont->cw;
-	const int y = win->pane->ypad + row * xfont->ch;
+	const int x = pane->xpad + col * xfont->cw;
+	const int y = pane->ypad + row * xfont->ch;
 	const int width = xfont->cw * u32swidth(c, 1) - 1;
 	int attr;
 	Line cursor;
 
 	/* 点滅 */
-	if (win->pane->focus && (!type || type % 2) && (win->pane->timer_lit[CARET_TIMER]))
+	if (pane->focus && (!type || type % 2) && (pane->timer_lit[CARET_TIMER]))
 		return;
 
 	switch (type) {
@@ -799,35 +838,35 @@ drawCursor(Win *win, Line *line, int row, int col, int type)
 	case 0:
 	case 1:
 	case 2:
-		if (win->pane->focus) {
+		if (pane->focus) {
 			attr = index < u32slen(line->str) ? line->attr[index] : 0;
 			cursor = (Line){c, &attr, &defbg, &deffg};
-			drawLine(win, &cursor, row, col, 1, 0);
+			drawLine(pane, &cursor, row, col, 1, 0);
 		} else {
-			XSetForeground(disp, win->gc, BELLCOLOR(win->pane->term->palette[deffg]));
-			XDrawRectangle(disp, win->window, win->gc, x, y, width, xfont->ch - 1);
-			XDrawPoint(disp, win->window, win->gc, x + width, y + xfont->ch - 1);
+			XSetForeground(disp, pane->gc, BELLCOLOR(pane->term->palette[deffg]));
+			XDrawRectangle(disp, pane->pixmap, pane->gc, x, y, width, xfont->ch - 1);
+			XDrawPoint(disp, pane->pixmap, pane->gc, x + width, y + xfont->ch - 1);
 		}
 		break;
 	case 3: /* 下線 */
 	case 4:
-		XFillRectangle(disp, win->window, win->gc, x, y + 1 + xfont->ascent, width, xfont->ch * 0.1);
+		XFillRectangle(disp, pane->pixmap, pane->gc, x, y + 1 + xfont->ascent, width, xfont->ch * 0.1);
 		break;
 	case 5: /* 縦線 */
 	case 6:
-		XFillRectangle(disp, win->window, win->gc, x - 1, y, xfont->ch * 0.1, xfont->ch);
+		XFillRectangle(disp, pane->pixmap, pane->gc, x - 1, y, xfont->ch * 0.1, xfont->ch);
 		break;
 	}
 }
 
 void
-drawSelection(Win *win, struct Selection *sel)
+drawSelection(Pane *pane, struct Selection *sel)
 {
-	const int s = MIN(sel->aline, sel->bline) - win->pane->term->sb->firstline;
-	const int e = MAX(sel->aline, sel->bline) - win->pane->term->sb->firstline;
+	const int s = MIN(sel->aline, sel->bline) - pane->term->sb->firstline;
+	const int e = MAX(sel->aline, sel->bline) - pane->term->sb->firstline;
 	int i;
 
-#define DRAW(n, a, b)   drawLineRev(win, getLine(win->pane->term, n), n + win->pane->scr, a, b)
+#define DRAW(n, a, b)   drawLineRev(pane, getLine(pane->term, n), n + pane->scr, a, b)
 	if (sel->rect) {
 		/* 矩形選択 */
 		for (i = s; i < e + 1; i++)
@@ -837,37 +876,37 @@ drawSelection(Win *win, struct Selection *sel)
 		if (sel->aline == sel->bline) {
 			DRAW(s, sel->acol, sel->bcol);
 		} else {
-			DRAW(s, (sel->aline < sel->bline ? sel->acol : sel->bcol), win->pane->term->sb->cols + 1);
+			DRAW(s, (sel->aline < sel->bline ? sel->acol : sel->bcol), pane->term->sb->cols + 1);
 			DRAW(e, 0, (sel->aline < sel->bline ? sel->bcol : sel->acol));
 			for (i = s + 1; i < e; i++)
-				DRAW(i, 0, win->pane->term->sb->cols + 1);
+				DRAW(i, 0, pane->term->sb->cols + 1);
 		}
 	}
 #undef DRAW
 }
 
 void
-drawLineRev(Win *win, Line *line, int row, int col1, int col2)
+drawLineRev(Pane *pane, Line *line, int row, int col1, int col2)
 {
-	const Color c = win->pane->term->palette[defbg];
+	const Color c = pane->term->palette[defbg];
 	XftColor xc = { 0, { RED(c) << 8, GREEN(c) << 8, BLUE(c) << 8, 0xffff } };
 	int li, ri;
 	int xoff, yoff, len;
 
-	if (!BETWEEN(row, 0, win->pane->term->sb->rows + 1) || (!line))
+	if (!BETWEEN(row, 0, pane->term->sb->rows + 1) || (!line))
 		return;
 
 	li = MIN(getCharCnt(line->str, MIN(col1, col2)).index, u32slen(line->str));
 	ri = MIN(getCharCnt(line->str, MAX(col1, col2)).index, u32slen(line->str));
 
-	xoff = win->pane->xpad + getCharCnt(line->str, MIN(col1, col2)).col * xfont->cw;
-	yoff = win->pane->ypad + row * xfont->ch;
+	xoff = pane->xpad + getCharCnt(line->str, MIN(col1, col2)).col * xfont->cw;
+	yoff = pane->ypad + row * xfont->ch;
 	len = MIN(u32slen(line->str + li), ri - li);
 
-	XSetForeground(disp, win->gc, BELLCOLOR(win->pane->term->palette[deffg]));
-	XFillRectangle(disp, win->window, win->gc, xoff, yoff,
+	XSetForeground(disp, pane->gc, BELLCOLOR(pane->term->palette[deffg]));
+	XFillRectangle(disp, pane->pixmap, pane->gc, xoff, yoff,
 			u32swidth(line->str + li, len) * xfont->cw, xfont->ch);
-	drawXFontString(win->draw, &xc, xfont, 0, xoff, yoff + xfont->ascent,
+	drawXFontString(pane->draw, &xc, xfont, 0, xoff, yoff + xfont->ascent,
 			line->str + li, len);
 }
 
