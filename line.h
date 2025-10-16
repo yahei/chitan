@@ -1,4 +1,5 @@
 #include <stdint.h>
+#include <stdlib.h>
 
 extern int deffg;
 extern int defbg;

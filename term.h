@@ -1,3 +1,5 @@
+#include <stdlib.h>
+
 #include "line.h"
 
 typedef uint_least32_t Color;
