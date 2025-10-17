@@ -22,8 +22,8 @@
 #define timespecsub(a, b, c) do {\
 	(c)->tv_sec  = (a)->tv_sec  - (b)->tv_sec;\
 	(c)->tv_nsec = (a)->tv_nsec - (b)->tv_nsec;\
-	(c)->tv_sec  -= (a)->tv_nsec < (b)->tv_nsec ? 1 : 0;\
-	(c)->tv_nsec += (a)->tv_nsec < (b)->tv_nsec ? 1000000000 : 0;\
+	(c)->tv_sec  -= (c)->tv_nsec < 0 ? 1 : 0;\
+	(c)->tv_nsec += (c)->tv_nsec < 0 ? 1000000000 : 0;\
 } while (0);
 #define timespeccmp(a, b, CMP) ((a)->tv_sec == (b)->tv_sec ?\
 		(a)->tv_nsec CMP (b)->tv_nsec : (a)->tv_sec CMP (b)->tv_sec)

@@ -117,10 +117,11 @@ void
 run(void)
 {
 	Pane *pane = win->pane;
-	struct timespec timeout = { 0, 1000 };
+	struct timespec timeout = { 0, 1000 }, time;
 	fd_set rfds;
 	int tfd = pane->term->master;
 	int xfd = XConnectionNumber(dinfo.disp);
+	int i;
 
 	while (1) {
 		/* ファイルディスクリプタの監視 */
@@ -141,18 +142,27 @@ run(void)
 			return;
 
 		/* 端末のread */
-		if (0 < readPty(pane->term)) {
+		errno = 0;
+		for (i = 0; 0 < readPty(pane->term); i++) {
 			pane->redraw_flag = 1;
-			/* IMEスポット移動 */
-			if (win->ime.xic) {
-				win->ime.spot.x = pane->xpad + pane->term->cx * xfont->cw;
-				win->ime.spot.y = pane->ypad + pane->term->cy * xfont->ch + xfont->ascent;
-				XSetICValues(win->ime.xic, XNPreeditAttributes, win->ime.spotlist, NULL);
-			}
-		} else if (errno == EIO) {
+			if (0 < (i + 1) % 8)
+				continue;
+			clock_gettime(CLOCK_MONOTONIC, &time);
+			timespecsub(&time, &now, &time);
+			if (1 < time.tv_sec || 20 * 1000 * 1000 < time.tv_nsec)
+				break;
+		}
+		if (errno == EIO)
 			return;
+
+		/* IMEスポット移動 */
+		if (pane->redraw_flag && win->ime.xic) {
+			win->ime.spot.x = pane->xpad + pane->term->cx * xfont->cw;
+			win->ime.spot.y = pane->ypad + pane->term->cy * xfont->ch + xfont->ascent;
+			XSetICValues(win->ime.xic, XNPreeditAttributes, win->ime.spotlist, NULL);
 		}
 
+		/* 点滅の処理をして次の待機時間を取得 */
 		manegeTimer(pane, &timeout);
 
 		/* 再描画 */
