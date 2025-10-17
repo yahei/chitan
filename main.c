@@ -35,9 +35,7 @@ typedef struct Win {
 	Pane *pane;
 } Win;
 
-static Display *disp;
-static Visual *visual;
-static Colormap cmap;
+static DispInfo dinfo;
 static XFont *xfont;
 static XIM xim;
 static Win *win;
@@ -89,27 +87,27 @@ init(void)
 	XSetLocaleModifiers("");
 
 	/* Xサーバーに接続 */
-	disp= XOpenDisplay(NULL);
-	if (disp== NULL)
+	dinfo.disp= XOpenDisplay(NULL);
+	if (dinfo.disp== NULL)
 		fatal("XOpenDisplay failed.\n");
-	XMatchVisualInfo(disp, XDefaultScreen(disp), 32, TrueColor, &vinfo);
-	visual = vinfo.visual;
-	cmap = XCreateColormap(disp, DefaultRootWindow(disp), visual, None);
+	XMatchVisualInfo(dinfo.disp, XDefaultScreen(dinfo.disp), 32, TrueColor, &vinfo);
+	dinfo.visual = vinfo.visual;
+	dinfo.cmap = XCreateColormap(dinfo.disp, DefaultRootWindow(dinfo.disp), dinfo.visual, None);
 
 	/* XIM */
-	XRegisterIMInstantiateCallback(disp, NULL, NULL, NULL,
+	XRegisterIMInstantiateCallback(dinfo.disp, NULL, NULL, NULL,
 			ximOpen, NULL);
 
 	/* 文字描画の準備 */
 	FcInit();
-	xfont = openFont(disp, "monospace", 12.0);
+	xfont = openFont(dinfo.disp, "monospace", 12.0);
 	if (xfont == NULL)
 		fatal("XftFontOpen failed.\n");
 
 	/* Selection */
 	names = (char *[]){ "PRIMARY", "CLIPBOARD", "UTF8_STRING", "_MY_SELECTION_" };
 	for (i = 0; i < ATOM_NUM; i++)
-		atoms[i] = XInternAtom(disp, names[i], True);
+		atoms[i] = XInternAtom(dinfo.disp, names[i], True);
 	
 	/* ウィンドウの作成 */
 	win = openWindow();
@@ -122,7 +120,7 @@ run(void)
 	struct timespec timeout = { 0, 1000 };
 	fd_set rfds;
 	int tfd = pane->term->master;
-	int xfd = XConnectionNumber(disp);
+	int xfd = XConnectionNumber(dinfo.disp);
 
 	while (1) {
 		/* ファイルディスクリプタの監視 */
@@ -171,13 +169,13 @@ fin(void)
 	FcFini();
 	if (xim)
 		XCloseIM(xim);
-	XCloseDisplay(disp);
+	XCloseDisplay(dinfo.disp);
 }
 
 Win *
 openWindow(void)
 {
-	Pane *pane = createPane(disp, xfont, DefaultRootWindow(disp), 800, 600, 32);
+	Pane *pane = createPane(&dinfo, xfont, DefaultRootWindow(dinfo.disp), 800, 600, 32);
 	Win *win = xmalloc(sizeof(Win));
 
 	*win = (Win) { .width = 800, .height = 600, .pane = pane };
@@ -186,25 +184,23 @@ openWindow(void)
 	win->attr.event_mask = KeyPressMask | KeyReleaseMask |
 		ExposureMask | FocusChangeMask | StructureNotifyMask |
 		ButtonPressMask | ButtonReleaseMask | ButtonMotionMask;
-	win->attr.colormap = cmap;
+	win->attr.colormap = dinfo.cmap;
 	win->attr.border_pixel = pane->term->palette[defbg];
 
 	/* ウィンドウ作成 */
-	win->window = XCreateWindow(disp, DefaultRootWindow(disp),
-			0, 0, win->width, win->height, 1, 32, InputOutput, visual,
+	win->window = XCreateWindow(dinfo.disp, DefaultRootWindow(dinfo.disp),
+			0, 0, win->width, win->height, 1, 32, InputOutput, dinfo.visual,
 			CWEventMask | CWColormap | CWBorderPixel, &win->attr);
 
 	/* プロパティ */
 	win->hint = XAllocClassHint();
 	win->hint->res_name = "chitan";
 	win->hint->res_class = "chitan";
-	XSetClassHint(disp, win->window, win->hint);
+	XSetClassHint(dinfo.disp, win->window, win->hint);
 
 	/* 描画の準備 */
-	win->gc = XCreateGC(disp, win->window, 0, NULL);
-	win->draw = XftDrawCreate(disp, win->window, visual, cmap);
-	XSetForeground(disp, win->gc, pane->term->palette[deffg]);
-	XSetBackground(disp, win->gc, pane->term->palette[defbg]);
+	win->gc = XCreateGC(dinfo.disp, win->window, 0, NULL);
+	win->draw = XftDrawCreate(dinfo.disp, win->window, dinfo.visual, dinfo.cmap);
 
 	/* IME */
 	xicOpen(win);
@@ -214,12 +210,12 @@ openWindow(void)
 	win->ime.peline = allocLine();
 
 	/* ウィンドウが閉じられたときイベントを受け取る */
-	Atom atom = XInternAtom(disp, "WM_DELETE_WINDOW", False);
-	XSetWMProtocols(disp, win->window, &atom, 1);
+	Atom atom = XInternAtom(dinfo.disp, "WM_DELETE_WINDOW", False);
+	XSetWMProtocols(dinfo.disp, win->window, &atom, 1);
 
 	/* ウィンドウを表示 */
-	XMapWindow(disp, win->window);
-	XSync(disp, False);
+	XMapWindow(dinfo.disp, win->window);
+	XSync(dinfo.disp, False);
 
 	return win;
 }
@@ -236,9 +232,9 @@ closeWindow(Win *win)
 	if (win->ime.xic)
 		XDestroyIC(win->ime.xic);
 	XftDrawDestroy(win->draw);
-	XFreeGC(disp, win->gc);
+	XFreeGC(dinfo.disp, win->gc);
 	XFree(win->hint);
-	XDestroyWindow(disp, win->window);
+	XDestroyWindow(dinfo.disp, win->window);
 	free(win);
 }
 
@@ -248,7 +244,7 @@ handleXEvent(Win *win)
 	static Pane *dragging = NULL;
 	Pane *pane = win->pane;
 	XEvent event;
-	XConfigureEvent *e;
+	const XConfigureEvent *e = (XConfigureEvent *)&event;
 	XSelectionRequestEvent *sre;
 	int mx, my, state, mb = 0;
 	Atom prop, type;
@@ -257,12 +253,12 @@ handleXEvent(Win *win)
 	unsigned char *props;
 	char *sel;
 
-	while (0 < XPending(disp)) {
-		XNextEvent(disp, &event);
+	while (0 < XPending(dinfo.disp)) {
+		XNextEvent(dinfo.disp, &event);
 
 		/* IMEのイベントをフィルタリング */
 		if (!xim)
-			ximOpen(disp, NULL, NULL);
+			ximOpen(dinfo.disp, NULL, NULL);
 		if (xim && XFilterEvent(&event, None) == True)
 			continue;
 
@@ -291,7 +287,7 @@ handleXEvent(Win *win)
 				mouseEvent(pane, &event);
 			} else if (mb == 2) {
 				/* 貼り付け */
-				XConvertSelection(disp, atoms[PRIMARY], atoms[UTF8_STRING],
+				XConvertSelection(dinfo.disp, atoms[PRIMARY], atoms[UTF8_STRING],
 						atoms[MY_SELECTION], win->window, event.xkey.time);
 				pane->scr = 0;
 			} else {
@@ -320,7 +316,7 @@ handleXEvent(Win *win)
 			if (dragging->selection.aline == dragging->selection.bline &&
 			    dragging->selection.acol  == dragging->selection.bcol)
 				break;
-			XSetSelectionOwner(disp, atoms[PRIMARY], win->window, event.xkey.time);
+			XSetSelectionOwner(dinfo.disp, atoms[PRIMARY], win->window, event.xkey.time);
 			copySelection(dragging, &dragging->selection.primary);
 			dragging = NULL;
 			break;
@@ -332,7 +328,6 @@ handleXEvent(Win *win)
 
 		case ConfigureNotify:
 			/* ウィンドウサイズ変更 */
-			e = (XConfigureEvent *)&event;
 			if (win->width == e->width && win->height == e->height)
 				break;
 			win->width = e->width;
@@ -360,17 +355,17 @@ handleXEvent(Win *win)
 				sel = "";
 			if (sre->property == None)
 				sre->property = sre->target;
-			XChangeProperty(disp, sre->requestor, sre->property, atoms[UTF8_STRING],
+			XChangeProperty(dinfo.disp, sre->requestor, sre->property, atoms[UTF8_STRING],
 					8, PropModeReplace, (unsigned char *)sel, strlen(sel));
-			XSelectionEvent se = { SelectionNotify, 0, True, disp, sre->requestor,
+			XSelectionEvent se = { SelectionNotify, 0, True, dinfo.disp, sre->requestor,
 				sre->selection, sre->target, sre->property, sre->time };
-			XSendEvent(disp, event.xselectionrequest.requestor, False, 0, (XEvent *)&se);
+			XSendEvent(dinfo.disp, event.xselectionrequest.requestor, False, 0, (XEvent *)&se);
 			break;
 
 		case SelectionNotify:
 			/* 貼り付ける文字列が届いた */
 			if ((prop = event.xselection.property) != None) {
-				XGetWindowProperty(disp, win->window, prop, 0, 256,
+				XGetWindowProperty(dinfo.disp, win->window, prop, 0, 256,
 						False, atoms[UTF8_STRING], &type,
 						&format, &ntimes, &after, &props);
 				if (1 < pane->term->dec[2004])
@@ -432,14 +427,14 @@ keyPressEvent(Win *win, XEvent event, int bufsize)
 	/* C-S-cでコピー */
 	if (keysym == XK_C && event.xkey.state & ControlMask) {
 		copySelection(win->pane, &win->pane->selection.clip);
-		XSetSelectionOwner(disp, atoms[CLIPBOARD], win->window, event.xkey.time);
+		XSetSelectionOwner(dinfo.disp, atoms[CLIPBOARD], win->window, event.xkey.time);
 		return 0;
 	}
 
 	/* C-S-vで貼り付け */
 	if (keysym == XK_V && event.xkey.state & ControlMask) {
-		XConvertSelection(disp, atoms[CLIPBOARD], atoms[UTF8_STRING], atoms[MY_SELECTION],
-				win->window, event.xkey.time);
+		XConvertSelection(dinfo.disp, atoms[CLIPBOARD], atoms[UTF8_STRING],
+				atoms[MY_SELECTION], win->window, event.xkey.time);
 		return 1;
 	}
 
@@ -467,9 +462,9 @@ void
 redraw(Win *win)
 {
 	drawPane(win->pane, win->ime.peline, win->ime.caret);
-	XCopyArea(disp, win->pane->pixmap, win->window, win->gc, 0, 0,
+	XCopyArea(dinfo.disp, win->pane->pixmap, win->window, win->gc, 0, 0,
 			win->pane->width, win->pane->height, 0, 0);
-	XSync(disp, False);
+	XSync(dinfo.disp, False);
 }
 
 void

@@ -13,19 +13,19 @@
 		BLEND_COLOR(color, 0.85, 0xffffffff, 0.15) : color)
 #define SCROLLMAX(sb)   (sb->firstline - MAX(sb->totallines - sb->maxlines, 0))
 
-Pane *
-createPane(Display *disp, XFont *xfont, Drawable d, int width, int height, int depth)
-{
-	XVisualInfo vinfo;
-	XMatchVisualInfo(disp, XDefaultScreen(disp), 32, TrueColor, &vinfo);
-	Visual *visual = vinfo.visual;
-	Colormap cmap = XCreateColormap(disp,
-			DefaultRootWindow(disp), visual, None);
+static void drawLine(Pane *, Line *, int, int, int, int);
+static void drawCursor(Pane *, Line *, int, int, int);
+static void drawSelection(Pane *, struct Selection *);
+static void drawLineRev(Pane *, Line *, int, int, int);
+static void bell(Pane *);
 
+Pane *
+createPane(DispInfo *dinfo, XFont *xfont, Drawable d, int width, int height, int depth)
+{
 	Pane *pane = xmalloc(sizeof(Pane));
 
 	*pane = (Pane){
-		.disp = disp, .xfont = xfont, .d = d, .depth = depth,
+		.dinfo = dinfo, .xfont = xfont, .d = d, .depth = depth,
 		.width = width, .height = height,
 		.xpad = xfont->cw / 2, .ypad = xfont->cw / 2
 	};
@@ -38,14 +38,14 @@ createPane(Display *disp, XFont *xfont, Drawable d, int width, int height, int d
 			(width - pane->xpad * 2) / xfont->cw, 256);
 	if (!pane->term)
 		errExit("openTerm failed.\n");
-	pane->term->bell = bell;
+	pane->term->bell = (void (*)(void *))bell;
 	pane->term->bellp = pane;
 	pane->term->palette[defbg] = 0xcc000000 + (0x00ffffff & pane->term->palette[defbg]);
 
 	/* 描画の準備 */
-	pane->pixmap = XCreatePixmap(disp, d, width, height, depth);
-	pane->gc = XCreateGC(disp, pane->pixmap, 0, NULL);
-	pane->draw = XftDrawCreate(disp, pane->pixmap, visual, cmap);
+	pane->pixmap = XCreatePixmap(dinfo->disp, d, width, height, depth);
+	pane->gc = XCreateGC(dinfo->disp, pane->pixmap, 0, NULL);
+	pane->draw = XftDrawCreate(dinfo->disp, pane->pixmap, dinfo->visual, dinfo->cmap);
 
 	return pane;
 }
@@ -55,27 +55,22 @@ destroyPane(Pane *pane)
 {
 	closeTerm(pane->term);
 	XftDrawDestroy(pane->draw);
-	XFreeGC(pane->disp, pane->gc);
-	XFreePixmap(pane->disp, pane->pixmap);
+	XFreeGC(pane->dinfo->disp, pane->gc);
+	XFreePixmap(pane->dinfo->disp, pane->pixmap);
 	free(pane);
 }
 
 void
 setPaneSize(Pane *pane, int width, int height)
 {
-	XVisualInfo vinfo;
-	XMatchVisualInfo(pane->disp, XDefaultScreen(pane->disp), 32, TrueColor, &vinfo);
-	Visual *visual = vinfo.visual;
-	Colormap cmap = XCreateColormap(pane->disp,
-			DefaultRootWindow(pane->disp), visual, None);
-
 	XftDrawDestroy(pane->draw);
-	XFreeGC(pane->disp, pane->gc);
-	XFreePixmap(pane->disp, pane->pixmap);
+	XFreeGC(pane->dinfo->disp, pane->gc);
+	XFreePixmap(pane->dinfo->disp, pane->pixmap);
 
-	pane->pixmap = XCreatePixmap(pane->disp, pane->d, width, height, pane->depth);
-	pane->gc = XCreateGC(pane->disp, pane->pixmap, 0, NULL);
-	pane->draw = XftDrawCreate(pane->disp, pane->pixmap, visual, cmap);
+	pane->pixmap = XCreatePixmap(pane->dinfo->disp, pane->d, width, height, pane->depth);
+	pane->gc = XCreateGC(pane->dinfo->disp, pane->pixmap, 0, NULL);
+	pane->draw = XftDrawCreate(pane->dinfo->disp, pane->pixmap,
+			pane->dinfo->visual, pane->dinfo->cmap);
 	pane->width = width;
 	pane->height = height;
 
@@ -233,8 +228,8 @@ drawPane(Pane *pane, Line *peline, int pecaret)
 	pane->timer_active[BLINK_TIMER] = pane->timer_active[RAPID_TIMER] = 0;
 
 	/* 画面をクリア */
-	XSetForeground(pane->disp, pane->gc, BELLCOLOR(pane->term->palette[defbg]));
-	XFillRectangle(pane->disp, pane->pixmap, pane->gc, 0, 0, pane->width, pane->height);
+	XSetForeground(pane->dinfo->disp, pane->gc, BELLCOLOR(pane->term->palette[defbg]));
+	XFillRectangle(pane->dinfo->disp, pane->pixmap, pane->gc, 0, 0, pane->width, pane->height);
 
 	/* 端末の内容をウィンドウに表示 */
 	for (i = 0; i <= pane->term->sb->rows; i++)
@@ -242,7 +237,7 @@ drawPane(Pane *pane, Line *peline, int pecaret)
 			drawLine(pane, line, i, 0, pane->term->sb->cols, 0);
 
 	/* カーソルかPreeditを表示 */
-	XSetForeground(pane->disp, pane->gc, pane->term->palette[deffg]);
+	XSetForeground(pane->dinfo->disp, pane->gc, pane->term->palette[deffg]);
 	if (u32slen(peline->str)) {
 		/* Preeditの幅とキャレットのPreedit内での位置を取得 */
 		pewidth = u32swidth(peline->str, u32slen(peline->str));
@@ -325,8 +320,8 @@ drawLine(Pane *pane, Line *line, int row, int col, int width, int pos)
 	xc.color.alpha = 0xffff;
 
 	/* 背景を塗る */
-	XSetForeground(pane->disp, pane->gc, BELLCOLOR(pane->term->palette[bg]));
-	XFillRectangle(pane->disp, pane->pixmap, pane->gc, x, y, w, pane->xfont->ch);
+	XSetForeground(pane->dinfo->disp, pane->gc, BELLCOLOR(pane->term->palette[bg]));
+	XFillRectangle(pane->dinfo->disp, pane->pixmap, pane->gc, x, y, w, pane->xfont->ch);
 
 	y += pane->xfont->ascent;
 
@@ -338,8 +333,8 @@ drawLine(Pane *pane, Line *line, int row, int col, int width, int pos)
 
 	/* 後処理 */
 	if (line->attr[i] & ULINE) { /* 下線 */
-		XSetForeground(pane->disp, pane->gc, pane->term->palette[fg]);
-		XDrawLine(pane->disp, pane->pixmap, pane->gc, x, y + 1, x + w - 1, y + 1);
+		XSetForeground(pane->dinfo->disp, pane->gc, pane->term->palette[fg]);
+		XDrawLine(pane->dinfo->disp, pane->pixmap, pane->gc, x, y + 1, x + w - 1, y + 1);
 	}
 }
 
@@ -351,6 +346,7 @@ drawCursor(Pane *pane, Line *line, int row, int col, int type)
 	const int x = pane->xpad + col * pane->xfont->cw;
 	const int y = pane->ypad + row * pane->xfont->ch;
 	const int width = pane->xfont->cw * u32swidth(c, 1) - 1;
+	const DispInfo *dinfo = pane->dinfo;
 	int attr;
 	Line cursor;
 
@@ -368,18 +364,18 @@ drawCursor(Pane *pane, Line *line, int row, int col, int type)
 			cursor = (Line){c, &attr, &defbg, &deffg};
 			drawLine(pane, &cursor, row, col, 1, 0);
 		} else {
-			XSetForeground(pane->disp, pane->gc, BELLCOLOR(pane->term->palette[deffg]));
-			XDrawRectangle(pane->disp, pane->pixmap, pane->gc, x, y, width, pane->xfont->ch - 1);
-			XDrawPoint(pane->disp, pane->pixmap, pane->gc, x + width, y + pane->xfont->ch - 1);
+			XSetForeground(dinfo->disp, pane->gc, BELLCOLOR(pane->term->palette[deffg]));
+			XDrawRectangle(dinfo->disp, pane->pixmap, pane->gc, x, y, width, pane->xfont->ch - 1);
+			XDrawPoint(dinfo->disp, pane->pixmap, pane->gc, x + width, y + pane->xfont->ch - 1);
 		}
 		break;
 	case 3: /* 下線 */
 	case 4:
-		XFillRectangle(pane->disp, pane->pixmap, pane->gc, x, y + 1 + pane->xfont->ascent, width, pane->xfont->ch * 0.1);
+		XFillRectangle(dinfo->disp, pane->pixmap, pane->gc, x, y + 1 + pane->xfont->ascent, width, pane->xfont->ch * 0.1);
 		break;
 	case 5: /* 縦線 */
 	case 6:
-		XFillRectangle(pane->disp, pane->pixmap, pane->gc, x - 1, y, pane->xfont->ch * 0.1, pane->xfont->ch);
+		XFillRectangle(dinfo->disp, pane->pixmap, pane->gc, x - 1, y, pane->xfont->ch * 0.1, pane->xfont->ch);
 		break;
 	}
 }
@@ -428,17 +424,16 @@ drawLineRev(Pane *pane, Line *line, int row, int col1, int col2)
 	yoff = pane->ypad + row * pane->xfont->ch;
 	len = MIN(u32slen(line->str + li), ri - li);
 
-	XSetForeground(pane->disp, pane->gc, BELLCOLOR(pane->term->palette[deffg]));
-	XFillRectangle(pane->disp, pane->pixmap, pane->gc, xoff, yoff,
+	XSetForeground(pane->dinfo->disp, pane->gc, BELLCOLOR(pane->term->palette[deffg]));
+	XFillRectangle(pane->dinfo->disp, pane->pixmap, pane->gc, xoff, yoff,
 			u32swidth(line->str + li, len) * pane->xfont->cw, pane->xfont->ch);
 	drawXFontString(pane->draw, &xc, pane->xfont, 0, xoff, yoff + pane->xfont->ascent,
 			line->str + li, len);
 }
 
 void
-bell(void *vp)
+bell(Pane *pane)
 {
-	Pane *pane = (Pane *)vp;
 	pane->timer_active[BELL_TIMER] = 1;
 	pane->timers[BELL_TIMER] = pane->now;
 }

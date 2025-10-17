@@ -3,10 +3,16 @@
 #include "term.h"
 #include "font.h"
 
+typedef struct DispInfo {
+	Display *disp;
+	Visual *visual;
+	Colormap cmap;
+} DispInfo;
+
 enum timer_names { BELL_TIMER, BLINK_TIMER, RAPID_TIMER, CARET_TIMER, TIMER_NUM };
 
 typedef struct Pane {
-	Display *disp;
+	DispInfo *dinfo;
 	XFont *xfont;
 	Pixmap pixmap;
 	Drawable d;
@@ -28,20 +34,12 @@ typedef struct Pane {
 	char timer_lit[TIMER_NUM];
 } Pane;
 
-Pane *createPane(Display *, XFont *, Drawable, int, int, int);
+Pane *createPane(DispInfo *, XFont *, Drawable, int, int, int);
 void destroyPane(Pane *);
 void setPaneSize(Pane *, int, int);
-
 void mouseEvent(Pane *, XEvent *);
 void scrollPane(Pane *, int);
 void setSelection(Pane *, int, int, char, char);
 void copySelection(Pane *, char **);
 void manegeTimer(Pane *, struct timespec *);
-
 void drawPane(Pane *, Line *, int);
-void drawLine(Pane *, Line *, int, int, int, int);
-void drawCursor(Pane *, Line *, int, int, int);
-void drawSelection(Pane *, struct Selection *);
-void drawLineRev(Pane *, Line *, int, int, int);
-
-void bell(void *);
