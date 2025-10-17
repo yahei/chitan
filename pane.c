@@ -232,9 +232,9 @@ drawPane(Pane *pane, Line *peline, int pecaret)
 	XFillRectangle(pane->dinfo->disp, pane->pixmap, pane->gc, 0, 0, pane->width, pane->height);
 
 	/* 端末の内容をウィンドウに表示 */
-	for (i = 0; i <= pane->term->sb->rows; i++)
+	for (i = 0; i < pane->term->sb->rows + 2; i++)
 		if ((line = getLine(pane->term, i - pane->scr)))
-			drawLine(pane, line, i, 0, pane->term->sb->cols, 0);
+			drawLine(pane, line, i, 0, pane->term->sb->cols + 2, 0);
 
 	/* カーソルかPreeditを表示 */
 	XSetForeground(pane->dinfo->disp, pane->gc, pane->term->palette[deffg]);
@@ -252,7 +252,7 @@ drawPane(Pane *pane, Line *peline, int pecaret)
 		/* Preeditとカーソルの描画 */
 		drawLine(pane, peline, pane->term->cy, pepos, pewidth, 0);
 		drawCursor(pane, peline, pane->term->cy, pepos + pecaretpos, 6);
-	} else if (1 <= pane->term->dec[25] && pane->term->cx < pane->term->sb->cols) {
+	} else if (1 <= pane->term->dec[25] && pane->term->cx < pane->term->sb->cols + 2) {
 		/* カーソルの描画 */
 		caretrow = pane->term->cy + pane->scr;
 		if (caretrow <= pane->term->sb->rows && (line = getLine(pane->term, pane->term->cy)))
@@ -397,10 +397,10 @@ drawSelection(Pane *pane, struct Selection *sel)
 		if (sel->aline == sel->bline) {
 			DRAW(s, sel->acol, sel->bcol);
 		} else {
-			DRAW(s, (sel->aline < sel->bline ? sel->acol : sel->bcol), pane->term->sb->cols + 1);
+			DRAW(s, (sel->aline < sel->bline ? sel->acol : sel->bcol), pane->term->sb->cols + 2);
 			DRAW(e, 0, (sel->aline < sel->bline ? sel->bcol : sel->acol));
 			for (i = s + 1; i < e; i++)
-				DRAW(i, 0, pane->term->sb->cols + 1);
+				DRAW(i, 0, pane->term->sb->cols + 2);
 		}
 	}
 #undef DRAW
@@ -414,7 +414,7 @@ drawLineRev(Pane *pane, Line *line, int row, int col1, int col2)
 	int li, ri;
 	int xoff, yoff, len;
 
-	if (!BETWEEN(row, 0, pane->term->sb->rows + 1) || (!line))
+	if (!BETWEEN(row, 0, pane->term->sb->rows + 2) || (!line))
 		return;
 
 	li = MIN(getCharCnt(line->str, MIN(col1, col2)).index, u32slen(line->str));
