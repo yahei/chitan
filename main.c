@@ -245,6 +245,7 @@ closeWindow(Win *win)
 char
 handleXEvent(Win *win)
 {
+	static Pane *dragging = NULL;
 	Pane *pane = win->pane;
 	XEvent event;
 	XConfigureEvent *e;
@@ -265,6 +266,9 @@ handleXEvent(Win *win)
 		if (xim && XFilterEvent(&event, None) == True)
 			continue;
 
+		mx = (event.xbutton.x - pane->xpad) / xfont->cw;
+		my = (event.xbutton.y - pane->ypad) / xfont->ch;
+
 		switch (event.type) {
 		case KeyPress:
 			/* キーボード入力 */
@@ -278,63 +282,47 @@ handleXEvent(Win *win)
 		case ButtonPress:
 			state = event.xbutton.state;
 			mb = event.xbutton.button;
-			/* スクロール */
 			if ((mb == 4 || mb == 5) && pane->term->sb == &pane->term->ori) {
+				/* スクロール */
 				scrollPane(pane, (mb == 4 ? 1 : -1) * 3);
-				break;
-			}
-			/* 擬似端末に通知 */
-			if (!BETWEEN(mb, 1, 4) || (state & ~(ShiftMask | Mod1Mask)) ||
+			} else if (!BETWEEN(mb, 1, 4) || (state & ~(ShiftMask | Mod1Mask)) ||
 					(pane->term->sb == &pane->term->alt && !(state & ShiftMask))) {
+				/* 擬似端末に通知 */
 				mouseEvent(pane, &event);
-				break;
-			}
-			/* 貼り付け */
-			if (mb == 2) {
+			} else if (mb == 2) {
+				/* 貼り付け */
 				XConvertSelection(disp, atoms[PRIMARY], atoms[UTF8_STRING],
 						atoms[MY_SELECTION], win->window, event.xkey.time);
 				pane->scr = 0;
-				break;
+			} else {
+				/* 範囲選択のドラッグを開始 */
+				setSelection(pane, my, mx, mb == 1, 0 < (state & Mod1Mask));
+				dragging = pane;
 			}
-			/* 範囲選択のドラッグを開始 */
-			pane->selection.rect = 0 < (state & Mod1Mask);
-			pane->selection.altbuf = pane->term->sb == &pane->term->alt;
-			pane->selection.dragging = 1;
+			break;
 
 		case MotionNotify:
-			/* 疑似端末に通知 */
-			if (!pane->selection.dragging) {
+			if (!dragging)
+				/* 疑似端末に通知 */
 				mouseEvent(pane, &event);
-				break;
-			}
-
-			/* ここからPress/Motion共通の処理 */
-			/* 範囲選択の終点を設定 */
-			mx = (event.xbutton.x - pane->xpad) / xfont->cw;
-			my = (event.xbutton.y - pane->ypad) / xfont->ch;
-			pane->selection.bcol = mx;
-			pane->selection.bline = my + pane->term->sb->firstline - pane->scr;
-			/* 範囲選択の始点を設定 */
-			if (mb == 1) {
-				pane->selection.acol = mx;
-				pane->selection.aline = my + pane->term->sb->firstline- pane->scr;
-			}
-			pane->redraw_flag = 1;
+			else
+				/* 範囲選択の終点を動かす */
+				setSelection(dragging, my, mx, 0, pane->selection.rect);
 			break;
 
 		case ButtonRelease:
 			/* 疑似端末に通知 */
-			if (!pane->selection.dragging) {
+			if (!dragging) {
 				mouseEvent(pane, &event);
 				break;
 			}
 			/* 範囲選択のドラッグを終了 */
-			pane->selection.dragging = 0;
-			if (pane->selection.aline == pane->selection.bline &&
-			    pane->selection.acol  == pane->selection.bcol)
+			if (dragging->selection.aline == dragging->selection.bline &&
+			    dragging->selection.acol  == dragging->selection.bcol)
 				break;
 			XSetSelectionOwner(disp, atoms[PRIMARY], win->window, event.xkey.time);
-			copySelection(pane, &pane->selection.primary);
+			copySelection(dragging, &dragging->selection.primary);
+			dragging = NULL;
 			break;
 
 		case Expose:

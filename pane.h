@@ -20,7 +20,7 @@ typedef struct Pane {
 	struct ScreenBuffer *prevbuf;
 	struct Selection {
 		int aline, acol, bline, bcol;
-		int rect, altbuf, dragging;
+		int rect, altbuf;
 		char *primary, *clip;
 	} selection;
 	struct timespec timers[TIMER_NUM], now;
@@ -34,6 +34,7 @@ void setPaneSize(Pane *, int, int);
 
 void mouseEvent(Pane *, XEvent *);
 void scrollPane(Pane *, int);
+void setSelection(Pane *, int, int, char, char);
 void copySelection(Pane *, char **);
 void manegeTimer(Pane *, struct timespec *);
 

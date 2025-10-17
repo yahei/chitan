@@ -115,6 +115,21 @@ scrollPane(Pane *pane, int n)
 }
 
 void
+setSelection(Pane *pane, int line, int col, char start, char rect)
+{
+	pane->selection.rect = rect;
+	pane->redraw_flag = 1;
+	line += pane->term->sb->firstline - pane->scr;
+	if (start) {
+		pane->selection.altbuf = pane->term->sb == &pane->term->alt;
+		pane->selection.acol = col;
+		pane->selection.aline = line;
+	}
+	pane->selection.bcol = col;
+	pane->selection.bline = line;
+}
+
+void
 copySelection(Pane *pane, char **dst)
 {
 	int len = 256;
