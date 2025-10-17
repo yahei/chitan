@@ -40,7 +40,7 @@ Term *
 openTerm(int row, int col, int bufsize)
 {
 	Term *term;
-	char *sname;
+	char *sname, *shell;
 	int slave;
 	int i;
 
@@ -102,11 +102,13 @@ openTerm(int row, int col, int bufsize)
 		dup2(slave, 2);
 		close(slave);
 		setenv("TERM", "chitan-256color", 1);
+		if (!(shell = getenv("SHELL")))
+			shell = "/bin/sh";
 		if (setsid() < 0)
 			fatal("setsid failed.\n");
 		if (ioctl(0, TIOCSCTTY) < 0)
 			fprintf(stderr, "TIOCSCTTY failed.\n");
-		if (execlp("bash", "bash", NULL) < 0)
+		if (execlp(shell, shell, NULL) < 0)
 			fatal("exec failed.\n");
 		break;
 
