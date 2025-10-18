@@ -25,6 +25,7 @@ enum sgr_attribute {
 typedef struct Line {
 	char32_t *str;
 	int *attr, *fg, *bg;
+	int ver;
 } Line;
 
 typedef struct InsertLine {

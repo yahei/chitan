@@ -19,10 +19,7 @@ allocLine(void)
 {
 	Line *line = xmalloc(sizeof(Line));
 
-	line->str = xmalloc(sizeof(char32_t));
-	line->attr = xmalloc(0);
-	line->fg = xmalloc(0);
-	line->bg = xmalloc(0);
+	*line = (Line){ .str = xmalloc(sizeof(char32_t)) };
 	line->str[0] = L'\0';
 
 	return line;
@@ -64,6 +61,7 @@ insertU32s(Line *line, int head, const InsertLine *ins, int len)
 	INSERT(line->bg, ins->bg, sizeof(int), 0);
 
 #undef INSERT
+	line->ver++;
 }
 
 void
@@ -91,6 +89,7 @@ deleteChars(Line *line, int head, int len)
 	DELETE(line->bg, buf, sizeof(int), 0);
 
 #undef DELETE
+	line->ver++;
 }
 
 int
