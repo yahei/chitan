@@ -125,7 +125,7 @@ setSelection(Pane *pane, int line, int col, char start, char rect)
 }
 
 void
-copySelection(Pane *pane, char **dst)
+copySelection(Pane *pane, char **dst, int deltrail)
 {
 	int len = 256;
 	char32_t *cp, *copy = xmalloc(len * sizeof(copy[0]));
@@ -134,7 +134,7 @@ copySelection(Pane *pane, char **dst)
 	int left      = MIN(pane->selection.acol,  pane->selection.bcol);
 	int right     = MAX(pane->selection.acol,  pane->selection.bcol);
 	Line *line;
-	int i, l, r;
+	int i, j, l, r;
 
 	copy[0] = L'\0';
 
@@ -160,6 +160,14 @@ copySelection(Pane *pane, char **dst)
 		cp = copy + u32slen(copy);
 		wcsncpy((wchar_t *)cp, (wchar_t *)line->str + l, r - l);
 		cp[r - l] = L'\0';
+
+		if (deltrail) {
+			for (j = u32slen(cp); 0 < j; j--)
+				if (cp[j - 1] != L' ')
+					break;
+			cp[j] = L'\0';
+		}
+
 		if (i < lastline)
 			wcscat((wchar_t *)copy, L"\n");
 	}

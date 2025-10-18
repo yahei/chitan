@@ -40,6 +40,6 @@ void setPaneSize(Pane *, int, int);
 void mouseEvent(Pane *, XEvent *);
 void scrollPane(Pane *, int);
 void setSelection(Pane *, int, int, char, char);
-void copySelection(Pane *, char **);
+void copySelection(Pane *, char **, int);
 void manegeTimer(Pane *, struct timespec *);
 void drawPane(Pane *, Line *, int);
