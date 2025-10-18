@@ -28,7 +28,7 @@ typedef struct Pane {
 		int aline, acol, bline, bcol;
 		int rect, altbuf;
 		char *primary, *clip;
-	} selection;
+	} sel;
 	struct timespec timers[TIMER_NUM], now;
 	char timer_active[TIMER_NUM];
 	char timer_lit[TIMER_NUM];

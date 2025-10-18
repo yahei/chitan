@@ -57,6 +57,8 @@ destroyPane(Pane *pane)
 	XftDrawDestroy(pane->draw);
 	XFreeGC(pane->dinfo->disp, pane->gc);
 	XFreePixmap(pane->dinfo->disp, pane->pixmap);
+	free(pane->sel.primary);
+	free(pane->sel.clip);
 	free(pane);
 }
 
@@ -112,16 +114,16 @@ scrollPane(Pane *pane, int n)
 void
 setSelection(Pane *pane, int line, int col, char start, char rect)
 {
-	pane->selection.rect = rect;
+	pane->sel.rect = rect;
 	pane->redraw_flag = 1;
 	line += pane->term->sb->firstline - pane->scr;
 	if (start) {
-		pane->selection.altbuf = pane->term->sb == &pane->term->alt;
-		pane->selection.acol = col;
-		pane->selection.aline = line;
+		pane->sel.altbuf = pane->term->sb == &pane->term->alt;
+		pane->sel.acol = col;
+		pane->sel.aline = line;
 	}
-	pane->selection.bcol = col;
-	pane->selection.bline = line;
+	pane->sel.bcol = col;
+	pane->sel.bline = line;
 }
 
 void
@@ -129,10 +131,10 @@ copySelection(Pane *pane, char **dst, int deltrail)
 {
 	int len = 256;
 	char32_t *cp, *copy = xmalloc(len * sizeof(copy[0]));
-	int firstline = MIN(pane->selection.aline, pane->selection.bline);
-	int lastline  = MAX(pane->selection.aline, pane->selection.bline);
-	int left      = MIN(pane->selection.acol,  pane->selection.bcol);
-	int right     = MAX(pane->selection.acol,  pane->selection.bcol);
+	int firstline = MIN(pane->sel.aline, pane->sel.bline);
+	int lastline  = MAX(pane->sel.aline, pane->sel.bline);
+	int left      = MIN(pane->sel.acol,  pane->sel.bcol);
+	int right     = MAX(pane->sel.acol,  pane->sel.bcol);
 	Line *line;
 	int i, j, l, r;
 
@@ -143,7 +145,7 @@ copySelection(Pane *pane, char **dst, int deltrail)
 		if (!(line = getLine(pane->term, i - pane->term->sb->firstline)))
 			continue;
 
-		if (pane->selection.rect) {
+		if (pane->sel.rect) {
 			l = MIN(getCharCnt(line->str,  left).index, u32slen(line->str));
 			r = MIN(getCharCnt(line->str, right).index, u32slen(line->str));
 		} else {
@@ -268,10 +270,10 @@ drawPane(Pane *pane, Line *peline, int pecaret)
 	}
 
 	/* 選択範囲を書く */
-	if ((pane->selection.aline != pane->selection.bline ||
-	     pane->selection.acol  != pane->selection.bcol) &&
-	    pane->selection.altbuf == (pane->term->sb == &pane->term->alt))
-		drawSelection(pane, &pane->selection);
+	if ((pane->sel.aline != pane->sel.bline ||
+	     pane->sel.acol  != pane->sel.bcol) &&
+	    pane->sel.altbuf == (pane->term->sb == &pane->term->alt))
+		drawSelection(pane, &pane->sel);
 
 	pane->redraw_flag = 0;
 }

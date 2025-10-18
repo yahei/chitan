@@ -233,8 +233,6 @@ openWindow(void)
 void
 closeWindow(Win *win)
 {
-	free(win->pane->selection.primary);
-	free(win->pane->selection.clip);
 	destroyPane(win->pane);
 	freeLine(win->ime.peline);
 	XFree(win->ime.spotlist);
@@ -313,7 +311,7 @@ handleXEvent(Win *win)
 				mouseEvent(pane, &event);
 			else
 				/* 範囲選択の終点を動かす */
-				setSelection(dragging, my, mx, 0, pane->selection.rect);
+				setSelection(dragging, my, mx, 0, pane->sel.rect);
 			break;
 
 		case ButtonRelease:
@@ -323,11 +321,11 @@ handleXEvent(Win *win)
 				break;
 			}
 			/* 範囲選択のドラッグを終了 */
-			if (dragging->selection.aline == dragging->selection.bline &&
-			    dragging->selection.acol  == dragging->selection.bcol)
+			if (dragging->sel.aline == dragging->sel.bline &&
+			    dragging->sel.acol  == dragging->sel.bcol)
 				break;
 			XSetSelectionOwner(dinfo.disp, atoms[PRIMARY], win->window, event.xkey.time);
-			copySelection(dragging, &dragging->selection.primary, !dragging->selection.rect);
+			copySelection(dragging, &dragging->sel.primary, !dragging->sel.rect);
 			dragging = NULL;
 			break;
 
@@ -360,7 +358,7 @@ handleXEvent(Win *win)
 			/* 貼り付ける文字列を送る */
 			sre = &event.xselectionrequest;
 			sel = sre->selection == atoms[PRIMARY] ?
-				pane->selection.primary : pane->selection.clip;
+				pane->sel.primary : pane->sel.clip;
 			if (!sel)
 				sel = "";
 			if (sre->property == None)
@@ -436,7 +434,7 @@ keyPressEvent(Win *win, XEvent event, int bufsize)
 
 	/* C-S-cでコピー */
 	if (keysym == XK_C && event.xkey.state & ControlMask) {
-		copySelection(win->pane, &win->pane->selection.clip, !win->pane->selection.rect);
+		copySelection(win->pane, &win->pane->sel.clip, !win->pane->sel.rect);
 		XSetSelectionOwner(dinfo.disp, atoms[CLIPBOARD], win->window, event.xkey.time);
 		return 0;
 	}
