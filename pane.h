@@ -28,6 +28,7 @@ typedef struct Pane {
 		int aline, acol, bline, bcol;
 		int rect, altbuf;
 		char *primary, *clip;
+		int *vers;
 	} sel;
 	struct timespec timers[TIMER_NUM], now;
 	char timer_active[TIMER_NUM];
@@ -40,6 +41,7 @@ void setPaneSize(Pane *, int, int);
 void mouseEvent(Pane *, XEvent *);
 void scrollPane(Pane *, int);
 void setSelection(Pane *, int, int, char, char);
+void checkSelection(Pane *);
 void copySelection(Pane *, char **, int);
 void manegeTimer(Pane *, struct timespec *);
 void drawPane(Pane *, Line *, int);

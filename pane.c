@@ -114,16 +114,46 @@ scrollPane(Pane *pane, int n)
 void
 setSelection(Pane *pane, int line, int col, char start, char rect)
 {
+	Line *pline;
+	int s, e, i, first = pane->term->sb->firstline;
+
+	/* 始点と終点をセット */
 	pane->sel.rect = rect;
 	pane->redraw_flag = 1;
-	line += pane->term->sb->firstline - pane->scr;
+	line += first - pane->scr;
 	if (start) {
 		pane->sel.altbuf = pane->term->sb == &pane->term->alt;
-		pane->sel.acol = col;
-		pane->sel.aline = line;
+		pane->sel.acol  = MAX(col,  0);
+		pane->sel.aline = MAX(line, 0);
 	}
-	pane->sel.bcol = col;
-	pane->sel.bline = line;
+	pane->sel.bcol  = MAX(col,  0);
+	pane->sel.bline = MAX(line, 0);
+
+	/* 行のバージョンを記録 */
+	s = MIN(pane->sel.aline, pane->sel.bline);
+	e = MAX(pane->sel.aline, pane->sel.bline);
+	pane->sel.vers = xrealloc(pane->sel.vers, (e - s + 1) * sizeof(int));
+	for (i = 0; i <= e - s; i++)
+		if ((pline = getLine(pane->term, s - first + i)))
+			pane->sel.vers[i] = pline->ver;
+}
+
+void
+checkSelection(Pane *pane)
+{
+	Line *line;
+	int s = MIN(pane->sel.aline, pane->sel.bline);
+	int e = MAX(pane->sel.aline, pane->sel.bline);
+	int i, first = pane->term->sb->firstline;
+
+	for (i = 0; i <= e - s; i++) {
+		if ((line = getLine(pane->term, s - first + i)) &&
+				pane->sel.vers[i] == line->ver)
+			continue;
+		pane->sel.aline = pane->sel.bline;
+		pane->sel.acol  = pane->sel.bcol;
+		return;
+	}
 }
 
 void
@@ -396,6 +426,8 @@ drawSelection(Pane *pane, struct Selection *sel)
 	const int s = MIN(sel->aline, sel->bline) - pane->term->sb->firstline;
 	const int e = MAX(sel->aline, sel->bline) - pane->term->sb->firstline;
 	int i;
+
+	checkSelection(pane);
 
 #define DRAW(n, a, b)   drawLineRev(pane, getLine(pane->term, n), n + pane->scr, a, b)
 	if (sel->rect) {
