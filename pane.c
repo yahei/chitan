@@ -15,7 +15,7 @@
 
 static void drawLine(Pane *, Line *, int, int, int, int);
 static void drawCursor(Pane *, Line *, int, int, int);
-static void drawSelection(Pane *, struct Selection *);
+static void drawSelection(Pane *);
 static void drawLineRev(Pane *, Line *, int, int, int);
 static void bell(Pane *);
 
@@ -300,10 +300,9 @@ drawPane(Pane *pane, Line *peline, int pecaret)
 	}
 
 	/* 選択範囲を書く */
-	if ((pane->sel.aline != pane->sel.bline ||
-	     pane->sel.acol  != pane->sel.bcol) &&
+	if ((pane->sel.aline != pane->sel.bline || pane->sel.acol != pane->sel.bcol) &&
 	    pane->sel.altbuf == (pane->term->sb == &pane->term->alt))
-		drawSelection(pane, &pane->sel);
+		drawSelection(pane);
 
 	pane->redraw_flag = 0;
 }
@@ -421,8 +420,9 @@ drawCursor(Pane *pane, Line *line, int row, int col, int type)
 }
 
 void
-drawSelection(Pane *pane, struct Selection *sel)
+drawSelection(Pane *pane)
 {
+	struct Selection *sel = &pane->sel;
 	const int s = MIN(sel->aline, sel->bline) - pane->term->sb->firstline;
 	const int e = MAX(sel->aline, sel->bline) - pane->term->sb->firstline;
 	int i;
