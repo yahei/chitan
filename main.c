@@ -225,7 +225,7 @@ openWindow(void)
 
 	/* ウィンドウを表示 */
 	XMapWindow(dinfo.disp, win->window);
-	XSync(dinfo.disp, False);
+	XFlush(dinfo.disp);
 
 	return win;
 }
@@ -472,7 +472,7 @@ redraw(Win *win)
 	drawPane(win->pane, win->ime.peline, win->ime.caret);
 	XCopyArea(dinfo.disp, win->pane->pixmap, win->window, win->gc, 0, 0,
 			win->pane->width, win->pane->height, 0, 0);
-	XSync(dinfo.disp, False);
+	XFlush(dinfo.disp);
 }
 
 void
