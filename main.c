@@ -48,6 +48,7 @@ static void fin(void);
 /* Win */
 static Win *openWindow(void);
 static void closeWindow(Win *);
+static void setWindowName(Win *, char *);
 static char handleXEvent(Win *);
 static char keyPressEvent(Win *, XEvent, int);
 static void redraw(Win *);
@@ -201,11 +202,12 @@ openWindow(void)
 	win->window = XCreateWindow(dinfo.disp, DefaultRootWindow(dinfo.disp),
 			0, 0, win->width, win->height, 1, 32, InputOutput, dinfo.visual,
 			CWEventMask | CWColormap | CWBorderPixel, &win->attr);
+	setWindowName(win, "chitan");
 
 	/* プロパティ */
 	win->hint = XAllocClassHint();
-	win->hint->res_name = "chitan";
-	win->hint->res_class = "chitan";
+	win->hint->res_name = "chitan-256color";
+	win->hint->res_class = "chitan-256color";
 	XSetClassHint(dinfo.disp, win->window, win->hint);
 
 	/* 描画の準備 */
@@ -244,6 +246,16 @@ closeWindow(Win *win)
 	XFree(win->hint);
 	XDestroyWindow(dinfo.disp, win->window);
 	free(win);
+}
+
+void
+setWindowName(Win *win, char *title)
+{
+	XTextProperty prop = {
+		(unsigned char *)title, atoms[UTF8_STRING], 8, strlen(title)
+	};
+
+	XSetWMName(dinfo.disp, win->window, &prop);
 }
 
 char
