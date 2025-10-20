@@ -165,7 +165,6 @@ run(void)
 		/* 端末のread */
 		errno = 0;
 		for (i = 0; 0 < readPty(pane->term); i++) {
-			pane->redraw_flag = 1;
 			if (0 < (i + 1) % 8)
 				continue;
 			clock_gettime(CLOCK_MONOTONIC, &time);
@@ -175,6 +174,7 @@ run(void)
 		}
 		if (errno == EIO)
 			return;
+		if (0 < i) pane->redraw_flag = 1;
 
 		/* IMEスポット移動 */
 		if (pane->redraw_flag && win->ime.xic) {
