@@ -20,12 +20,12 @@ static void drawLineRev(Pane *, Line *, int, int, int);
 static void bell(Pane *);
 
 Pane *
-createPane(DispInfo *dinfo, XFont *xfont, const char *program, int width, int height, int depth)
+createPane(DispInfo *dinfo, XFont *xfont, const char *program, int width, int height, float alpha)
 {
 	Pane *pane = xmalloc(sizeof(Pane));
 
 	*pane = (Pane){
-		.dinfo = dinfo, .xfont = xfont, .depth = depth,
+		.dinfo = dinfo, .xfont = xfont, .depth = 32, .alpha = alpha,
 		.width = width, .height = height,
 		.xpad = xfont->cw / 2, .ypad = xfont->cw / 2
 	};
@@ -40,11 +40,12 @@ createPane(DispInfo *dinfo, XFont *xfont, const char *program, int width, int he
 		errExit("openTerm failed.\n");
 	pane->term->bell = (void (*)(void *))bell;
 	pane->term->bellp = pane;
-	pane->term->palette[defbg] = 0xcc000000 + (0x00ffffff & pane->term->palette[defbg]);
+	pane->term->palette[defbg] = ((0xff & (int)(0xff * alpha)) << 24) +
+		(0x00ffffff & pane->term->palette[defbg]);
 
 	/* 描画の準備 */
 	pane->pixmap = XCreatePixmap(dinfo->disp,
-			DefaultRootWindow(dinfo->disp), width, height, depth);
+			DefaultRootWindow(dinfo->disp), width, height, pane->depth);
 	pane->gc = XCreateGC(dinfo->disp, pane->pixmap, 0, NULL);
 	pane->draw = XftDrawCreate(dinfo->disp, pane->pixmap, dinfo->visual, dinfo->cmap);
 

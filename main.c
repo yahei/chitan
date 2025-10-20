@@ -41,6 +41,7 @@ static XFont *xfont;
 static XIM xim;
 static Win *win;
 static struct timespec now;
+static float alpha;
 static char *program;
 
 static void init(void);
@@ -72,12 +73,16 @@ Atom atoms[ATOM_NUM];
 int
 main(int argc, char *args[])
 {
+	alpha = 1.0f;
 	program = getenv("SHELL");
 	program = program ? program : "bin/sh";
 
 	while (1) {
-		switch (getopt(argc, args, "e:")) {
+		switch (getopt(argc, args, "a:e:")) {
 		case '?':
+			continue;
+		case 'a':
+			alpha = CLIP(atof(optarg), 0, 1.0);
 			continue;
 		case 'e':
 			program = optarg;
@@ -205,7 +210,7 @@ openWindow(void)
 	Win *win = xmalloc(sizeof(Win));
 
 	*win = (Win) { .width = 800, .height = 600 };
-	win->pane = createPane(&dinfo, xfont, program, 800, 600, 32);
+	win->pane = createPane(&dinfo, xfont, program, 800, 600, alpha);
 
 	/* ウィンドウの属性 */
 	win->attr.event_mask = KeyPressMask | KeyReleaseMask |
