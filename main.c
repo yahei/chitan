@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
+#include <unistd.h>
 #include <wchar.h>
 #include <X11/Xlib.h>
 
@@ -40,6 +41,7 @@ static XFont *xfont;
 static XIM xim;
 static Win *win;
 static struct timespec now;
+static char *program;
 
 static void init(void);
 static void run(void);
@@ -70,6 +72,20 @@ Atom atoms[ATOM_NUM];
 int
 main(int argc, char *args[])
 {
+	program = getenv("SHELL");
+	program = program ? program : "bin/sh";
+
+	while (1) {
+		switch (getopt(argc, args, "e:")) {
+		case '?':
+			continue;
+		case 'e':
+			program = optarg;
+			continue;
+		}
+		break;
+	}
+
 	init();
 	run();
 	fin();
@@ -186,17 +202,16 @@ fin(void)
 Win *
 openWindow(void)
 {
-	Pane *pane = createPane(&dinfo, xfont, DefaultRootWindow(dinfo.disp), 800, 600, 32);
 	Win *win = xmalloc(sizeof(Win));
 
-	*win = (Win) { .width = 800, .height = 600, .pane = pane };
+	*win = (Win) { .width = 800, .height = 600 };
+	win->pane = createPane(&dinfo, xfont, program, 800, 600, 32);
 
 	/* ウィンドウの属性 */
 	win->attr.event_mask = KeyPressMask | KeyReleaseMask |
 		ExposureMask | FocusChangeMask | StructureNotifyMask |
 		ButtonPressMask | ButtonReleaseMask | ButtonMotionMask;
 	win->attr.colormap = dinfo.cmap;
-	win->attr.border_pixel = pane->term->palette[defbg];
 
 	/* ウィンドウ作成 */
 	win->window = XCreateWindow(dinfo.disp, DefaultRootWindow(dinfo.disp),

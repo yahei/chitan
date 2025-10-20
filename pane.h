@@ -15,7 +15,6 @@ typedef struct Pane {
 	DispInfo *dinfo;
 	XFont *xfont;
 	Pixmap pixmap;
-	Drawable d;
 	unsigned int depth;
 	GC gc;
 	XftDraw *draw;
@@ -35,7 +34,7 @@ typedef struct Pane {
 	char timer_lit[TIMER_NUM];
 } Pane;
 
-Pane *createPane(DispInfo *, XFont *, Drawable, int, int, int);
+Pane *createPane(DispInfo *, XFont *, const char *, int, int, int);
 void destroyPane(Pane *);
 void setPaneSize(Pane *, int, int);
 void mouseEvent(Pane *, XEvent *);

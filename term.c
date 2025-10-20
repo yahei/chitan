@@ -37,10 +37,10 @@ static void setSGR(Term *, char *);
 static const char *designateCharSet(Term *, const char *, const char *);
 
 Term *
-openTerm(int row, int col, int bufsize)
+openTerm(int row, int col, int bufsize, const char *program)
 {
 	Term *term;
-	char *sname, *shell;
+	char *sname;
 	int slave;
 	int i;
 
@@ -102,13 +102,11 @@ openTerm(int row, int col, int bufsize)
 		dup2(slave, 2);
 		close(slave);
 		setenv("TERM", "chitan-256color", 1);
-		if (!(shell = getenv("SHELL")))
-			shell = "/bin/sh";
 		if (setsid() < 0)
 			fatal("setsid failed.\n");
 		if (ioctl(0, TIOCSCTTY) < 0)
 			fprintf(stderr, "TIOCSCTTY failed.\n");
-		if (execlp(shell, shell, NULL) < 0)
+		if (execlp(program, program, NULL) < 0)
 			fatal("exec failed.\n");
 		break;
 
