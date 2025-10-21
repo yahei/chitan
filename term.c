@@ -234,6 +234,7 @@ procNCCs(Term *term, const char *head)
 	char32_t decoded[len], *dp;
 	const char *rest;
 	Line *line;
+	CharCnt cc;
 	int max = term->sb->cols - term->cx, wlen;
 	int i;
 
@@ -261,9 +262,13 @@ procNCCs(Term *term, const char *head)
 		wlen = MAX(wlen, 1);
 
 		/* 書き込む */
-		if ((line = getLine(term, term->cy)))
+		if ((line = getLine(term, term->cy))) {
 			term->cx += putU32s(line, term->cx, dp, term->attr,
 					term->fg, term->bg, wlen);
+			cc = getCharCnt(line->str, term->sb->cols);
+			if (cc.index < u32slen(line->str))
+				line->str[cc.index] = '\0';
+		}
 	}
 
 	return rest;
