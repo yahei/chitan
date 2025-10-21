@@ -459,7 +459,7 @@ drawLineRev(Pane *pane, Line *line, int row, int col1, int col2)
 	int li, ri;
 	int xoff, yoff, len;
 
-	if (!BETWEEN(row, 0, pane->term->sb->rows + 2) || (!line))
+	if (!BETWEEN(row, -1, pane->term->sb->rows + 2) || (!line))
 		return;
 
 	li = MIN(getCharCnt(line->str, MIN(col1, col2)).index, u32slen(line->str));
