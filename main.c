@@ -81,20 +81,11 @@ main(int argc, char *argv[])
 
 	while (1) {
 		switch (getopt(argc, argv, "+a:e:f:s:")) {
-		case '?':
-			continue;
-		case 'a':
-			alpha = CLIP(atof(optarg), 0, 1.0);
-			continue;
-		case 'e':
-			pargv = argv + optind - 1;
-			break;
-		case 'f':
-			fontfamily = optarg;
-			continue;
-		case 's':
-			fontsize = MAX(atof(optarg), 1);
-			continue;
+		case '?':                                       continue;
+		case 'a': alpha = CLIP(atof(optarg), 0, 1.0);   continue;
+		case 'e': pargv = argv + optind - 1;            break;
+		case 'f': fontfamily = optarg;                  continue;
+		case 's': fontsize = MAX(atof(optarg), 1);      continue;
 		}
 		break;
 	}
