@@ -35,6 +35,7 @@ static void decset(Term *, unsigned int, int);
 static void setScrBufSize(Term *term, int, int);
 static void setSGR(Term *, char *);
 static const char *designateCharSet(Term *, const char *, const char *);
+static void dumbbell(void *){};
 
 Term *
 openTerm(int row, int col, int bufsize, const char *program, char *const pargv[])
@@ -46,7 +47,8 @@ openTerm(int row, int col, int bufsize, const char *program, char *const pargv[]
 
 	/* 構造体の初期化 */
 	term = xmalloc(sizeof(Term));
-	*term = (Term){ .master = -1, .ctype = 2, .fg = deffg, .bg = defbg };
+	*term = (Term){ .master = -1, .ctype = 2, .fg = deffg, .bg = defbg,
+		.bell = &dumbbell };
 
 	/* スクリーンバッファの初期化 */
 	term->ori = term->alt = (struct ScreenBuffer){
@@ -282,35 +284,14 @@ procCC(Term *term, const char *head, const char *tail)
 
 	/* C0 基本集合 */
 	switch (*head) {
-	case 0x00: /* NUL */
-		break;
-
-	case 0x07: /* BEL */
-		if (term->bell)
-			term->bell(term->bellp);
-		break;
-
-	case 0x08: /* BS */
-		moveCursorPos(term, -1, 0);
-		break;
-
-	case 0x09: /* HT */
-		moveCursorPos(term, 8 - term->cx % 8, 0);
-		break;
-
-	case 0x0a: /* LF */
-		linefeed(term);
-		break;
-
-	case 0x0d: /* CR */
-		setCursorPos(term, 0, term->cy);
-		break;
-
-	case 0x1b: /* ESC */
-		return procESC(term, head + 1, tail);
-
-	default: /* 未対応 */
-		fprintf(stderr, "Not Supported C0: (%#x)\n", *head);
+	case 0x00:                                              break; /* NUL */
+	case 0x07: term->bell(term->bellp);                     break; /* BEL */
+	case 0x08: moveCursorPos(term, -1, 0);                  break; /* BS  */
+	case 0x09: moveCursorPos(term, 8 - term->cx % 8, 0);    break; /* HT  */
+	case 0x0a: linefeed(term);                              break; /* LF  */
+	case 0x0d: setCursorPos(term, 0, term->cy);             break; /* CR  */
+	case 0x1b: return procESC(term, head + 1, tail);               /* ESC */
+	default: fprintf(stderr, "Not Supported C0: (%#x)\n", *head);  /* etc */
 	}
 
 	return head + 1;
@@ -931,22 +912,16 @@ setSGR(Term *term, char *param)
 		/* 属性 */
 		if (BETWEEN(n, 1, 10))
 			term->attr |= 1 << (n - 1);
-		if (n == 21)
-			term->attr |= DULINE;
-		if (n == 22)
-			term->attr &= ~(BOLD | FAINT);
-		if (n == 23)
-			term->attr &= ~ITALIC;
-		if (n == 24)
-			term->attr &= ~(ULINE | DULINE);
-		if (n == 25)
-			term->attr &= ~(BLINK | RAPID);
-		if (n == 27)
-			term->attr &= ~NEGA;
-		if (n == 28)
-			term->attr &= ~CONCEAL;
-		if (n == 29)
-			term->attr &= ~STRIKE;
+		switch (n) {
+		case 21: term->attr |= DULINE;                  break;
+		case 22: term->attr &= ~(BOLD | FAINT);         break;
+		case 23: term->attr &= ~ITALIC;                 break;
+		case 24: term->attr &= ~(ULINE | DULINE);       break;
+		case 25: term->attr &= ~(BLINK | RAPID);        break;
+		case 27: term->attr &= ~NEGA;                   break;
+		case 28: term->attr &= ~CONCEAL;                break;
+		case 29: term->attr &= ~STRIKE;                 break;
+		}
 
 		/* フォント */
 		if (BETWEEN(n, 10, 21))

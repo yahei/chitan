@@ -186,7 +186,7 @@ u8sToU32s(char32_t *dst, const char *src, size_t n)
 	const char *rest = src;
 	int bytes;
 
-	for (;;) {
+	while (1) {
 		if (n == 0)
 			return rest;
 
