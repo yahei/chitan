@@ -3,6 +3,12 @@
 #include "pane.h"
 #include "util.h"
 
+/*
+ * Pane
+ *
+ * Pixmapを持ち、そこに端末の内容を書く
+ */
+
 #define CHOOSE(a, b, c) (timespeccmp((a), (b), c) ? (a) : (b))
 #define BLEND_COLOR(c1, a1, c2, a2) (\
 		((int)(ALPHA(c1) * (a1) + ALPHA(c2) * (a2)) << 24) +\

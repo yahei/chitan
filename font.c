@@ -5,6 +5,12 @@
 #include "font.h"
 #include "util.h"
 
+/*
+ * XFont
+ *
+ * フォントやグリフのフォールバック先を管理する
+ */
+
 XftFontSuite *getFontSuiteGlyphs(XFont *, char32_t);
 XftFontSuite *getFontSuiteFonts(XFont *, const char *);
 char *getFontName(const unsigned char *, char32_t, char *, int);
