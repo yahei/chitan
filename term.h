@@ -44,7 +44,7 @@ typedef struct Term {
 	void *bellp;            /* ベルのcallbackに渡す */
 } Term;
 
-Term *openTerm(int, int, int, const char *);
+Term *openTerm(int, int, int, const char *, char *const []);
 void closeTerm(Term *);
 ssize_t readPty(Term *);
 ssize_t writePty(Term *, const char *, ssize_t);

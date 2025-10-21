@@ -42,7 +42,7 @@ static XIM xim;
 static Win *win;
 static struct timespec now;
 static float alpha;
-static char *program;
+static char **pargv;
 
 static void init(void);
 static void run(void);
@@ -71,22 +71,22 @@ enum { PRIMARY, CLIPBOARD, UTF8_STRING, MY_SELECTION, ATOM_NUM };
 Atom atoms[ATOM_NUM];
 
 int
-main(int argc, char *args[])
+main(int argc, char *argv[])
 {
 	alpha = 1.0f;
-	program = getenv("SHELL");
-	program = program ? program : "bin/sh";
+	pargv = (char *[]){ getenv("SHELL"), NULL };
+	pargv[0] = pargv[0] ? pargv[0] : "bin/sh";
 
 	while (1) {
-		switch (getopt(argc, args, "a:e:")) {
+		switch (getopt(argc, argv, "+a:e:")) {
 		case '?':
 			continue;
 		case 'a':
 			alpha = CLIP(atof(optarg), 0, 1.0);
 			continue;
 		case 'e':
-			program = optarg;
-			continue;
+			pargv = argv + optind - 1;
+			break;
 		}
 		break;
 	}
@@ -210,7 +210,7 @@ openWindow(void)
 	Win *win = xmalloc(sizeof(Win));
 
 	*win = (Win) { .width = 800, .height = 600 };
-	win->pane = createPane(&dinfo, xfont, program, 800, 600, alpha);
+	win->pane = createPane(&dinfo, xfont, 800, 600, alpha, pargv);
 
 	/* ウィンドウの属性 */
 	win->attr.event_mask = KeyPressMask | KeyReleaseMask |

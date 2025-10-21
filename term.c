@@ -37,7 +37,7 @@ static void setSGR(Term *, char *);
 static const char *designateCharSet(Term *, const char *, const char *);
 
 Term *
-openTerm(int row, int col, int bufsize, const char *program)
+openTerm(int row, int col, int bufsize, const char *program, char *const pargv[])
 {
 	Term *term;
 	char *sname;
@@ -106,9 +106,9 @@ openTerm(int row, int col, int bufsize, const char *program)
 			fatal("setsid failed.\n");
 		if (ioctl(0, TIOCSCTTY) < 0)
 			fprintf(stderr, "TIOCSCTTY failed.\n");
-		if (execlp(program, program, NULL) < 0)
+		if (execvp(program, pargv) < 0)
 			fatal("exec failed.\n");
-		break;
+		return NULL;
 
 	default: /* master側 */
 		close(slave);
