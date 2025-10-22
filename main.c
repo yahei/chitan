@@ -49,7 +49,7 @@ static void run(void);
 static void fin(void);
 
 /* Win */
-static Win *openWindow(void);
+static Win *openWindow(int ,int);
 static void closeWindow(Win *);
 static void setWindowName(Win *, char *);
 static char handleXEvent(Win *);
@@ -131,7 +131,7 @@ init(void)
 		atoms[i] = XInternAtom(dinfo.disp, names[i], True);
 	
 	/* ウィンドウの作成 */
-	win = openWindow();
+	win = openWindow(800, 600);
 }
 
 void
@@ -204,12 +204,11 @@ fin(void)
 }
 
 Win *
-openWindow(void)
+openWindow(int width, int height)
 {
 	Win *win = xmalloc(sizeof(Win));
 
-	*win = (Win) { .width = 800, .height = 600 };
-	win->pane = createPane(&dinfo, xfont, 800, 600, alpha, pargv);
+	*win = (Win){ .width = width, .height = height };
 
 	/* ウィンドウの属性 */
 	win->attr.event_mask = KeyPressMask | KeyReleaseMask |
@@ -219,14 +218,13 @@ openWindow(void)
 
 	/* ウィンドウ作成 */
 	win->window = XCreateWindow(dinfo.disp, DefaultRootWindow(dinfo.disp),
-			0, 0, win->width, win->height, 1, 32, InputOutput, dinfo.visual,
+			0, 0, width, height, 1, 32, InputOutput, dinfo.visual,
 			CWEventMask | CWColormap | CWBorderPixel, &win->attr);
 	setWindowName(win, "chitan");
 
 	/* プロパティ */
 	win->hint = XAllocClassHint();
-	win->hint->res_name = "chitan-256color";
-	win->hint->res_class = "chitan-256color";
+	*win->hint = (XClassHint){ "chitan-256color", "chitan-256color" };
 	XSetClassHint(dinfo.disp, win->window, win->hint);
 
 	/* 描画の準備 */
@@ -247,6 +245,9 @@ openWindow(void)
 	/* ウィンドウを表示 */
 	XMapWindow(dinfo.disp, win->window);
 	XFlush(dinfo.disp);
+
+	/* Pane作成 */
+	win->pane = createPane(&dinfo, xfont, width, height, alpha, pargv);
 
 	return win;
 }
