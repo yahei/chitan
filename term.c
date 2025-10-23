@@ -598,32 +598,31 @@ procSOS(Term *term, const char *head, const char *tail)
 const char *
 procOSC(Term *term, const char *head, const char *tail)
 {
-	const char *p;
-	char *perr, err[tail - head + 1];
+	const int len = tail - head;
+	char payload[len + 1], err[len + 1];
+	int i;
 
-	for (p = head, perr = err;; p++, perr++) {
-		/* 正常終了 */
-		if (p[0] == 0x07)
+	/* BELまで読む */
+	for (i = 0; head[i] != 0x07; i++) {
+		/* ST(ESC \)で終了 */
+		if (i < len && strncmp(&head[i], "\e\\", 2) == 0)
 			break;
-		if (p < tail && p[0] == 0x1b && p[1] == 0x5c) {
-			p++;
-			break;
-		}
-
-		/* 中断 */
-		if (!(BETWEEN(*p, 0x08, 0x0e) || BETWEEN(*p, 0x20, 0x7f)))
-			return p;
-		if (tail <= p)
+		/* 使えない文字が現れて中断 */
+		if (!(BETWEEN(head[i], 0x08, 0x0e) || BETWEEN(head[i], 0x20, 0x7f)))
+			return &head[i];
+		/* 末尾に到達して中断 */
+		if (len <= i)
 			return NULL;
-
-		/* 未対応の表示用 */
-		*perr = BETWEEN(*p, 0x20, 0x7f) ? *p : '?';
+		/* 内容を記録 */
+		payload[i] = BETWEEN(head[i], 0x20, 0x7f) ? head[i] : '?';
 	}
-	err[p - head] = '\0';
+	payload[i] = '\0';
+	strcpy(err, payload);
 
 	/* 未対応 */
 	fprintf(stderr, "Not Supported OSC: %s\n", err);
-	return p + 1;
+
+	return head + i + (head[i] == 0x07 ? 1 : 2);
 }
 
 const char *
