@@ -17,15 +17,18 @@
 
 #define READ_SIZE       4096
 #define LINE(a,b)       (a->lines[b % a->maxlines])
+#define IS_GC(c)         (BETWEEN(c, 0x20, 0x7f))
+
+enum cseq_type { CS_DCS, CS_SOS, CS_OSC, CS_PM, CS_APC, CS_k };
 
 static void setDefaultPalette(Term *);
 static const char *procNCCs(Term *, const char *);
 static const char *procCC(Term *, const char *, const char *);
 static const char *procESC(Term *, const char *, const char *);
 static const char *procCSI(Term *, const char *, const char *);
-static const char *procSOS(Term *, const char *, const char *);
-static const char *procOSC(Term *, const char *, const char *);
-static const char *procCStr(Term *, const char *, const char *);
+static const char *ctrlSeq(Term *, const char *, const char *, enum cseq_type type);
+static void CStr(Term *, const char *, const char *, const char *);
+static void OSC(Term *, char *, const char *);
 static void linefeed(Term *);
 static void setCursorPos(Term *, int, int);
 static void moveCursorPos(Term *, int, int);
@@ -330,17 +333,23 @@ procESC(Term *term, const char *head, const char *tail)
 	case 0x5b: /* CSI */
 		return procCSI(term, head + 1, tail);
 
+	case 0x50: /* DCS */
+		return ctrlSeq(term, head + 1, tail, CS_DCS);
+
 	case 0x58: /* SOS */
-		return procSOS(term, head + 1, tail);
+		return ctrlSeq(term, head + 1, tail, CS_SOS);
 
 	case 0x5d: /* OSC */
-		return procOSC(term, head + 1, tail);
+		return ctrlSeq(term, head + 1, tail, CS_OSC);
 
-	case 0x50: /* DCS */
 	case 0x5e: /* PM */
+		return ctrlSeq(term, head + 1, tail, CS_PM);
+
 	case 0x5f: /* APC */
+		return ctrlSeq(term, head + 1, tail, CS_APC);
+
 	case 0x6b: /* k  タイトル設定? */
-		return procCStr(term, head, tail);
+		return ctrlSeq(term, head + 1, tail, CS_k);
 
 	default:
 		/*
@@ -351,7 +360,7 @@ procESC(Term *term, const char *head, const char *tail)
 		 * 0x40-0x5f   Fe型     C1 補助集合
 		 * 0x60-0x7e   Fs型     標準単独制御機能
 		 */
-		if (BETWEEN(*head, 0x20, 0x7f))
+		if (IS_GC(*head))
 			fprintf(stderr, "Not Supported ESC Seq: ESC %c(%#x)\n",
 					*head, *head);
 		else
@@ -568,64 +577,59 @@ procCSI(Term *term, const char *head, const char *tail)
 }
 
 const char *
-procSOS(Term *term, const char *head, const char *tail)
+ctrlSeq(Term *term, const char *head, const char *tail, enum cseq_type type)
 {
 	const int len = tail - head;
 	char payload[len + 1], err[len + 1];
 	int i;
 
+	/* 中身を読み取る */
 	for (i = 0; i <= len; i++) {
-		/* ST(ESC \)で終了 */
-		if (i < len && strncmp(&head[i], "\e\\", 2) == 0)
+		/* ST(ESC \)またはBELで終了 */
+		if ((i < len && strncmp(&head[i], "\e\\", 2) == 0) ||
+				(type == CS_OSC && head[i] == 0x07))
 			break;
-		/* SOSが現れて中断 */
-		if (i < len && strncmp(&head[i], "\eX", 2) == 0) {
+		/* 使えない文字またはSOSが現れて中断 */
+		if ((type != CS_SOS && !(BETWEEN(head[i], 0x08, 0x0e) || IS_GC(head[i]))) ||
+		    (type == CS_SOS && i < len && strncmp(&head[i], "\eX", 2) == 0)) {
 			err[i] = '\0';
-			fprintf(stderr, "Interrupted by SOS: %s\n", err);
+			fprintf(stderr, "CtrlSeq \"%s\" was interrupted by '%#x'\n", err, head[i]);
 			return &head[i];
 		}
 		/* 末尾に到達して中断 */
 		if (len <= i)
 			return NULL;
 		/* 内容を記録 */
-		err[i] = BETWEEN(head[i], 0x20, 0x7f) ? head[i] : '?';
+		err[i] = IS_GC(head[i]) ? head[i] : '?';
 	}
 	strncpy(payload, head, i);
 	payload[i] = err[i] = '\0';
 
-	/* 未対応 */
-	fprintf(stderr, "Not Supported SOS: %s\n", err);
-	return head + i + 2;
+	/* 制御列の種類ごとの処理 */
+	switch (type) {
+	case CS_OSC:     OSC(term, payload, err);               break;
+	case CS_SOS:    CStr(term, payload, err, "SOS");        break;
+	case CS_DCS:    CStr(term, payload, err, "DCS");        break;
+	case CS_PM:     CStr(term, payload, err, "PM");         break;
+	case CS_APC:    CStr(term, payload, err, "APC");        break;
+	case CS_k:      CStr(term, payload, err, "CtrlSeq k");  break;
+	default:
+	}
+
+	return head + i + (head[i] == 0x07 ? 1 : 2);
 }
 
-const char *
-procOSC(Term *term, const char *head, const char *tail)
+void
+CStr(Term *term, const char *payload, const char *err, const char *type)
 {
-	const int len = tail - head;
-	const char *res;
-	char payload[len + 1], err[len + 1], *spec, *endptr;
-	int i, pn, pc, color;
+	fprintf(stderr, "Not Supported %s: %s\n", type, err);
+}
 
-	/* BELまで読む */
-	for (i = 0; head[i] != 0x07 && i <= len; i++) {
-		/* ST(ESC \)で終了 */
-		if (i < len && strncmp(&head[i], "\e\\", 2) == 0)
-			break;
-		/* 使えない文字が現れて中断 */
-		if (!(BETWEEN(head[i], 0x08, 0x0e) || BETWEEN(head[i], 0x20, 0x7f))) {
-			err[i] = '\0';
-			fprintf(stderr, "Interrupted by invalid character: %s\n", err);
-			return &head[i];
-		}
-		/* 末尾に到達して中断 */
-		if (len <= i)
-			return NULL;
-		/* 未対応の表示用 */
-		err[i] = BETWEEN(head[i], 0x20, 0x7f) ? head[i] : '?';
-	}
-	strncpy(payload, head, i);
-	payload[i] = err[i] = '\0';
-	res = head + i + (head[i] == 0x07 ? 1 : 2);
+void
+OSC(Term *term, char *payload, const char *err)
+{
+	char *spec, *endptr;
+	int pn, pc, color;
 
 	pn = atoi(strtok(payload, ";"));
 	switch (pn) {
@@ -644,7 +648,7 @@ procOSC(Term *term, const char *head, const char *tail)
 				term->palette[pc] &= 0xff000000;
 				term->palette[pc] = strlen(&spec[1]) == 6 ?
 					term->palette[pc] | color : color;
-				return res;
+				return;
 			}
 		}
 		break;
@@ -652,38 +656,7 @@ procOSC(Term *term, const char *head, const char *tail)
 
 	/* 未対応 */
 	fprintf(stderr, "Not Supported OSC: %s\n", err);
-	return res;
-}
-
-const char *
-procCStr(Term *term, const char *head, const char *tail)
-{
-	const int len = tail - head;
-	char payload[len + 1], err[len + 1];
-	int i;
-
-	for (i = 0; i <= len; i++) {
-		/* ST(ESC \)で終了 */
-		if (i < len && strncmp(&head[i], "\e\\", 2) == 0)
-			break;
-		/* 使えない文字が現れて中断 */
-		if (!(BETWEEN(head[i], 0x08, 0x0e) || BETWEEN(head[i], 0x20, 0x7f))) {
-			err[i] = '\0';
-			fprintf(stderr, "Interrupted by invalid character: %s\n", err);
-			return &head[i];
-		}
-		/* 末尾に到達して中断 */
-		if (len <= i)
-			return NULL;
-		/* 未対応の表示用 */
-		err[i] = BETWEEN(head[i], 0x20, 0x7f) ? head[i] : '?';
-	}
-	strncpy(payload, head, i);
-	payload[i] = err[i] = '\0';
-
-	/* 未対応 */
-	fprintf(stderr, "Not Supported CtrlStr: %s\n", err);
-	return head + i + 2;
+	return;
 }
 
 void
