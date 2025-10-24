@@ -2,6 +2,7 @@ chitan|chitan-256color|chitan terminal emulator,
 # 端末の仕様
 	acsc=``aaffggjjkkllmmnnooppqqrrssttuuvvwwxxyyzz{{||}}~~,
 	am,
+	ccc,
 	xenl,
 	bce,
 	km,
@@ -55,6 +56,7 @@ chitan|chitan-256color|chitan terminal emulator,
 	ri=\eM,
 	smacs=\e(0,
 	rmacs=\e(B,
+	initc=\e]4;%p1%d;#%p2%{255}%*%{1000}%/%02x%p3%{255}%*%{1000}%/%02x%p4%{255}%*%{1000}%/%02x\a,
 
 # SGR
 	sgr0=\e[0m,

@@ -599,8 +599,9 @@ const char *
 procOSC(Term *term, const char *head, const char *tail)
 {
 	const int len = tail - head;
-	char payload[len + 1], err[len + 1];
-	int i;
+	const char *res;
+	char payload[len + 1], err[len + 1], *spec, *endptr;
+	int i, pn, pc, color;
 
 	/* BELまで読む */
 	for (i = 0; head[i] != 0x07; i++) {
@@ -618,11 +619,34 @@ procOSC(Term *term, const char *head, const char *tail)
 	}
 	payload[i] = '\0';
 	strcpy(err, payload);
+	res = head + i + (head[i] == 0x07 ? 1 : 2);
+
+	pn = atoi(strtok(payload, ";"));
+	switch (pn) {
+	case 4:  /* 色設定 */
+	case 10: /* 文字色設定 */
+	case 11: /* 背景色設定 */
+		switch (pn) {
+		case 4:  pc = atoi(strtok(NULL, ";")); break;
+		case 10: pc = deffg;                   break;
+		case 11: pc = defbg;                   break;
+		}
+		spec = strtok(NULL, ";");
+		if (strncmp(spec, "#", 1) == 0) {       /* #rrggbb形式 */
+			color = strtol(&spec[1], &endptr, 16);
+			if (&spec[1] != endptr) {
+				term->palette[pc] &= 0xff000000;
+				term->palette[pc] = strlen(&spec[1]) == 6 ?
+					term->palette[pc] | color : color;
+				return res;
+			}
+		}
+		break;
+	}
 
 	/* 未対応 */
 	fprintf(stderr, "Not Supported OSC: %s\n", err);
-
-	return head + i + (head[i] == 0x07 ? 1 : 2);
+	return res;
 }
 
 const char *
