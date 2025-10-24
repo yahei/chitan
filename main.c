@@ -286,6 +286,7 @@ handleXEvent(Win *win)
 	XEvent event;
 	const XConfigureEvent *e = (XConfigureEvent *)&event;
 	XSelectionRequestEvent *sre;
+	XSelectionEvent se;
 	int mx, my, state, mb = 0;
 	Atom prop, type;
 	int format;
@@ -306,8 +307,7 @@ handleXEvent(Win *win)
 		my = (event.xbutton.y - pane->ypad) / xfont->ch;
 
 		switch (event.type) {
-		case KeyPress:
-			/* キーボード入力 */
+		case KeyPress:          /* キーボード入力 */
 			if (keyPressEvent(win, event, 64)) {
 				pane->timer_lit[CARET_TIMER] = 1;
 				pane->timers[CARET_TIMER] = now;
@@ -315,59 +315,49 @@ handleXEvent(Win *win)
 			}
 			break;
 
-		case ButtonPress:
+		case ButtonPress:       /* マウス Press */
 			state = event.xbutton.state;
 			mb = event.xbutton.button;
 			if ((mb == 4 || mb == 5) && pane->term->sb == &pane->term->ori) {
-				/* スクロール */
 				scrollPane(pane, (mb == 4 ? 1 : -1) * 3);
 			} else if (!BETWEEN(mb, 1, 4) || (state & ~(ShiftMask | Mod1Mask)) ||
 					(pane->term->sb == &pane->term->alt && !(state & ShiftMask))) {
-				/* 擬似端末に通知 */
 				mouseEvent(pane, &event);
 			} else if (mb == 2) {
-				/* 貼り付け */
 				XConvertSelection(dinfo.disp, atoms[PRIMARY], atoms[UTF8_STRING],
 						atoms[MY_SELECTION], win->window, event.xkey.time);
 				pane->scr = 0;
 			} else {
-				/* 範囲選択のドラッグを開始 */
-				setSelection(pane, my, mx, mb == 1, 0 < (state & Mod1Mask));
 				dragging = pane;
+				setSelection(pane, my, mx, mb == 1, 0 < (state & Mod1Mask));
 			}
 			break;
 
-		case MotionNotify:
+		case MotionNotify:     /* マウス Move */
 			if (!dragging)
-				/* 疑似端末に通知 */
 				mouseEvent(pane, &event);
 			else
-				/* 範囲選択の終点を動かす */
 				setSelection(dragging, my, mx, 0, pane->sel.rect);
 			break;
 
-		case ButtonRelease:
-			/* 疑似端末に通知 */
+		case ButtonRelease:    /* マウス Release */
 			if (!dragging) {
 				mouseEvent(pane, &event);
-				break;
+			} else {
+				if (dragging->sel.aline == dragging->sel.bline &&
+				    dragging->sel.acol  == dragging->sel.bcol)
+					break;
+				XSetSelectionOwner(dinfo.disp, atoms[PRIMARY], win->window, event.xkey.time);
+				copySelection(dragging, &dragging->sel.primary, !dragging->sel.rect);
+				dragging = NULL;
 			}
-			/* 範囲選択のドラッグを終了 */
-			if (dragging->sel.aline == dragging->sel.bline &&
-			    dragging->sel.acol  == dragging->sel.bcol)
-				break;
-			XSetSelectionOwner(dinfo.disp, atoms[PRIMARY], win->window, event.xkey.time);
-			copySelection(dragging, &dragging->sel.primary, !dragging->sel.rect);
-			dragging = NULL;
 			break;
 
-		case Expose:
-			/* 再描画 */
+		case Expose:            /* 再描画 */
 			pane->redraw_flag = 1;
 			break;
 
-		case ConfigureNotify:
-			/* ウィンドウサイズ変更 */
+		case ConfigureNotify:   /* ウィンドウサイズ変更 */
 			if (win->width == e->width && win->height == e->height)
 				break;
 			win->width = e->width;
@@ -376,18 +366,15 @@ handleXEvent(Win *win)
 			break;
 
 		case FocusIn:
-		case FocusOut:
-			/* フォーカスの変化 */
+		case FocusOut:          /* フォーカスの変化 */
 			pane->focus = event.type == FocusIn;
 			pane->redraw_flag = 1;
 			break;
 
-		case ClientMessage:
-			/* ウィンドウが閉じられた */
+		case ClientMessage:     /* ウィンドウが閉じられた */
 			return -1;
 
-		case SelectionRequest:
-			/* 貼り付ける文字列を送る */
+		case SelectionRequest:  /* 貼り付ける文字列を送る */
 			sre = &event.xselectionrequest;
 			sel = sre->selection == atoms[PRIMARY] ?
 				pane->sel.primary : pane->sel.clip;
@@ -397,13 +384,12 @@ handleXEvent(Win *win)
 				sre->property = sre->target;
 			XChangeProperty(dinfo.disp, sre->requestor, sre->property, atoms[UTF8_STRING],
 					8, PropModeReplace, (unsigned char *)sel, strlen(sel));
-			XSelectionEvent se = { SelectionNotify, 0, True, dinfo.disp, sre->requestor,
-				sre->selection, sre->target, sre->property, sre->time };
+			se = (XSelectionEvent){ SelectionNotify, 0, True, dinfo.disp,
+				sre->requestor, sre->selection, sre->target, sre->property, sre->time };
 			XSendEvent(dinfo.disp, event.xselectionrequest.requestor, False, 0, (XEvent *)&se);
 			break;
 
-		case SelectionNotify:
-			/* 貼り付ける文字列が届いた */
+		case SelectionNotify:   /* 貼り付ける文字列が届いた */
 			if ((prop = event.xselection.property) != None) {
 				XGetWindowProperty(dinfo.disp, win->window, prop, 0, 256,
 						False, atoms[UTF8_STRING], &type,
@@ -415,6 +401,7 @@ handleXEvent(Win *win)
 					writePty(pane->term, "\e[201~", 6);
 				XFree(props);
 			}
+			break;
 		}
 	}
 

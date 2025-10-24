@@ -393,7 +393,8 @@ drawCursor(Pane *pane, Line *line, int row, int col, int type)
 	char32_t *c = index < u32slen(line->str) ? &line->str[index] : (char32_t *)L" ";
 	const int x = pane->xpad + col * pane->xfont->cw;
 	const int y = pane->ypad + row * pane->xfont->ch;
-	const int width = pane->xfont->cw * u32swidth(c, 1) - 1;
+	const int cw = pane->xfont->cw * u32swidth(c, 1) - 1;
+	const int ch = pane->xfont->ch;
 	const DispInfo *dinfo = pane->dinfo;
 	int attr;
 	Line cursor;
@@ -403,27 +404,22 @@ drawCursor(Pane *pane, Line *line, int row, int col, int type)
 		return;
 
 	switch (type) {
-	default: /* ブロック */
-	case 0:
-	case 1:
-	case 2:
+	default: case 0: case 1: case 2: /* ブロック */
 		if (pane->focus) {
 			attr = index < u32slen(line->str) ? line->attr[index] : 0;
 			cursor = (Line){c, &attr, &defbg, &deffg};
 			drawLine(pane, &cursor, row, col, 1, 0);
 		} else {
 			XSetForeground(dinfo->disp, pane->gc, BELLCOLOR(pane->term->palette[deffg]));
-			XDrawRectangle(dinfo->disp, pane->pixmap, pane->gc, x, y, width, pane->xfont->ch - 1);
-			XDrawPoint(dinfo->disp, pane->pixmap, pane->gc, x + width, y + pane->xfont->ch - 1);
+			XDrawRectangle(dinfo->disp, pane->pixmap, pane->gc, x, y, cw, ch - 1);
+			XDrawPoint(dinfo->disp, pane->pixmap, pane->gc, x + cw, y + ch - 1);
 		}
 		break;
-	case 3: /* 下線 */
-	case 4:
-		XFillRectangle(dinfo->disp, pane->pixmap, pane->gc, x, y + 1 + pane->xfont->ascent, width, pane->xfont->ch * 0.1);
+	case 3: case 4: /* 下線 */
+		XFillRectangle(dinfo->disp, pane->pixmap, pane->gc, x, y + 1 + pane->xfont->ascent, cw, ch * 0.1);
 		break;
-	case 5: /* 縦線 */
-	case 6:
-		XFillRectangle(dinfo->disp, pane->pixmap, pane->gc, x - 1, y, pane->xfont->ch * 0.1, pane->xfont->ch);
+	case 5: case 6: /* 縦線 */
+		XFillRectangle(dinfo->disp, pane->pixmap, pane->gc, x - 1, y, ch * 0.1, ch);
 		break;
 	}
 }
