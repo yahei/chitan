@@ -339,6 +339,7 @@ procESC(Term *term, const char *head, const char *tail)
 	case 0x50: /* DCS */
 	case 0x5e: /* PM */
 	case 0x5f: /* APC */
+	case 0x6b: /* k  タイトル設定? */
 		return procCStr(term, head, tail);
 
 	default:
@@ -770,6 +771,7 @@ decset(Term *term, unsigned int num, int flag)
 	int i;
 
 	switch (num) {
+	case 1:    /* DECCKM */
 	case 25:   /* カーソル表示切替 */
 	case 9:    /* マウス X10 */
 	case 1000: /* マウス normal */
