@@ -51,7 +51,7 @@ openTerm(int row, int col, int bufsize, const char *program, char *const pargv[]
 	/* 構造体の初期化 */
 	term = xmalloc(sizeof(Term));
 	*term = (Term){ .master = -1, .ctype = 2, .fg = deffg, .bg = defbg,
-		.bell = &dumbbell };
+		.bell = &dumbbell, .title = "chitan" };
 
 	/* スクリーンバッファの初期化 */
 	term->ori = term->alt = (struct ScreenBuffer){
@@ -348,7 +348,7 @@ procESC(Term *term, const char *head, const char *tail)
 	case 0x5f: /* APC */
 		return ctrlSeq(term, head + 1, tail, CS_APC);
 
-	case 0x6b: /* k  タイトル設定? */
+	case 0x6b: /* k タイトル設定 */
 		return ctrlSeq(term, head + 1, tail, CS_k);
 
 	default:
@@ -607,12 +607,12 @@ ctrlSeq(Term *term, const char *head, const char *tail, enum cseq_type type)
 
 	/* 制御列の種類ごとの処理 */
 	switch (type) {
-	case CS_OSC:     OSC(term, payload, err);               break;
-	case CS_SOS:    CStr(term, payload, err, "SOS");        break;
-	case CS_DCS:    CStr(term, payload, err, "DCS");        break;
-	case CS_PM:     CStr(term, payload, err, "PM");         break;
-	case CS_APC:    CStr(term, payload, err, "APC");        break;
-	case CS_k:      CStr(term, payload, err, "CtrlSeq k");  break;
+	case CS_OSC:     OSC(term, payload, err);                       break;
+	case CS_SOS:    CStr(term, payload, err, "SOS");                break;
+	case CS_DCS:    CStr(term, payload, err, "DCS");                break;
+	case CS_PM:     CStr(term, payload, err, "PM");                 break;
+	case CS_APC:    CStr(term, payload, err, "APC");                break;
+	case CS_k:      strncpy(term->title, payload, TITLE_MAX - 1);   break;
 	default:
 	}
 
@@ -633,6 +633,9 @@ OSC(Term *term, char *payload, const char *err)
 
 	pn = atoi(strtok(payload, ";"));
 	switch (pn) {
+	case 0:  /* タイトル */
+		strncpy(term->title, payload + 2, TITLE_MAX - 1);
+		return;
 	case 4:  /* 色設定 */
 	case 10: /* 文字色設定 */
 	case 11: /* 背景色設定 */

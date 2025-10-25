@@ -34,6 +34,7 @@ typedef struct Win {
 	XftDraw *draw;
 	int width, height;
 	Pane *pane;
+	char name[TITLE_MAX];
 } Win;
 
 static DispInfo dinfo;
@@ -220,7 +221,6 @@ openWindow(int width, int height)
 	win->window = XCreateWindow(dinfo.disp, DefaultRootWindow(dinfo.disp),
 			0, 0, width, height, 1, 32, InputOutput, dinfo.visual,
 			CWEventMask | CWColormap | CWBorderPixel, &win->attr);
-	setWindowName(win, "chitan");
 
 	/* プロパティ */
 	win->hint = XAllocClassHint();
@@ -269,13 +269,12 @@ closeWindow(Win *win)
 }
 
 void
-setWindowName(Win *win, char *title)
+setWindowName(Win *win, char *name)
 {
-	XTextProperty prop = {
-		(unsigned char *)title, atoms[UTF8_STRING], 8, strlen(title)
-	};
-
-	XSetWMName(dinfo.disp, win->window, &prop);
+	if (strcmp(win->name, name) != 0) {
+		strncpy(win->name, name, TITLE_MAX);
+		XStoreName(dinfo.disp, win->window, name);
+	}
 }
 
 char
@@ -488,6 +487,7 @@ keyPressEvent(Win *win, XEvent event, int bufsize)
 void
 redraw(Win *win)
 {
+	setWindowName(win, win->pane->term->title);
 	drawPane(win->pane, win->ime.peline, win->ime.caret);
 	XCopyArea(dinfo.disp, win->pane->pixmap, win->window, win->gc, 0, 0,
 			win->pane->width, win->pane->height, 0, 0);

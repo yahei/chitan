@@ -8,6 +8,8 @@ typedef uint_least32_t Color;
 #define GREEN(c) ((c) >>  8 & 0xff)
 #define BLUE(c)  ((c) >>  0 & 0xff)
 
+#define TITLE_MAX (256)
+
 enum mouse_event_type {
 	SHIFT   = 4,
 	ALT     = 8,
@@ -42,6 +44,7 @@ typedef struct Term {
 	const char32_t *g[4];   /* 文字集合 */
 	void (*bell)(void *);   /* ベルのcallback */
 	void *bellp;            /* ベルのcallbackに渡す */
+	char title[TITLE_MAX];  /* タイトル */
 } Term;
 
 Term *openTerm(int, int, int, const char *, char *const []);
