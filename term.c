@@ -744,22 +744,24 @@ decset(Term *term, unsigned int num, int flag)
 	int i;
 
 	switch (num) {
-	case 1:    /* DECCKM */
-	case 25:   /* カーソル表示切替 */
-	case 9:    /* マウス X10 */
-	case 1000: /* マウス normal */
-	case 1002: /* マウス button */
-	case 1003: /* マウス any */
-	case 1006: /* マウス SGR */
+	case 1:    /* Application Cursor Keys */
+	case 25:   /* Show cursor */
+	case 9:    /* Mouse Tracking - X10 */
+	case 1000: /* Mouse Tracking - normal */
+	case 1002: /* Mouse Tracking - button */
+	case 1003: /* Mouse Tracking - any */
+	case 1005: /* Mouse Tracking - UTF-8 (非対応) */
+	case 1006: /* Mouse Tracking - SGR */
+	case 1015: /* Mouse Tracking - urxvt (非対応) */
 	case 2004: /* Bracketed Paste Mode */
 		break;
 
-	case 7:    /* 自動改行モード */
+	case 7:    /* Auto-Wrap */
 		term->sb->am = 0;
 		break;
 
-	case 1049:  /* altscreen clear */
-	case 1047:  /* altscreen */
+	case 1047:  /* Alternate Screen Buffer */
+	case 1049:  /* Alternate Screen Buffer clear */
 		oldsb = term->sb;
 		term->sb = flag ? &term->alt : &term->ori;
 
