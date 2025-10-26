@@ -271,9 +271,13 @@ closeWindow(Win *win)
 void
 setWindowName(Win *win, char *name)
 {
+	XTextProperty prop = {
+		(unsigned char *)name, atoms[UTF8_STRING], 8, strlen(name)
+	};
+
 	if (strcmp(win->name, name) != 0) {
 		strncpy(win->name, name, TITLE_MAX);
-		XStoreName(dinfo.disp, win->window, name);
+		XSetWMName(dinfo.disp, win->window, &prop);
 	}
 }
 

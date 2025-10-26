@@ -16,8 +16,8 @@
  */
 
 #define READ_SIZE       4096
-#define LINE(a,b)       (a->lines[b % a->maxlines])
-#define IS_GC(c)         (BETWEEN(c, 0x20, 0x7f))
+#define LINE(a,b)       ((a)->lines[(b) % (a)->maxlines])
+#define IS_NCC(c)       (BETWEEN((c), 0x20, 0x7f) || (c) & 0x80)
 
 enum cseq_type { CS_DCS, CS_SOS, CS_OSC, CS_PM, CS_APC, CS_k };
 
@@ -365,7 +365,7 @@ procESC(Term *term, const char *head, const char *tail)
 		 * 0x40-0x5f   Fe型     C1 補助集合
 		 * 0x60-0x7e   Fs型     標準単独制御機能
 		 */
-		if (IS_GC(*head))
+		if (BETWEEN(*head, 0x20, 0x7f))
 			fprintf(stderr, "Not Supported ESC Seq: ESC %c(%#x)\n",
 					*head, *head);
 		else
@@ -595,7 +595,7 @@ ctrlSeq(Term *term, const char *head, const char *tail, enum cseq_type type)
 				(type == CS_OSC && head[i] == 0x07))
 			break;
 		/* 使えない文字またはSOSが現れて中断 */
-		if ((type != CS_SOS && !(BETWEEN(head[i], 0x08, 0x0e) || IS_GC(head[i]))) ||
+		if ((type != CS_SOS && !(BETWEEN(head[i], 0x08, 0x0e) || IS_NCC(head[i]))) ||
 		    (type == CS_SOS && i < len && strncmp(&head[i], "\eX", 2) == 0)) {
 			err[i] = '\0';
 			fprintf(stderr, "CtrlSeq \"%s\" was interrupted by '%#x'\n", err, head[i]);
@@ -605,7 +605,7 @@ ctrlSeq(Term *term, const char *head, const char *tail, enum cseq_type type)
 		if (len <= i)
 			return NULL;
 		/* 内容を記録 */
-		err[i] = IS_GC(head[i]) ? head[i] : '?';
+		err[i] = IS_NCC(head[i]) ? head[i] : '?';
 	}
 	strncpy(payload, head, i);
 	payload[i] = err[i] = '\0';
