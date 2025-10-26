@@ -320,6 +320,11 @@ procESC(Term *term, const char *head, const char *tail)
 	case 0x2f: /* G3-DESIGGNAE 96-SET */
 		return designateCharSet(term, head, tail);
 
+	case 0x3d: /* DECKPAM */
+	case 0x3e: /* DECKPNM */
+		term->appkeypad = *head == 0x3d;
+		break;
+
 	case 0x4d: /* RI */
 		if (sb->scrs < term->cy)
 			term->cy--;

@@ -38,6 +38,7 @@ typedef struct Term {
 	int rblen;              /* リードバッファに残っている文字の数 */
 	char opt[64];           /* オプション */
 	char dec[8800];         /* 拡張オプション */
+	char appkeypad;         /* Application Keypadの状態 */
 	int attr, fg, bg;       /* 現在のSGR */
 	Color *palette;         /* カラーパレット */
 	int oldmx, oldmy;       /* 前回のマウス座標 */
