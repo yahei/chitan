@@ -42,7 +42,7 @@ static XFont *xfont;
 static XIM xim;
 static Win *win;
 static struct timespec now;
-static float alpha, fontsize;
+static float alpha;
 static char **pargv, *fontfamily;
 
 static void init(void);
@@ -75,18 +75,16 @@ int
 main(int argc, char *argv[])
 {
 	alpha = 1.0;
-	fontsize = 12.0;
 	pargv = (char *[]){ getenv("SHELL"), NULL };
 	pargv[0] = pargv[0] ? pargv[0] : "bin/sh";
 	fontfamily = "monospace";
 
 	while (1) {
-		switch (getopt(argc, argv, "+a:e:f:s:")) {
+		switch (getopt(argc, argv, "+a:e:f:")) {
 		case '?':                                       continue;
 		case 'a': alpha = CLIP(atof(optarg), 0, 1.0);   continue;
 		case 'e': pargv = argv + optind - 1;            break;
 		case 'f': fontfamily = optarg;                  continue;
-		case 's': fontsize = MAX(atof(optarg), 1);      continue;
 		}
 		break;
 	}
@@ -122,7 +120,7 @@ init(void)
 
 	/* 文字描画の準備 */
 	FcInit();
-	xfont = openFont(dinfo.disp, fontfamily, fontsize);
+	xfont = openFont(dinfo.disp, fontfamily);
 	if (xfont == NULL)
 		fatal("XftFontOpen failed.\n");
 

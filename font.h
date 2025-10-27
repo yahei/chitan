@@ -13,7 +13,6 @@ enum font_attributes {
 typedef struct XFont {
 	Display *disp;
 	unsigned char *family;
-	float size;
 	int cw, ch;
 	int ascent;
 	struct FallbackGlyph {
@@ -24,6 +23,6 @@ typedef struct XFont {
 	int glyphs_len, fonts_len;
 } XFont;
 
-XFont *openFont(Display *, const char *, float);
+XFont *openFont(Display *, const char *);
 void closeFont(XFont *);
 void drawXFontString(XftDraw *, XftColor *, XFont *, int, int, int, const FcChar32 *, int);

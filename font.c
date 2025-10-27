@@ -1,4 +1,5 @@
 #include <stdint.h>
+#include <stdio.h>
 #include <string.h>
 #include <wchar.h>
 
@@ -16,12 +17,12 @@ XftFontSuite *getFontSuiteFonts(XFont *, const char *);
 char *getFontName(const unsigned char *, char32_t, char *, int);
 
 XFont *
-openFont(Display *disp, const char *family, float size)
+openFont(Display *disp, const char *family)
 {
 	XFont *xfont = xmalloc(sizeof(XFont));
 	XGlyphInfo ginfo;
 
-	*xfont = (XFont){ disp, NULL, size, 1, 1, 0, NULL, NULL, 0, 0 };
+	*xfont = (XFont){ disp, NULL, 1, 1, 0, NULL, NULL, 0, 0 };
 	xfont->family = xmalloc(strlen(family) + 1);
 	strcpy((char *)xfont->family, family);
 
@@ -101,27 +102,23 @@ getFontSuiteFonts(XFont *xfont, const char *fontname)
 {
 	XftFontSuite *font;
 	unsigned char *xftname;
-	int i, j, weight, slant;
+	char name[strlen(fontname) + 64];
+	int i;
 
 	/* フォントリストにあればそれを使う */
-	for (j = 0; j < xfont->fonts_len; j++) {
-		FcPatternGetString((*xfont->fonts[j])[0]->pattern, FC_FAMILY, 0, &xftname);
+	for (i = 0; i < xfont->fonts_len; i++) {
+		FcPatternGetString((*xfont->fonts[i])[0]->pattern, FC_FAMILY, 0, &xftname);
 		if (strcmp((char *)xftname, fontname) == 0)
-			return (xfont->fonts[j]);
+			return (xfont->fonts[i]);
 	}
 
 	/* フォントをロードしてリストに追加 */
 	font = xmalloc(sizeof(XftFontSuite));
 	for (i = 0; i < 8; i++) {
-		weight = i & FONT_BOLD ? XFT_WEIGHT_BOLD : XFT_WEIGHT_MEDIUM;
-		slant = i & FONT_ITALIC ? XFT_SLANT_ITALIC : XFT_SLANT_ROMAN;
-		(*font)[i] = XftFontOpen(
-				xfont->disp, 0,
-				XFT_FAMILY, XftTypeString, fontname,
-				XFT_SIZE, XftTypeDouble, xfont->size,
-				XFT_WEIGHT, XftTypeInteger, weight,
-				XFT_SLANT, XftTypeInteger, slant,
-				NULL);
+		strcpy(name, fontname);
+		strcat(name, i & FONT_BOLD   ? ":bold"   : "");
+		strcat(name, i & FONT_ITALIC ? ":italic" : "");
+		(*font)[i] = XftFontOpenName(xfont->disp, XDefaultScreen(xfont->disp), name);
 	}
 	PUSH_BACK(xfont->fonts, xfont->fonts_len, font);
 
@@ -135,6 +132,7 @@ getFontName(const unsigned char *family, char32_t codepoint, char *buf, int bufl
 	FcCharSet *charset = FcCharSetCreate();
 	FcResult result;
 	unsigned char *fontname;
+	const char *opt = strchr((char *)family, ':');
 
 	FcPatternAddString(pattern, FC_FAMILY, family);
 	FcCharSetAddChar(charset, codepoint);
@@ -144,8 +142,8 @@ getFontName(const unsigned char *family, char32_t codepoint, char *buf, int bufl
 	matched = FcFontMatch(NULL, pattern, &result);
 	FcPatternGetString(matched, FC_FAMILY, 0, &fontname);
 
-	strncpy(buf, (char *)fontname, buflen);
-	buf[buflen-1] = '\0';
+	snprintf(buf, buflen, "%s%s", fontname, opt ? opt : "");
+	buf[buflen - 1] = '\0';
 
 	FcCharSetDestroy(charset);
 	FcPatternDestroy(pattern);
