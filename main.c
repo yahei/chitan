@@ -68,7 +68,7 @@ static void preeditDraw(XIM, Win *, XIMPreeditDrawCallbackStruct *);
 static void preeditCaret(XIM, Win *, XIMPreeditCaretCallbackStruct *);
 
 /* Selection */
-enum { PRIMARY, CLIPBOARD, UTF8_STRING, MY_SELECTION, ATOM_NUM };
+enum { PRIMARY, CLIPBOARD, UTF8_STRING, MY_SELECTION, WM_DELETE_WINDOW, ATOM_NUM };
 Atom atoms[ATOM_NUM];
 
 int
@@ -125,7 +125,7 @@ init(void)
 		fatal("XftFontOpen failed.\n");
 
 	/* Selection */
-	names = (char *[]){ "PRIMARY", "CLIPBOARD", "UTF8_STRING", "_MY_SELECTION_" };
+	names = (char *[]){ "PRIMARY", "CLIPBOARD", "UTF8_STRING", "_MY_SELECTION_", "WM_DELETE_WINDOW" };
 	for (i = 0; i < ATOM_NUM; i++)
 		atoms[i] = XInternAtom(dinfo.disp, names[i], True);
 	
@@ -237,8 +237,7 @@ openWindow(int width, int height)
 	win->ime.peline = allocLine();
 
 	/* ウィンドウが閉じられたときイベントを受け取る */
-	Atom atom = XInternAtom(dinfo.disp, "WM_DELETE_WINDOW", False);
-	XSetWMProtocols(dinfo.disp, win->window, &atom, 1);
+	XSetWMProtocols(dinfo.disp, win->window, &atoms[WM_DELETE_WINDOW], 1);
 
 	/* ウィンドウを表示 */
 	XMapWindow(dinfo.disp, win->window);
@@ -285,7 +284,8 @@ handleXEvent(Win *win)
 	static Pane *dragging = NULL;
 	Pane *pane = win->pane;
 	XEvent event;
-	const XConfigureEvent *e = (XConfigureEvent *)&event;
+	const XConfigureEvent *ce = (XConfigureEvent *)&event;
+	const XClientMessageEvent *cme = (XClientMessageEvent *)&event;
 	XSelectionRequestEvent *sre;
 	XSelectionEvent se;
 	int mx, my, state, mb = 0;
@@ -359,11 +359,11 @@ handleXEvent(Win *win)
 			break;
 
 		case ConfigureNotify:   /* ウィンドウサイズ変更 */
-			if (win->width == e->width && win->height == e->height)
+			if (win->width == ce->width && win->height == ce->height)
 				break;
-			win->width = e->width;
-			win->height = e->height;
-			setPaneSize(pane, e->width, e->height);
+			win->width  = ce->width;
+			win->height = ce->height;
+			setPaneSize(pane, ce->width, ce->height);
 			break;
 
 		case FocusIn:
@@ -373,7 +373,7 @@ handleXEvent(Win *win)
 			break;
 
 		case ClientMessage:     /* ウィンドウが閉じられた */
-			return -1;
+			return -(cme->data.l[0] == atoms[WM_DELETE_WINDOW]);
 
 		case SelectionRequest:  /* 貼り付ける文字列を送る */
 			sre = &event.xselectionrequest;
