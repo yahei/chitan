@@ -17,15 +17,15 @@
 
 #define READ_SIZE       4096
 #define LINE(a,b)       ((a)->lines[(b) % (a)->maxlines])
-#define IS_NCC(c)       (BETWEEN((c), 0x20, 0x7f) || (c) & 0x80)
+#define IS_GC(c)        (BETWEEN((c), 0x20, 0x7f) || (c) & 0x80)
 
 enum cseq_type { CS_DCS, CS_SOS, CS_OSC, CS_PM, CS_APC, CS_k };
 
 static void setDefaultPalette(Term *);
-static const char *procNCCs(Term *, const char *);
-static const char *procCC(Term *, const char *, const char *);
-static const char *procESC(Term *, const char *, const char *);
-static const char *procCSI(Term *, const char *, const char *);
+static const char *GCs(Term *, const char *);
+static const char *CC(Term *, const char *, const char *);
+static const char *ESC(Term *, const char *, const char *);
+static const char *CSI(Term *, const char *, const char *);
 static const char *ctrlSeq(Term *, const char *, const char *, enum cseq_type type);
 static void CStr(Term *, const char *, const char *, const char *);
 static void OSC(Term *, char *, const char *);
@@ -207,7 +207,7 @@ readPty(Term *term)
 		return size;
 
 	for (reading = term->readbuf; reading < tail;) {
-		rest = procCC(term, reading, tail);
+		rest = CC(term, reading, tail);
 		if (rest == NULL) {
 			break;
 		} else if (reading != rest) {
@@ -217,7 +217,7 @@ readPty(Term *term)
 			continue;
 		}
 
-		rest = procNCCs(term, reading);
+		rest = GCs(term, reading);
 		if (reading != rest) {
 			memmove(term->readbuf, rest, tail - rest + 1);
 			tail -= rest - term->readbuf;
@@ -233,7 +233,7 @@ readPty(Term *term)
 }
 
 const char *
-procNCCs(Term *term, const char *head)
+GCs(Term *term, const char *head)
 {
 	const int len = strlen(head) + 1;
 	char32_t decoded[len], *dp;
@@ -280,7 +280,7 @@ procNCCs(Term *term, const char *head)
 }
 
 const char *
-procCC(Term *term, const char *head, const char *tail)
+CC(Term *term, const char *head, const char *tail)
 {
 	if (!BETWEEN(*head, 0x00, 0x20) && *head != 0x7f)
 		return head;
@@ -293,7 +293,7 @@ procCC(Term *term, const char *head, const char *tail)
 	case 0x09: moveCursorPos(term, 8 - term->cx % 8, 0);    break; /* HT  */
 	case 0x0a: linefeed(term);                              break; /* LF  */
 	case 0x0d: setCursorPos(term, 0, term->cy);             break; /* CR  */
-	case 0x1b: return procESC(term, head + 1, tail);               /* ESC */
+	case 0x1b: return ESC(term, head + 1, tail);                   /* ESC */
 	default: fprintf(stderr, "Not Supported C0: (%#x)\n", *head);  /* etc */
 	}
 
@@ -301,7 +301,7 @@ procCC(Term *term, const char *head, const char *tail)
 }
 
 const char *
-procESC(Term *term, const char *head, const char *tail)
+ESC(Term *term, const char *head, const char *tail)
 {
 	struct ScreenBuffer *sb = term->sb;
 
@@ -336,7 +336,7 @@ procESC(Term *term, const char *head, const char *tail)
 		break;
 
 	case 0x5b: /* CSI */
-		return procCSI(term, head + 1, tail);
+		return CSI(term, head + 1, tail);
 
 	case 0x50: /* DCS */
 		return ctrlSeq(term, head + 1, tail, CS_DCS);
@@ -376,7 +376,7 @@ procESC(Term *term, const char *head, const char *tail)
 }
 
 const char *
-procCSI(Term *term, const char *head, const char *tail)
+CSI(Term *term, const char *head, const char *tail)
 {
 	struct ScreenBuffer *sb = term->sb;
 	char param[tail - head + 1], *pp;
@@ -595,7 +595,7 @@ ctrlSeq(Term *term, const char *head, const char *tail, enum cseq_type type)
 				(type == CS_OSC && head[i] == 0x07))
 			break;
 		/* 使えない文字またはSOSが現れて中断 */
-		if ((type != CS_SOS && !(BETWEEN(head[i], 0x08, 0x0e) || IS_NCC(head[i]))) ||
+		if ((type != CS_SOS && !(BETWEEN(head[i], 0x08, 0x0e) || IS_GC(head[i]))) ||
 		    (type == CS_SOS && i < len && strncmp(&head[i], "\eX", 2) == 0)) {
 			err[i] = '\0';
 			fprintf(stderr, "CtrlSeq \"%s\" was interrupted by '%#x'\n", err, head[i]);
@@ -605,7 +605,7 @@ ctrlSeq(Term *term, const char *head, const char *tail, enum cseq_type type)
 		if (len <= i)
 			return NULL;
 		/* 内容を記録 */
-		err[i] = IS_NCC(head[i]) ? head[i] : '?';
+		err[i] = IS_GC(head[i]) ? head[i] : '?';
 	}
 	strncpy(payload, head, i);
 	payload[i] = err[i] = '\0';
