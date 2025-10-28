@@ -76,6 +76,7 @@ openTerm(int row, int col, int bufsize, const char *program, char *const pargv[]
 	/* オプションの初期化 */
 	memset(term->opt, 1, 64);
 	memset(term->dec, 1, 8800);
+	term->appkeypad = 1;
 
 	/* カラーパレットの初期化 */
 	term->palette = xmalloc(MAX(256, MAX(deffg, defbg) + 1) * sizeof(Color));
@@ -322,7 +323,7 @@ ESC(Term *term, const char *head, const char *tail)
 
 	case 0x3d: /* DECKPAM */
 	case 0x3e: /* DECKPNM */
-		term->appkeypad = *head == 0x3d;
+		term->appkeypad = *head == 0x3d ? 2 : 0;
 		break;
 
 	case 0x4d: /* RI */

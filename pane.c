@@ -115,7 +115,7 @@ mouseEvent(Pane *pane, XEvent *event)
 void
 scrollPane(Pane *pane, int n)
 {
-	pane->redraw_flag = 1;
+	pane->redraw_flag = true;
 	pane->scr += n;
 	pane->scr = CLIP(pane->scr, 0, SCROLLMAX(pane->term->sb));
 }
@@ -128,7 +128,7 @@ setSelection(Pane *pane, int line, int col, char start, char rect)
 
 	/* 始点と終点をセット */
 	pane->sel.rect = rect;
-	pane->redraw_flag = 1;
+	pane->redraw_flag = true;
 	line += first - pane->scr;
 	if (start) {
 		pane->sel.altbuf = pane->term->sb == &pane->term->alt;
@@ -245,7 +245,7 @@ manegeTimer(Pane *pane, struct timespec *timeout)
 			continue;
 		if (timespeccmp(&pane->timers[i], &pane->now, <=)) {
 			pane->timer_lit[i] = !pane->timer_lit[i];
-			pane->redraw_flag = 1;
+			pane->redraw_flag = true;
 			timespecadd(&pane->timers[i], &duration[i], &pane->timers[i]);
 			if (timespeccmp(&pane->timers[i], &pane->now, <=))
 				timespecadd(&pane->now, &duration[i], &pane->timers[i]);
@@ -255,8 +255,8 @@ manegeTimer(Pane *pane, struct timespec *timeout)
 	timespecsub(&nexttime, &pane->now, timeout);
 
 	/* ベルは繰り返さない */
-	if (pane->timer_lit[BELL_TIMER] == 0)
-		pane->timer_active[BELL_TIMER] = 0;
+	if (pane->timer_lit[BELL_TIMER] == false)
+		pane->timer_active[BELL_TIMER] = false;
 }
 
 void
@@ -274,7 +274,7 @@ drawPane(Pane *pane, Line *peline, int pecaret)
 	pane->prevfst = pane->term->sb->firstline;
 
 	/* 点滅中フラグをクリア */
-	pane->timer_active[BLINK_TIMER] = pane->timer_active[RAPID_TIMER] = 0;
+	pane->timer_active[BLINK_TIMER] = pane->timer_active[RAPID_TIMER] = false;
 
 	/* 画面をクリア */
 	XSetForeground(pane->dinfo->disp, pane->gc, BELLCOLOR(pane->term->palette[defbg]));
@@ -313,7 +313,7 @@ drawPane(Pane *pane, Line *peline, int pecaret)
 	    pane->sel.altbuf == (pane->term->sb == &pane->term->alt))
 		drawSelection(pane);
 
-	pane->redraw_flag = 0;
+	pane->redraw_flag = false;
 }
 
 void
@@ -334,9 +334,9 @@ drawLine(Pane *pane, Line *line, int row, int col, int width, int pos)
 
 	/* 点滅 */
 	if (line->attr[i] & BLINK)
-		pane->timer_active[BLINK_TIMER] = 1;
+		pane->timer_active[BLINK_TIMER] = true;
 	if (line->attr[i] & RAPID)
-		pane->timer_active[RAPID_TIMER] = 1;
+		pane->timer_active[RAPID_TIMER] = true;
 	if (!(((line->attr[i] & BLINK) && pane->timer_lit[BLINK_TIMER]) ||
 	      ((line->attr[i] & RAPID) && pane->timer_lit[RAPID_TIMER]) ||
 	      (!(line->attr[i] & BLINK) && !(line->attr[i] & RAPID))))
@@ -481,6 +481,6 @@ drawLineRev(Pane *pane, Line *line, int row, int col1, int col2)
 void
 bell(Pane *pane)
 {
-	pane->timer_active[BELL_TIMER] = 1;
+	pane->timer_active[BELL_TIMER] = true;
 	pane->timers[BELL_TIMER] = pane->now;
 }

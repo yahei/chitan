@@ -1,3 +1,4 @@
+#include <stdbool.h>
 #include <time.h>
 
 #include "term.h"
@@ -20,7 +21,7 @@ typedef struct Pane {
 	GC gc;
 	XftDraw *draw;
 	int width, height, xpad, ypad;
-	char focus, redraw_flag;
+	bool focus, redraw_flag;
 	Term *term;
 	int scr, prevfst;
 	struct ScreenBuffer *prevbuf;
@@ -31,8 +32,8 @@ typedef struct Pane {
 		int *vers;
 	} sel;
 	struct timespec timers[TIMER_NUM], now;
-	char timer_active[TIMER_NUM];
-	char timer_lit[TIMER_NUM];
+	bool timer_active[TIMER_NUM];
+	bool timer_lit[TIMER_NUM];
 } Pane;
 
 Pane *createPane(DispInfo *, XFont *, int, int, float, char *const []);

@@ -53,8 +53,8 @@ static void fin(void);
 static Win *openWindow(int ,int);
 static void closeWindow(Win *);
 static void setWindowName(Win *, char *);
-static char handleXEvent(Win *);
-static char keyPressEvent(Win *, XEvent, int);
+static int handleXEvent(Win *);
+static int keyPressEvent(Win *, XEvent, int);
 static void redraw(Win *);
 
 /* IME */
@@ -158,7 +158,7 @@ run(void)
 		pane->now = now;
 
 		/* ウィンドウのイベント処理 */
-		if (handleXEvent(win) < 0)
+		if (handleXEvent(win))
 			return;
 
 		/* 端末のread */
@@ -173,7 +173,7 @@ run(void)
 		}
 		if (errno == EIO)
 			return;
-		if (0 < i) pane->redraw_flag = 1;
+		if (0 < i) pane->redraw_flag = true;
 
 		/* IMEスポット移動 */
 		if (pane->redraw_flag && win->ime.xic) {
@@ -278,7 +278,7 @@ setWindowName(Win *win, char *name)
 	}
 }
 
-char
+int
 handleXEvent(Win *win)
 {
 	static Pane *dragging = NULL;
@@ -310,7 +310,7 @@ handleXEvent(Win *win)
 		switch (event.type) {
 		case KeyPress:          /* キーボード入力 */
 			if (keyPressEvent(win, event, 64)) {
-				pane->timer_lit[CARET_TIMER] = 1;
+				pane->timer_lit[CARET_TIMER] = true;
 				pane->timers[CARET_TIMER] = now;
 				pane->scr = 0;
 			}
@@ -355,7 +355,7 @@ handleXEvent(Win *win)
 			break;
 
 		case Expose:            /* 再描画 */
-			pane->redraw_flag = 1;
+			pane->redraw_flag = true;
 			break;
 
 		case ConfigureNotify:   /* ウィンドウサイズ変更 */
@@ -369,11 +369,11 @@ handleXEvent(Win *win)
 		case FocusIn:
 		case FocusOut:          /* フォーカスの変化 */
 			pane->focus = event.type == FocusIn;
-			pane->redraw_flag = 1;
+			pane->redraw_flag = true;
 			break;
 
 		case ClientMessage:     /* ウィンドウが閉じられた */
-			return -(cme->data.l[0] == atoms[WM_DELETE_WINDOW]);
+			return cme->data.l[0] == atoms[WM_DELETE_WINDOW];
 
 		case SelectionRequest:  /* 貼り付ける文字列を送る */
 			sre = &event.xselectionrequest;
@@ -409,7 +409,7 @@ handleXEvent(Win *win)
 	return 0;
 }
 
-char
+int
 keyPressEvent(Win *win, XEvent event, int bufsize)
 {
 	struct Key { int symbol; char *normal; char *app; } keys[] = {
