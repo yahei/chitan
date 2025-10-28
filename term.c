@@ -208,25 +208,22 @@ readPty(Term *term)
 		return size;
 
 	for (reading = term->readbuf; reading < tail;) {
-		rest = CC(term, reading, tail);
+		rest = IS_GC(*reading) ? GCs(term, reading) : CC(term, reading, tail);
+
 		if (rest == NULL) {
 			break;
-		} else if (reading != rest) {
-			memmove(term->readbuf, rest, tail - rest + 1);
-			tail -= rest - term->readbuf;
-			reading = term->readbuf;
+		} else if (rest == reading) {
+			reading++;
+			continue;
+		} else if (*rest == 0x00 && rest != tail) {
+			memmove((char *)rest, rest + 1, tail - rest);
+			tail--;
 			continue;
 		}
 
-		rest = GCs(term, reading);
-		if (reading != rest) {
-			memmove(term->readbuf, rest, tail - rest + 1);
-			tail -= rest - term->readbuf;
-			reading = term->readbuf;
-			continue;
-		}
-
-		reading++;
+		memmove(term->readbuf, rest, tail - rest + 1);
+		tail -= rest - term->readbuf;
+		reading = term->readbuf;
 	}
 	term->rblen = tail - term->readbuf;
 
@@ -283,9 +280,6 @@ GCs(Term *term, const char *head)
 const char *
 CC(Term *term, const char *head, const char *tail)
 {
-	if (!BETWEEN(*head, 0x00, 0x20) && *head != 0x7f)
-		return head;
-
 	/* C0 基本集合 */
 	switch (*head) {
 	case 0x00:                                              break; /* NUL */
@@ -369,8 +363,9 @@ ESC(Term *term, const char *head, const char *tail)
 		if (BETWEEN(*head, 0x20, 0x7f))
 			fprintf(stderr, "Not Supported ESC Seq: ESC %c(%#x)\n",
 					*head, *head);
-		else
+		else if (*head != 0x00)
 			fprintf(stderr, "Invalid ESC Seq: ESC (%#x)\n", *head);
+		return head;
 	}
 
 	return head + 1;
@@ -574,9 +569,10 @@ CSI(Term *term, const char *head, const char *tail)
 		if (BETWEEN(*head, 0x40, 0x7f))
 			fprintf(stderr, "Not Supported CSI: CSI [%s][%s]%c(%#x)\n",
 					param, inter, *head, *head);
-		else
+		else if (*head != 0x00)
 			fprintf(stderr, "Invalid CSI: CSI [%s][%s](%#x)\n",
 					param, inter, *head);
+		return head;
 	}
 
 	return head + 1;
