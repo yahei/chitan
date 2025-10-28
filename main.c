@@ -43,7 +43,7 @@ static XIM xim;
 static Win *win;
 static struct timespec now;
 static float alpha;
-static char **pargv, *fontfamily;
+static char **cmd, *pattern;
 
 static void init(void);
 static void run(void);
@@ -75,19 +75,21 @@ int
 main(int argc, char *argv[])
 {
 	alpha = 1.0;
-	pargv = (char *[]){ getenv("SHELL"), NULL };
-	pargv[0] = pargv[0] ? pargv[0] : "bin/sh";
-	fontfamily = "monospace";
+	pattern = "monospace";
 
 	while (1) {
-		switch (getopt(argc, argv, "+a:e:f:")) {
+		switch (getopt(argc, argv, "+a:f:e:")) {
 		case '?':                                       continue;
 		case 'a': alpha = CLIP(atof(optarg), 0, 1.0);   continue;
-		case 'e': pargv = argv + optind - 1;            break;
-		case 'f': fontfamily = optarg;                  continue;
+		case 'f': pattern = optarg;                     continue;
+		case 'e': cmd = argv + optind - 1;              break;
+		default : cmd = argv + optind;                  break;
 		}
 		break;
 	}
+
+	cmd    = cmd[0] ? cmd    : (char *[]){ getenv("SHELL"), NULL };
+	cmd[0] = cmd[0] ? cmd[0] : "/bin/sh";
 
 	init();
 	run();
@@ -120,7 +122,7 @@ init(void)
 
 	/* 文字描画の準備 */
 	FcInit();
-	xfont = openFont(dinfo.disp, fontfamily);
+	xfont = openFont(dinfo.disp, pattern);
 	if (xfont == NULL)
 		fatal("XftFontOpen failed.\n");
 
@@ -244,7 +246,7 @@ openWindow(int width, int height)
 	XFlush(dinfo.disp);
 
 	/* Pane作成 */
-	win->pane = createPane(&dinfo, xfont, width, height, alpha, pargv);
+	win->pane = createPane(&dinfo, xfont, width, height, alpha, cmd);
 
 	return win;
 }

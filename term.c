@@ -41,7 +41,7 @@ static const char *designateCharSet(Term *, const char *, const char *);
 static void dumbbell(void *){};
 
 Term *
-openTerm(int row, int col, int bufsize, const char *program, char *const pargv[])
+openTerm(int row, int col, int bufsize, const char *program, char *const cmd[])
 {
 	Term *term;
 	char *sname;
@@ -112,7 +112,7 @@ openTerm(int row, int col, int bufsize, const char *program, char *const pargv[]
 			fatal("setsid failed.\n");
 		if (ioctl(0, TIOCSCTTY) < 0)
 			fprintf(stderr, "TIOCSCTTY failed.\n");
-		if (execvp(program, pargv) < 0)
+		if (execvp(program, cmd) < 0)
 			fatal("exec failed.\n");
 		return NULL;
 

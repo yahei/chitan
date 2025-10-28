@@ -26,7 +26,7 @@ static void drawLineRev(Pane *, Line *, int, int, int);
 static void bell(Pane *);
 
 Pane *
-createPane(DispInfo *dinfo, XFont *xfont, int width, int height, float alpha, char *const pargv[])
+createPane(DispInfo *dinfo, XFont *xfont, int width, int height, float alpha, char *const cmd[])
 {
 	Pane *pane = xmalloc(sizeof(Pane));
 
@@ -41,7 +41,7 @@ createPane(DispInfo *dinfo, XFont *xfont, int width, int height, float alpha, ch
 
 	/* 端末をオープン */
 	pane->term = openTerm((height - pane->ypad * 2) / xfont->ch,
-			(width - pane->xpad * 2) / xfont->cw, 256, pargv[0], pargv);
+			(width - pane->xpad * 2) / xfont->cw, 256, cmd[0], cmd);
 	if (!pane->term)
 		errExit("openTerm failed.\n");
 	pane->term->bell = (void (*)(void *))bell;
