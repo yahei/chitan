@@ -12,7 +12,7 @@ enum font_attributes {
 
 typedef struct XFont {
 	Display *disp;
-	unsigned char *family;
+	unsigned char *pattern;
 	int cw, ch;
 	int ascent;
 	struct FallbackGlyph {

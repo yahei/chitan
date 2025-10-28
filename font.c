@@ -17,17 +17,17 @@ XftFontSuite *getFontSuiteFonts(XFont *, const char *);
 char *getFontName(const unsigned char *, char32_t, char *, int);
 
 XFont *
-openFont(Display *disp, const char *family)
+openFont(Display *disp, const char *pattern)
 {
 	XFont *xfont = xmalloc(sizeof(XFont));
 	XGlyphInfo ginfo;
 
 	*xfont = (XFont){ disp, NULL, 1, 1, 0, NULL, NULL, 0, 0 };
-	xfont->family = xmalloc(strlen(family) + 1);
-	strcpy((char *)xfont->family, family);
+	xfont->pattern = xmalloc(strlen(pattern) + 1);
+	strcpy((char *)xfont->pattern, pattern);
 
 	/* メインフォントのロード */
-	getFontSuiteFonts(xfont, family);
+	getFontSuiteFonts(xfont, pattern);
 	if (!(*xfont->fonts[0])[FONT_NONE]) {
 		closeFont(xfont);
 		return NULL;
@@ -54,7 +54,7 @@ closeFont(XFont *xfont)
 		free(xfont->fonts[i]);
 	}
 
-	free(xfont->family);
+	free(xfont->pattern);
 	free(xfont->glyphs);
 	free(xfont->fonts);
 
@@ -80,7 +80,8 @@ XftFontSuite *
 getFontSuiteGlyphs(XFont *xfont, char32_t codepoint)
 {
 	XftFontSuite *font;
-	char fontname[256];
+	const char *opt = strchr((char *)xfont->pattern, ':');
+	char fontname[256], pattern[256];
 	int j;
 
 	/* グリフリストにあればそのフォントを使う */
@@ -89,8 +90,9 @@ getFontSuiteGlyphs(XFont *xfont, char32_t codepoint)
 			return xfont->glyphs[j].font;
 
 	/* グリフをリストに追加 */
-	getFontName(xfont->family, codepoint, fontname, 256);
-	font = getFontSuiteFonts(xfont, fontname);
+	getFontName(xfont->pattern, codepoint, fontname, sizeof(fontname));
+	snprintf(pattern, sizeof(pattern), "%s%s", fontname, opt ? opt : "");
+	font = getFontSuiteFonts(xfont, pattern);
 	struct FallbackGlyph fbg = { codepoint, font };
 	PUSH_BACK(xfont->glyphs, xfont->glyphs_len, fbg);
 
@@ -98,24 +100,24 @@ getFontSuiteGlyphs(XFont *xfont, char32_t codepoint)
 }
 
 XftFontSuite *
-getFontSuiteFonts(XFont *xfont, const char *fontname)
+getFontSuiteFonts(XFont *xfont, const char *pattern)
 {
 	XftFontSuite *font;
 	unsigned char *xftname;
-	char name[strlen(fontname) + 64];
+	char name[strlen(pattern) + 64];
 	int i;
 
 	/* フォントリストにあればそれを使う */
 	for (i = 0; i < xfont->fonts_len; i++) {
 		FcPatternGetString((*xfont->fonts[i])[0]->pattern, FC_FAMILY, 0, &xftname);
-		if (strcmp((char *)xftname, fontname) == 0)
+		if (strncmp((char *)xftname, pattern, strlen((char *)xftname)) == 0)
 			return (xfont->fonts[i]);
 	}
 
 	/* フォントをロードしてリストに追加 */
 	font = xmalloc(sizeof(XftFontSuite));
 	for (i = 0; i < 8; i++) {
-		strcpy(name, fontname);
+		strcpy(name, pattern);
 		strcat(name, i & FONT_BOLD   ? ":bold"   : "");
 		strcat(name, i & FONT_ITALIC ? ":italic" : "");
 		(*font)[i] = XftFontOpenName(xfont->disp, XDefaultScreen(xfont->disp), name);
@@ -126,28 +128,26 @@ getFontSuiteFonts(XFont *xfont, const char *fontname)
 }
 
 char *
-getFontName(const unsigned char *family, char32_t codepoint, char *buf, int buflen)
+getFontName(const unsigned char *pattern, char32_t codepoint, char *buf, int buflen)
 {
-	FcPattern *matched, *pattern = FcPatternCreate();
-	FcCharSet *charset = FcCharSetCreate();
-	FcResult result;
-	unsigned char *fontname;
-	const char *opt = strchr((char *)family, ':');
+	FcPattern *fcmatched, *fcpattern = FcPatternCreate();
+	FcCharSet *fccharset = FcCharSetCreate();
+	FcResult fcresult;
+	unsigned char *family;
 
-	FcPatternAddString(pattern, FC_FAMILY, family);
-	FcCharSetAddChar(charset, codepoint);
-	FcPatternAddCharSet(pattern, FC_CHARSET, charset);
-	FcConfigSubstitute(NULL, pattern, FcMatchPattern);
-	FcDefaultSubstitute(pattern);
-	matched = FcFontMatch(NULL, pattern, &result);
-	FcPatternGetString(matched, FC_FAMILY, 0, &fontname);
+	FcPatternAddString(fcpattern, FC_FAMILY, pattern);
+	FcCharSetAddChar(fccharset, codepoint);
+	FcPatternAddCharSet(fcpattern, FC_CHARSET, fccharset);
+	FcConfigSubstitute(NULL, fcpattern, FcMatchPattern);
+	FcDefaultSubstitute(fcpattern);
+	fcmatched = FcFontMatch(NULL, fcpattern, &fcresult);
+	FcPatternGetString(fcmatched, FC_FAMILY, 0, &family);
 
-	snprintf(buf, buflen, "%s%s", fontname, opt ? opt : "");
-	buf[buflen - 1] = '\0';
+	snprintf(buf, buflen, "%s", family);
 
-	FcCharSetDestroy(charset);
-	FcPatternDestroy(pattern);
-	FcPatternDestroy(matched);
+	FcCharSetDestroy(fccharset);
+	FcPatternDestroy(fcpattern);
+	FcPatternDestroy(fcmatched);
 
 	return buf;
 }
