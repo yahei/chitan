@@ -37,6 +37,9 @@ typedef struct Win {
 	char name[TITLE_MAX];
 } Win;
 
+enum { PRIMARY, CLIPBOARD, UTF8_STRING, MY_SELECTION, WM_DELETE_WINDOW, ATOM_NUM };
+
+static Atom atoms[ATOM_NUM];
 static DispInfo dinfo;
 static XFont *xfont;
 static XIM xim;
@@ -66,10 +69,6 @@ static void preeditStart(XIM, Win *, XPointer);
 static void preeditDone(XIM, Win *, XPointer);
 static void preeditDraw(XIM, Win *, XIMPreeditDrawCallbackStruct *);
 static void preeditCaret(XIM, Win *, XIMPreeditCaretCallbackStruct *);
-
-/* Selection */
-enum { PRIMARY, CLIPBOARD, UTF8_STRING, MY_SELECTION, WM_DELETE_WINDOW, ATOM_NUM };
-Atom atoms[ATOM_NUM];
 
 int
 main(int argc, char *argv[])
