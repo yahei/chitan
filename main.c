@@ -71,6 +71,15 @@ static void preeditDone(XIM, Win *, XPointer);
 static void preeditDraw(XIM, Win *, XIMPreeditDrawCallbackStruct *);
 static void preeditCaret(XIM, Win *, XIMPreeditCaretCallbackStruct *);
 
+static char *version = "chitan 0.0.0";
+static char *help = "usage: chitan [-options] [[-e] command [args ...]]\n"
+"        -a alpha                background opacity (0.0-1.0)\n"
+"        -f font                 font selection pattern (ex. monospace:size=12)\n"
+"        -h                      show this help\n"
+"        -l number               number of log lines\n"
+"        -v                      show version\n"
+"        -e command [args ...]   command to execute (must be the last)\n";
+
 int
 main(int argc, char *argv[])
 {
@@ -79,11 +88,13 @@ main(int argc, char *argv[])
 	pattern = "monospace";
 
 	while (1) {
-		switch (getopt(argc, argv, "+a:f:l:e:")) {
-		case '?':                                       continue;
+		switch (getopt(argc, argv, "+a:f:l:hve:")) {
+		case '?': printf("%s", help);                   return 0;
 		case 'a': alpha = CLIP(atof(optarg), 0, 1.0);   continue;
 		case 'f': pattern = optarg;                     continue;
+		case 'h': printf("%s", help);                   return 0;
 		case 'l': loglines = MAX(atoi(optarg), 1);      continue;
+		case 'v': printf("%s\n", version);              return 0;
 		case 'e': cmd = argv + optind - 1;              break;
 		default : cmd = argv + optind;                  break;
 		}
