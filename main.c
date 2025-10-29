@@ -319,7 +319,7 @@ handleXEvent(Win *win)
 		if (xim && XFilterEvent(&event, None) == True)
 			continue;
 
-		mx = (event.xbutton.x - pane->xpad) / xfont->cw;
+		mx = (event.xbutton.x - pane->xpad + xfont->cw / 2) / xfont->cw;
 		my = (event.xbutton.y - pane->ypad) / xfont->ch;
 
 		switch (event.type) {
