@@ -22,6 +22,7 @@
 enum cseq_type { CS_DCS, CS_SOS, CS_OSC, CS_PM, CS_APC, CS_k };
 
 static void setDefaultPalette(Term *);
+static void removeCharFromReadbuf(Term *, const char *);
 static const char *GCs(Term *, const char *);
 static const char *CC(Term *, const char *, const char *);
 static const char *ESC(Term *, const char *, const char *);
@@ -214,20 +215,21 @@ readPty(Term *term)
 			break;
 		} else if (rest == reading) {
 			reading++;
-			continue;
-		} else if (*rest == 0x00 && rest != tail) {
-			memmove((char *)rest, rest + 1, tail - rest);
-			tail--;
-			continue;
+		} else {
+			memmove(term->readbuf, rest, tail - rest + 1);
+			tail -= rest - term->readbuf;
+			reading = term->readbuf;
 		}
-
-		memmove(term->readbuf, rest, tail - rest + 1);
-		tail -= rest - term->readbuf;
-		reading = term->readbuf;
 	}
 	term->rblen = tail - term->readbuf;
 
 	return size;
+}
+
+void
+removeCharFromReadbuf(Term *term, const char *target)
+{
+	memmove(term->readbuf + 1, term->readbuf, target - term->readbuf);
 }
 
 const char *
@@ -351,6 +353,9 @@ ESC(Term *term, const char *head, const char *tail)
 	case 0x6b: /* k タイトル設定 */
 		return ctrlSeq(term, head + 1, tail, CS_k);
 
+	case 0x00: /* NUL */
+		return ESC(term, head + 1, tail);
+
 	default:
 		/*
 		 * 未対応
@@ -360,12 +365,11 @@ ESC(Term *term, const char *head, const char *tail)
 		 * 0x40-0x5f   Fe型     C1 補助集合
 		 * 0x60-0x7e   Fs型     標準単独制御機能
 		 */
-		if (BETWEEN(*head, 0x20, 0x7f))
-			fprintf(stderr, "Not Supported ESC Seq: ESC %c(%#x)\n",
-					*head, *head);
-		else if (*head != 0x00)
-			fprintf(stderr, "Invalid ESC Seq: ESC (%#x)\n", *head);
-		return head;
+		if (!BETWEEN(*head, 0x20, 0x7f)) {
+			fprintf(stderr, "Invalid ESC Seq: ESC (%#04x)\n", *head);
+			return head;
+		}
+		fprintf(stderr, "Not Supported ESC Seq: ESC (%#04x)\n", *head);
 	}
 
 	return head + 1;
@@ -379,29 +383,29 @@ CSI(Term *term, const char *head, const char *tail)
 	char inter[tail - head + 1], *pi;
 	char *str1, *str2;
 	Line *line;
-	int i, len, begin, end;
+	int i, len, begin, end, index = 0;
 
 	/* パラメタバイト */
-	for (pp = param; BETWEEN(*head, 0x30, 0x40); head++) {
-		if (head >= tail)
+	for (pp = param; BETWEEN(head[index], 0x30, 0x40); index++) {
+		if (head + index >= tail)
 			return NULL;
-		*pp++ = *head;
+		*pp++ = head[index];
 	}
 	*pp = '\0';
 
 	/* 中間バイト */
-	for (pi = inter; BETWEEN(*head, 0x20, 0x30); head++) {
-		if (head >= tail)
+	for (pi = inter; BETWEEN(head[index], 0x20, 0x30); index++) {
+		if (head + index >= tail)
 			return NULL;
-		*pi++ = *head;
+		*pi++ = head[index];
 	}
 	*pi = '\0';
 
-	if (head >= tail)
+	if (head + index >= tail)
 		return NULL;
 
 	/* 終端バイト */
-	switch (*head) {
+	switch (head[index]) {
 	case 0x40: /* ICH 文字挿入 */
 		if ((line = getLine(term, term->cy))) {
 			int n = MAX(atoi(param), 1);
@@ -565,17 +569,21 @@ CSI(Term *term, const char *head, const char *tail)
 		}
 		break;
 
+	case 0x00: /* NUL このNULを取り除いて読み直す */
+		removeCharFromReadbuf(term, head + index);
+		return CSI(term, head + 1, tail);
+
 	default: /* 未対応 */
-		if (BETWEEN(*head, 0x40, 0x7f))
+		if (BETWEEN(head[index], 0x40, 0x7f))
 			fprintf(stderr, "Not Supported CSI: CSI [%s][%s]%c(%#x)\n",
-					param, inter, *head, *head);
-		else if (*head != 0x00)
+					param, inter, head[index], head[index]);
+		else if (head[index] != 0x00)
 			fprintf(stderr, "Invalid CSI: CSI [%s][%s](%#x)\n",
-					param, inter, *head);
-		return head;
+					param, inter, head[index]);
+		return head + index;
 	}
 
-	return head + 1;
+	return head + index + 1;
 }
 
 const char *
@@ -594,9 +602,15 @@ ctrlSeq(Term *term, const char *head, const char *tail, enum cseq_type type)
 		/* 使えない文字またはSOSが現れて中断 */
 		if ((type != CS_SOS && !(BETWEEN(head[i], 0x08, 0x0e) || IS_GC(head[i]))) ||
 		    (type == CS_SOS && i < len && strncmp(&head[i], "\eX", 2) == 0)) {
-			err[i] = '\0';
-			fprintf(stderr, "CtrlSeq \"%s\" was interrupted by '%#x'\n", err, head[i]);
-			return &head[i];
+			if (head[i] == 0x00) {
+				/* NULが原因なら取り除いて読み直す */
+				removeCharFromReadbuf(term, head + i);
+				return ctrlSeq(term, head + 1, tail, type);
+			} else {
+				err[i] = '\0';
+				fprintf(stderr, "CtrlSeq \"%s\" was interrupted by '%#x'\n", err, head[i]);
+				return &head[i];
+			}
 		}
 		/* 末尾に到達して中断 */
 		if (len <= i)
