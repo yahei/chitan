@@ -46,6 +46,7 @@ static XIM xim;
 static Win *win;
 static struct timespec now;
 static float alpha;
+static int loglines;
 static char **cmd, *pattern;
 
 static void init(void);
@@ -74,13 +75,15 @@ int
 main(int argc, char *argv[])
 {
 	alpha = 1.0;
+	loglines = 1024;
 	pattern = "monospace";
 
 	while (1) {
-		switch (getopt(argc, argv, "+a:f:e:")) {
+		switch (getopt(argc, argv, "+a:f:l:e:")) {
 		case '?':                                       continue;
 		case 'a': alpha = CLIP(atof(optarg), 0, 1.0);   continue;
 		case 'f': pattern = optarg;                     continue;
+		case 'l': loglines = MAX(atoi(optarg), 1);      continue;
 		case 'e': cmd = argv + optind - 1;              break;
 		default : cmd = argv + optind;                  break;
 		}
@@ -245,7 +248,7 @@ openWindow(int width, int height)
 	XFlush(dinfo.disp);
 
 	/* Pane作成 */
-	win->pane = createPane(&dinfo, xfont, width, height, alpha, cmd);
+	win->pane = createPane(&dinfo, xfont, width, height, alpha, loglines, cmd);
 
 	return win;
 }

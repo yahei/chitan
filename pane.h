@@ -36,7 +36,7 @@ typedef struct Pane {
 	bool timer_lit[TIMER_NUM];
 } Pane;
 
-Pane *createPane(DispInfo *, XFont *, int, int, float, char *const []);
+Pane *createPane(DispInfo *, XFont *, int, int, float, int, char *const []);
 void destroyPane(Pane *);
 void setPaneSize(Pane *, int, int);
 void mouseEvent(Pane *, XEvent *);
