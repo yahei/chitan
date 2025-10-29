@@ -437,6 +437,8 @@ keyPressEvent(Win *win, XEvent event, int bufsize)
 		{ XK_Page_Up,   "\e[5~",        "\e[5~" },
 		{ XK_Page_Down, "\e[6~",        "\e[6~" },
 		{ XK_Insert,    "\e[2~",        "\e[2~" },
+		{ XK_Delete,    "\e[3~",        "\e[3~" },
+		{ XK_BackSpace, "\x7f",         "\x7f" },
 		{ XK_F1,        "\eOP",         "\eOP" },
 		{ XK_F2,        "\eOQ",         "\eOQ" },
 		{ XK_F3,        "\eOR",         "\eOR" },
@@ -481,21 +483,21 @@ keyPressEvent(Win *win, XEvent event, int bufsize)
 		return 1;
 	}
 
+	/* カーソルキー等を送る */
+	for (key = keys; key->symbol != XK_VoidSymbol; key++) {
+		if (key->symbol != keysym)
+			continue;
+		str = win->pane->term->dec[1] < 2 ? key->normal : key->app;
+		writePty(win->pane->term, str, strlen(str));
+		return 1;
+	}
+
+	/* 文字列を送る */
 	if (strlen(buf)) {
-		/* 文字列を送る */
 		if (event.xkey.state & Mod1Mask)
 			writePty(win->pane->term, "\e", 1);
 		writePty(win->pane->term, buf, len);
 		return 1;
-	} else {
-		/* カーソルキー等を送る */
-		for (key = keys; key->symbol != XK_VoidSymbol; key++) {
-			if (key->symbol != keysym)
-				continue;
-			str = win->pane->term->dec[1] < 2 ? key->normal : key->app;
-			writePty(win->pane->term, str, strlen(str));
-			return 1;
-		}
 	}
 
 	return 0;
