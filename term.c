@@ -36,7 +36,7 @@ static void areaScroll(Term *, int, int, int);
 static void optset(Term *, unsigned int, int);
 static void decset(Term *, unsigned int, int);
 static void setScrBufSize(Term *term, int, int);
-static void setSGR(Term *, char *);
+static void setSGR(Term *, const char *);
 static const char *designateCharSet(Term *, const char *, const char *);
 static void dumbbell(void *){};
 
@@ -906,12 +906,14 @@ reportMouse(Term *term, int btn, int release, int mx, int my)
 }
 
 void
-setSGR(Term *term, char *param)
+setSGR(Term *term, const char *param)
 {
-	char *buf, *buf2;
+	char *buf, *buf2, tokens[strlen(param) + 1];
 	int n;
 
-	for (buf = strtok(param, ";"); buf; buf = strtok(NULL, ";")) {
+	strcpy(tokens, param);
+
+	for (buf = strtok(tokens, ";"); buf; buf = strtok(NULL, ";")) {
 		n = atoi(buf);
 
 		/* すべての効果を取り消す */
