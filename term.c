@@ -15,7 +15,7 @@
  * 疑似端末とログを管理する
  */
 
-#define READ_SIZE       4096
+#define READ_SIZE       (4096)
 #define LINE(a,b)       ((a)->lines[(b) % (a)->maxlines])
 #define IS_GC(c)        (BETWEEN((c), 0x20, 0x7f) || (c) & 0x80)
 
@@ -181,10 +181,10 @@ closeTerm(Term *term)
 	if (0 <= term->master)
 		close(term->master);
 
-	for (i = 0; i < term->sb->maxlines; i++) {
+	for (i = 0; i < term->ori.maxlines; i++)
 		freeLine(term->ori.lines[i]);
+	for (i = 0; i < term->alt.maxlines; i++)
 		freeLine(term->alt.lines[i]);
-	}
 
 	free(term->ori.lines);
 	free(term->alt.lines);
@@ -332,29 +332,14 @@ ESC(Term *term, const char *head, const char *tail)
 			areaScroll(term, sb->scrs, sb->scre, -1);
 		break;
 
-	case 0x5b: /* CSI */
-		return CSI(term, head + 1, tail);
-
-	case 0x50: /* DCS */
-		return ctrlSeq(term, head + 1, tail, CS_DCS);
-
-	case 0x58: /* SOS */
-		return ctrlSeq(term, head + 1, tail, CS_SOS);
-
-	case 0x5d: /* OSC */
-		return ctrlSeq(term, head + 1, tail, CS_OSC);
-
-	case 0x5e: /* PM */
-		return ctrlSeq(term, head + 1, tail, CS_PM);
-
-	case 0x5f: /* APC */
-		return ctrlSeq(term, head + 1, tail, CS_APC);
-
-	case 0x6b: /* k タイトル設定 */
-		return ctrlSeq(term, head + 1, tail, CS_k);
-
-	case 0x00: /* NUL */
-		return ESC(term, head + 1, tail);
+	case 0x50: return ctrlSeq(term, head + 1, tail, CS_DCS);    /* DCS */
+	case 0x58: return ctrlSeq(term, head + 1, tail, CS_SOS);    /* SOS */
+	case 0x5b: return     CSI(term, head + 1, tail);            /* CSI */
+	case 0x5d: return ctrlSeq(term, head + 1, tail, CS_OSC);    /* OSC */
+	case 0x5e: return ctrlSeq(term, head + 1, tail, CS_PM);     /* PM  */
+	case 0x5f: return ctrlSeq(term, head + 1, tail, CS_APC);    /* APC */
+	case 0x6b: return ctrlSeq(term, head + 1, tail, CS_k);      /* k   */
+	case 0x00: return     ESC(term, head + 1, tail);            /* NUL */
 
 	default:
 		/*
@@ -369,7 +354,7 @@ ESC(Term *term, const char *head, const char *tail)
 			fprintf(stderr, "Invalid ESC Seq: ESC (%#04x)\n", *head);
 			return head;
 		}
-		fprintf(stderr, "Not Supported ESC Seq: ESC (%#04x)\n", *head);
+		fprintf(stderr, "Not Supported ESC Seq: ESC %c(%#04x)\n", *head, *head);
 	}
 
 	return head + 1;
@@ -574,13 +559,13 @@ CSI(Term *term, const char *head, const char *tail)
 		return CSI(term, head + 1, tail);
 
 	default: /* 未対応 */
-		if (BETWEEN(head[index], 0x40, 0x7f))
-			fprintf(stderr, "Not Supported CSI: CSI [%s][%s]%c(%#x)\n",
-					param, inter, head[index], head[index]);
-		else if (head[index] != 0x00)
-			fprintf(stderr, "Invalid CSI: CSI [%s][%s](%#x)\n",
+		if (!BETWEEN(head[index], 0x40, 0x7f)) {
+			fprintf(stderr, "Invalid CSI: CSI [%s][%s](%#04x)\n",
 					param, inter, head[index]);
-		return head + index;
+			return head + index;
+		}
+		fprintf(stderr, "Not Supported CSI: CSI [%s][%s]%c(%#04x)\n",
+				param, inter, head[index], head[index]);
 	}
 
 	return head + index + 1;

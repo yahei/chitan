@@ -6,7 +6,7 @@ extern int defbg;
 
 typedef uint_least32_t char32_t;
 
-#define PUT_NUL(l,x)    (putU32s(l, x, (char32_t *)L"\0", 0, deffg, defbg, 1))
+#define PUT_NUL(l,x)    (putU32s((l), (x), (char32_t *)L"\0", 0, deffg, defbg, 1))
 
 enum sgr_attribute {
 	NONE    = 0,

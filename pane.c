@@ -15,9 +15,9 @@
 		((int)(  RED(c1) * (a1) +   RED(c2) * (a2)) << 16) +\
 		((int)(GREEN(c1) * (a1) + GREEN(c2) * (a2)) <<  8) +\
 		((int)( BLUE(c1) * (a1) +  BLUE(c2) * (a2)) <<  0))
-#define BELLCOLOR(color) (pane->timer_lit[BELL_TIMER] ?\
-		BLEND_COLOR(color, 0.85, 0xffffffff, 0.15) : color)
-#define SCROLLMAX(sb)   (sb->firstline - MAX(sb->totallines - sb->maxlines, 0))
+#define BELLCOLOR(c)    (pane->timer_lit[BELL_TIMER] ?\
+		BLEND_COLOR((c), 0.85, 0xffffffff, 0.15) : (c))
+#define SCROLLMAX(sb)   ((sb)->firstline - MAX((sb)->totallines - (sb)->maxlines, 0))
 
 static void drawLine(Pane *, Line *, int, int, int, int);
 static void drawCursor(Pane *, Line *, int, int, int);
@@ -184,14 +184,11 @@ copySelection(Pane *pane, char **dst, int deltrail)
 		if (!(line = getLine(pane->term, i - pane->term->sb->firstline)))
 			continue;
 
-		if (pane->sel.rect) {
-			l = MIN(getCharCnt(line->str,  left).index, u32slen(line->str));
-			r = MIN(getCharCnt(line->str, right).index, u32slen(line->str));
-		} else {
-			l = (i != firstline) ? 0 :
-				MIN(getCharCnt(line->str, left).index, u32slen(line->str));
-			r = (i != lastline) ? u32slen(line->str) + 1 :
-				MIN(getCharCnt(line->str, right).index, u32slen(line->str));
+		l = MIN(getCharCnt(line->str,  left).index, u32slen(line->str));
+		r = MIN(getCharCnt(line->str, right).index, u32slen(line->str));
+		if (!pane->sel.rect) {
+			l = (i == firstline) ? l : 0;
+			r = (i ==  lastline) ? r : u32slen(line->str) + 1;
 		}
 
 		while (len < u32slen(copy) + r - l + 2) {
@@ -310,7 +307,7 @@ drawPane(Pane *pane, Line *peline, int pecaret)
 
 	/* 選択範囲を書く */
 	if ((pane->sel.aline != pane->sel.bline || pane->sel.acol != pane->sel.bcol) &&
-	    pane->sel.altbuf == (pane->term->sb == &pane->term->alt))
+	     pane->sel.altbuf == (pane->term->sb == &pane->term->alt))
 		drawSelection(pane);
 
 	pane->redraw_flag = false;
@@ -323,7 +320,7 @@ drawLine(Pane *pane, Line *line, int row, int col, int width, int pos)
 	int x, y, w;
 	int attr, fg, bg;
 	XftColor xc;
-	Color c;
+	Color fc, bc;
 
 	if (width <= pos || line->str[i] == L'\0')
 		return;
@@ -337,9 +334,8 @@ drawLine(Pane *pane, Line *line, int row, int col, int width, int pos)
 		pane->timer_active[BLINK_TIMER] = true;
 	if (line->attr[i] & RAPID)
 		pane->timer_active[RAPID_TIMER] = true;
-	if (!(((line->attr[i] & BLINK) && pane->timer_lit[BLINK_TIMER]) ||
-	      ((line->attr[i] & RAPID) && pane->timer_lit[RAPID_TIMER]) ||
-	      (!(line->attr[i] & BLINK) && !(line->attr[i] & RAPID))))
+	if ((line->attr[i] & BLINK ? pane->timer_lit[BLINK_TIMER] ? 2 : 0 : 1) +
+	    (line->attr[i] & RAPID ? pane->timer_lit[RAPID_TIMER] ? 2 : 0 : 1) < 2)
 		return;
 
 	/* 座標 */
@@ -348,27 +344,23 @@ drawLine(Pane *pane, Line *line, int row, int col, int width, int pos)
 	w = pane->xfont->cw * u32swidth(&line->str[i], next - i);
 
 	/* 前処理 */
-	if (line->attr[i] & NEGA) { /* 反転 */
-		fg = line->bg[i];
-		bg = line->fg[i];
-	} else {
-		fg = line->fg[i];
-		bg = line->bg[i];
-	}
-	if (line->attr[i] & BOLD) /* 太字 */
-		fg = fg < 8 ? fg + 8 : fg;
-	c = pane->term->palette[fg]; /* 色を取得 */
-	if (line->attr[i] & FAINT) /* 細字 */
-		c = BLEND_COLOR(c, 0.6, pane->term->palette[bg], 0.4);
+	fg = line->attr[i] & NEGA ? line->bg[i] : line->fg[i];  /* 反転 */
+	bg = line->attr[i] & NEGA ? line->fg[i] : line->bg[i];
+	if (line->attr[i] & BOLD)                               /* 太字 */
+		fg += fg < 8 ? 8 : 0;
+	fc = pane->term->palette[fg];                           /* 色を取得 */
+	bc = pane->term->palette[bg];
+	if (line->attr[i] & FAINT)                              /* 細字 */
+		fc = BLEND_COLOR(fc, 0.6, bc, 0.4);
 
 	/* 色をXftColorに変換 */
-	xc.color.red   =   RED(c) << 8;
-	xc.color.green = GREEN(c) << 8;
-	xc.color.blue  =  BLUE(c) << 8;
+	xc.color.red   =   RED(fc) << 8;
+	xc.color.green = GREEN(fc) << 8;
+	xc.color.blue  =  BLUE(fc) << 8;
 	xc.color.alpha = 0xffff;
 
 	/* 背景を塗る */
-	XSetForeground(pane->dinfo->disp, pane->gc, BELLCOLOR(pane->term->palette[bg]));
+	XSetForeground(pane->dinfo->disp, pane->gc, BELLCOLOR(bc));
 	XFillRectangle(pane->dinfo->disp, pane->pixmap, pane->gc, x, y, w, pane->xfont->ch);
 
 	y += pane->xfont->ascent;
@@ -381,7 +373,7 @@ drawLine(Pane *pane, Line *line, int row, int col, int width, int pos)
 
 	/* 後処理 */
 	if (line->attr[i] & ULINE) { /* 下線 */
-		XSetForeground(pane->dinfo->disp, pane->gc, pane->term->palette[fg]);
+		XSetForeground(pane->dinfo->disp, pane->gc, fc);
 		XDrawLine(pane->dinfo->disp, pane->pixmap, pane->gc, x, y + 1, x + w - 1, y + 1);
 	}
 }
@@ -435,20 +427,15 @@ drawSelection(Pane *pane)
 	checkSelection(pane);
 
 #define DRAW(n, a, b)   drawLineRev(pane, getLine(pane->term, n), n + pane->scr, a, b)
-	if (sel->rect) {
-		/* 矩形選択 */
-		for (i = s; i < e + 1; i++)
+	for (i = s; i < e + 1; i++) {
+		if (sel->rect || (sel->aline == sel->bline))
 			DRAW(i, sel->acol, sel->bcol);
-	} else {
-		/* 通常 */
-		if (sel->aline == sel->bline) {
-			DRAW(s, sel->acol, sel->bcol);
-		} else {
+		else if (i == s)
 			DRAW(s, (sel->aline < sel->bline ? sel->acol : sel->bcol), pane->term->sb->cols + 2);
+		else if (i == e)
 			DRAW(e, 0, (sel->aline < sel->bline ? sel->bcol : sel->acol));
-			for (i = s + 1; i < e; i++)
-				DRAW(i, 0, pane->term->sb->cols + 2);
-		}
+		else
+			DRAW(i, 0, pane->term->sb->cols + 2);
 	}
 #undef DRAW
 }
