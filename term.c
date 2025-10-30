@@ -15,7 +15,7 @@
  * 疑似端末とログを管理する
  */
 
-#define READ_SIZE       (4096)
+#define READ_SIZE       (1 << 14)
 #define LINE(a,b)       ((a)->lines[(b) % (a)->maxlines])
 #define IS_GC(c)        (BETWEEN((c), 0x20, 0x7f) || (c) & 0x80)
 
@@ -196,7 +196,7 @@ closeTerm(Term *term)
 ssize_t
 readPty(Term *term)
 {
-	const char *reading, *rest, *tail;
+	const char *head, *reading, *rest, *tail;
 	ssize_t size;
 
 	term->readbuf = xrealloc(term->readbuf, term->rblen + READ_SIZE + 1);
@@ -208,20 +208,18 @@ readPty(Term *term)
 	if (size < 0)
 		return size;
 
-	for (reading = term->readbuf; reading < tail;) {
+	for (head = reading = term->readbuf; reading < tail;) {
 		rest = IS_GC(*reading) ? GCs(term, reading) : CC(term, reading, tail);
 
-		if (rest == NULL) {
+		if (rest == NULL)
 			break;
-		} else if (rest == reading) {
+		else if (rest == reading)
 			reading++;
-		} else {
-			memmove(term->readbuf, rest, tail - rest + 1);
-			tail -= rest - term->readbuf;
-			reading = term->readbuf;
-		}
+		else
+			head = reading = rest;
 	}
-	term->rblen = tail - term->readbuf;
+	memmove(term->readbuf, head, tail - head);
+	term->rblen = tail - head;
 
 	return size;
 }
