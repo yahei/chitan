@@ -362,29 +362,25 @@ const char *
 CSI(Term *term, const char *head, const char *tail)
 {
 	struct ScreenBuffer *sb = term->sb;
-	char param[tail - head + 1], *pp;
-	char inter[tail - head + 1], *pi;
+	char param[tail - head + 1], *pp = param;
+	char inter[tail - head + 1];
 	char *str1, *str2;
 	Line *line;
-	int i, len, begin, end, index = 0;
+	int i, a, b, len, begin, end, index = 0;
 
 	/* パラメタバイト */
-	for (pp = param; BETWEEN(head[index], 0x30, 0x40); index++) {
+	for (i = 0; BETWEEN(head[index], 0x30, 0x40); param[i++] = head[index++])
 		if (head + index >= tail)
 			return NULL;
-		*pp++ = head[index];
-	}
-	*pp = '\0';
+	param[i] = '\0';
 
 	/* 中間バイト */
-	for (pi = inter; BETWEEN(head[index], 0x20, 0x30); index++) {
+	for (i = 0; BETWEEN(head[index], 0x20, 0x30); inter[i++] = head[index++])
 		if (head + index >= tail)
 			return NULL;
-		*pi++ = head[index];
-	}
-	*pi = '\0';
+	inter[i] = '\0';
 
-	if (head + index >= tail)
+	if (tail <= head + index)
 		return NULL;
 
 	/* 終端バイト */
@@ -424,10 +420,9 @@ CSI(Term *term, const char *head, const char *tail)
 		break;
 
 	case 0x48: /* CUP カーソル位置決め */
-		str1 = strtok2(param, ";:");
-		str2 = strtok2(NULL, ";:");
-		setCursorPos(term, atoi(str2 ? str2 : "1") - 1,
-		                   atoi(str1 ? str1 : "1") - 1);
+		str1 = pp ? mystrsep(&pp, ";:") : "1";
+		str2 = pp ? mystrsep(&pp, ";:") : "1";
+		setCursorPos(term, atoi(str2) - 1, atoi(str1) - 1);
 		break;
 
 	case 0x4a: /* ED ページ内消去 */
@@ -541,15 +536,14 @@ CSI(Term *term, const char *head, const char *tail)
 		break;
 
 	case 0x72: /* DECSTBM スクロール範囲設定 */
-		str1 = strtok(param, ";");
-		str2 = strtok(NULL, ";");
-		if (str1 && str2 && atoi(str1) <= atoi(str2)) {
-			sb->scrs = MIN(atoi(str1), sb->rows) - 1;
-			sb->scre = MIN(atoi(str2), sb->rows) - 1;
-		} else {
-			sb->scrs = 0;
-			sb->scre = sb->rows - 1;
-		}
+		str1 = mystrsep(&pp, ";");
+		str2 = mystrsep(&pp, ";");
+		a = str1 ? CLIP(atoi(str1), 0, sb->rows) : 1;
+		b = str2 ? CLIP(atoi(str2), 0, sb->rows) : sb->rows;
+		if (b <= a)
+			break;
+		sb->scrs = a - 1;
+		sb->scre = b - 1;
 		break;
 
 	case 0x00: /* NUL このNULを取り除いて読み直す */
@@ -627,24 +621,25 @@ CStr(Term *term, const char *payload, const char *err, const char *type)
 void
 OSC(Term *term, char *payload, const char *err)
 {
-	char *spec, *endptr;
+	char *spec, *endptr, *buf;
 	int pn, pc, color;
 
-	pn = atoi(strtok(payload, ";"));
+	pn = (buf = mystrsep(&payload, ";")) ? atoi(buf) : -1;
 	switch (pn) {
 	case 0:  /* タイトル */
-		strncpy(term->title, payload + 2, TITLE_MAX - 1);
+		strncpy(term->title, payload, TITLE_MAX - 1);
 		return;
 	case 4:  /* 色設定 */
+		buf = mystrsep(&payload, ";");
 	case 10: /* 文字色設定 */
 	case 11: /* 背景色設定 */
 		switch (pn) {
-		case 4:  pc = atoi(strtok(NULL, ";")); break;
-		case 10: pc = deffg;                   break;
-		case 11: pc = defbg;                   break;
+		case 4:  pc = buf ? atoi(buf) : 0;      break;
+		case 10: pc = deffg;                    break;
+		case 11: pc = defbg;                    break;
 		}
-		spec = strtok(NULL, ";");
-		if (strncmp(spec, "#", 1) == 0) {       /* #rrggbb形式 */
+		spec = mystrsep(&payload, ";");
+		if (spec && strncmp(spec, "#", 1) == 0) {   /* #rrggbb形式 */
 			color = strtol(&spec[1], &endptr, 16);
 			if (&spec[1] != endptr) {
 				term->palette[pc] &= 0xff000000;
@@ -653,7 +648,7 @@ OSC(Term *term, char *payload, const char *err)
 				return;
 			}
 		}
-		break;
+		return;
 	}
 
 	/* 未対応 */
@@ -905,12 +900,12 @@ reportMouse(Term *term, int btn, int release, int mx, int my)
 void
 setSGR(Term *term, const char *param)
 {
-	char *buf, *buf2, tokens[strlen(param) + 1];
+	char *buf, *buf2, tokens[strlen(param) + 1], *p = tokens;
 	int n;
 
 	strcpy(tokens, param);
 
-	for (buf = strtok(tokens, ";"); buf; buf = strtok(NULL, ";")) {
+	for (buf = mystrsep(&p, ";"); buf; buf = mystrsep(&p, ";")) {
 		n = atoi(buf);
 
 		/* すべての効果を取り消す */
@@ -944,8 +939,8 @@ setSGR(Term *term, const char *param)
 		if (BETWEEN(n, 90, 98))
 			term->fg = n - 82;
 		if (n == 38) {
-			buf = strtok(NULL, ";");
-			buf2 = strtok(NULL, ";");
+			buf  = mystrsep(&p, ";");
+			buf2 = mystrsep(&p, ";");
 			if (buf && buf2 && atoi(buf) == 5)
 				term->fg = atoi(buf2);
 			else
@@ -960,8 +955,8 @@ setSGR(Term *term, const char *param)
 		if (BETWEEN(n, 100, 108))
 			term->bg = n - 92;
 		if (n == 48) {
-			buf = strtok(NULL, ";");
-			buf2 = strtok(NULL, ";");
+			buf  = mystrsep(&p, ";");
+			buf2 = mystrsep(&p, ";");
 			if (buf && buf2 && atoi(buf) == 5)
 				term->bg = atoi(buf2);
 			else

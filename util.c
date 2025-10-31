@@ -42,17 +42,13 @@ xrealloc(void *p, size_t size)
 }
 
 char *
-strtok2(char *str, char *delim)
+mystrsep(char **str, const char *delim)
 {
-	static char *last;
+	char *res = *str;
 
-	if (str == NULL)
-		str = last;
-
-	if (str && (last = strpbrk(str, delim))) {
-		*last = '\0';
-		last++;
+	if (*str && (*str = strpbrk(*str, delim))) {
+		**str = '\0';
+		(*str)++;
 	}
-
-	return str;
+	return res;
 }
