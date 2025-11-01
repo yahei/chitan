@@ -395,6 +395,8 @@ drawCursor(Pane *pane, Line *line, int row, int col, int type)
 	if (pane->focus && (!type || type % 2) && (pane->timer_lit[CARET_TIMER]))
 		return;
 
+	XSetForeground(dinfo->disp, pane->gc, BELLCOLOR(pane->term->palette[deffg]));
+
 	switch (type) {
 	default: case 0: case 1: case 2: /* ブロック */
 		if (pane->focus) {
@@ -402,7 +404,6 @@ drawCursor(Pane *pane, Line *line, int row, int col, int type)
 			cursor = (Line){c, &attr, &defbg, &deffg};
 			drawLine(pane, &cursor, row, col, 1, 0);
 		} else {
-			XSetForeground(dinfo->disp, pane->gc, BELLCOLOR(pane->term->palette[deffg]));
 			XDrawRectangle(dinfo->disp, pane->pixmap, pane->gc, x, y, cw, ch - 1);
 			XDrawPoint(dinfo->disp, pane->pixmap, pane->gc, x + cw, y + ch - 1);
 		}
