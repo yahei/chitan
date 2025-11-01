@@ -497,6 +497,10 @@ CSI(Term *term, const char *head, const char *tail)
 		putSPCs(line, term->cx, term->bg, atoi(param));
 		break;
 
+	case 0x63: /* DA 装置識別 */
+		if (param[0] == '\0' || param[0] == '0')
+			writePty(term, "\e[?6c", 5);
+		break;
 
 	case 0x64: /* VPA 行位置決め */
 		setCursorPos(term, term->cx, atoi(param) - 1);
