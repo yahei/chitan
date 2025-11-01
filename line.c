@@ -54,12 +54,10 @@ insertU32s(Line *line, int head, const InsertLine *ins, int len)
 			(movelen + sent) * size); \
 	memcpy(&dest[head], src, len * size); \
 } while (0);
-
-	INSERT(line->str, ins->str, sizeof(char32_t), 1);
-	INSERT(line->attr, ins->attr, sizeof(int), 0);
-	INSERT(line->fg, ins->fg, sizeof(int), 0);
-	INSERT(line->bg, ins->bg, sizeof(int), 0);
-
+	INSERT(line->str,   ins->str,   sizeof(char32_t),   1);
+	INSERT(line->attr,  ins->attr,  sizeof(int),        0);
+	INSERT(line->fg,    ins->fg,    sizeof(int),        0);
+	INSERT(line->bg,    ins->bg,    sizeof(int),        0);
 #undef INSERT
 	line->ver++;
 }
@@ -82,12 +80,10 @@ deleteChars(Line *line, int head, int len)
 	free(target); \
 	target = buf; \
 } while (0);
-
-	DELETE(line->str, strbuf, sizeof(char32_t), 1);
-	DELETE(line->attr, buf, sizeof(int), 0);
-	DELETE(line->fg, buf, sizeof(int), 0);
-	DELETE(line->bg, buf, sizeof(int), 0);
-
+	DELETE(line->str,   strbuf,     sizeof(char32_t),   1);
+	DELETE(line->attr,  buf,        sizeof(int),        0);
+	DELETE(line->fg,    buf,        sizeof(int),        0);
+	DELETE(line->bg,    buf,        sizeof(int),        0);
 #undef DELETE
 	line->ver++;
 }
@@ -140,8 +136,8 @@ putU32s(Line *line, int col, const char32_t *str, int attr, int fg, int bg, size
 
 	for (i = 0; i < len; i++) {
 		attrs[i] = attr;
-		fgs[i] = fg;
-		bgs[i] = bg;
+		fgs[i]   = fg;
+		bgs[i]   = bg;
 	}
 	placed = (InsertLine){ str, attrs, fgs, bgs };
 
@@ -167,13 +163,13 @@ findNextSGR(const Line *line, int index)
 
 	if (index < len) {
 		const int attr = line->attr[index];
-		const int fg = line->fg[index];
-		const int bg = line->bg[index];
+		const int fg   = line->fg[index];
+		const int bg   = line->bg[index];
 
 		for (; index < len; index++)
 			if (attr != line->attr[index] ||
-			      fg != line->fg[index] ||
-			      bg != line->bg[index])
+			    fg   != line->fg[index] ||
+			    bg   != line->bg[index])
 				return index;
 	}
 

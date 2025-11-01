@@ -635,7 +635,7 @@ preeditDraw(XIM xim, Win *win, XIMPreeditDrawCallbackStruct *call)
 		return;
 
 	/* 挿入の処理 */
-	len = call->text->length;
+	len  = call->text->length;
 	str  = xmalloc(len * sizeof(char32_t));
 	attr = xmalloc(len * sizeof(int));
 	fg   = xmalloc(len * sizeof(int));

@@ -399,21 +399,11 @@ CSI(Term *term, const char *head, const char *tail)
 		}
 		break;
 
-	case 0x41: /* CUU */
-		moveCursorPos(term, 0, -MAX(atoi(param), 1));
-		break;
-
-	case 0x42: /* CUD */
-		moveCursorPos(term, 0, MAX(atoi(param), 1));
-		break;
-
-	case 0x43: /* CUF */
-		moveCursorPos(term, MAX(atoi(param), 1), 0);
-		break;
-
-	case 0x44: /* CUB */
-		moveCursorPos(term, -MAX(atoi(param), 1), 0);
-		break;
+		/* カーソル移動 */
+	case 0x41: moveCursorPos(term, 0, -MAX(atoi(param), 1)); break; /* CUU */
+	case 0x42: moveCursorPos(term, 0,  MAX(atoi(param), 1)); break; /* CUD */
+	case 0x43: moveCursorPos(term,  MAX(atoi(param), 1), 0); break; /* CUF */
+	case 0x44: moveCursorPos(term, -MAX(atoi(param), 1), 0); break; /* CUB */
 
 	case 0x47: /* CHA カーソル文字位置決め */
 		setCursorPos(term, atoi(param) - 1, term->cy);
