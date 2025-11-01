@@ -611,7 +611,7 @@ CStr(Term *term, const char *payload, const char *err, const char *type)
 void
 OSC(Term *term, char *payload, const char *err)
 {
-	char *spec, *endptr, *buf;
+	char *spec, *endptr, *buf, res[28];
 	int pn, pc, color;
 
 	pn = (buf = mystrsep(&payload, ";")) ? atoi(buf) : -1;
@@ -619,6 +619,7 @@ OSC(Term *term, char *payload, const char *err)
 	case 0:  /* タイトル */
 		strncpy(term->title, payload, TITLE_MAX - 1);
 		return;
+
 	case 4:  /* 色設定 */
 		buf = mystrsep(&payload, ";");
 	case 10: /* 文字色設定 */
@@ -629,14 +630,24 @@ OSC(Term *term, char *payload, const char *err)
 		case 11: pc = defbg;                    break;
 		}
 		spec = mystrsep(&payload, ";");
-		if (spec && strncmp(spec, "#", 1) == 0) {   /* #rrggbb形式 */
+		if (spec == NULL) {                         /* */
+		} else if (strncmp(spec, "#", 1) == 0) {    /* #rrggbb形式 */
 			color = strtol(&spec[1], &endptr, 16);
 			if (&spec[1] != endptr) {
 				term->palette[pc] &= 0xff000000;
 				term->palette[pc] = strlen(&spec[1]) == 6 ?
 					term->palette[pc] | color : color;
-				return;
 			}
+		} else if (strncmp(spec, "?", 2) == 0) {    /* 現在の値を返す */
+			if (pn == 4)
+				snprintf(res, 8, "\e]%d;%d", pn, pc);
+			else
+				snprintf(res, 8, "\e]%d", pn);
+			snprintf(strchr(res, '\0'), 21, ";rgb:%04x/%04x/%04x\a",
+					  RED(term->palette[pc]) * 257,
+					GREEN(term->palette[pc]) * 257,
+					 BLUE(term->palette[pc]) * 257);
+			writePty(term, res, strlen(res));
 		}
 		return;
 	}
