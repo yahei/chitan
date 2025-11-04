@@ -19,8 +19,15 @@ allocLine(void)
 {
 	Line *line = xmalloc(sizeof(Line));
 
-	*line = (Line){ .str = xmalloc(sizeof(char32_t)) };
-	line->str[0] = L'\0';
+	line->str  = xmalloc(sizeof(char32_t));
+	line->attr = xmalloc(sizeof(int));
+	line->fg   = xmalloc(sizeof(int));
+	line->bg   = xmalloc(sizeof(int));
+
+	line->str[0]  = L'\0';
+	line->attr[0] = NONE;
+	line->fg[0]   = deffg;
+	line->bg[0]   = defbg;
 
 	return line;
 }
@@ -48,16 +55,16 @@ insertU32s(Line *line, int head, const InsertLine *ins, int len)
 	if (head < 0 || len <= 0)
 		return;
 
-#define INSERT(dest, src, size, sent) do { \
-	dest = xrealloc(dest, (newlen + sent) * size); \
+#define INSERT(dest, src, size) do { \
+	dest = xrealloc(dest, (newlen + 1) * size); \
 	memmove(&dest[head + len], &dest[MIN(head, oldlen)], \
-			(movelen + sent) * size); \
+			(movelen + 1) * size); \
 	memcpy(&dest[head], src, len * size); \
 } while (0);
-	INSERT(line->str,   ins->str,   sizeof(char32_t),   1);
-	INSERT(line->attr,  ins->attr,  sizeof(int),        0);
-	INSERT(line->fg,    ins->fg,    sizeof(int),        0);
-	INSERT(line->bg,    ins->bg,    sizeof(int),        0);
+	INSERT(line->str,   ins->str,   sizeof(char32_t));
+	INSERT(line->attr,  ins->attr,  sizeof(int));
+	INSERT(line->fg,    ins->fg,    sizeof(int));
+	INSERT(line->bg,    ins->bg,    sizeof(int));
 #undef INSERT
 	line->ver++;
 }
@@ -73,17 +80,17 @@ deleteChars(Line *line, int head, int len)
 	if (head < 0 || tail <= head)
 		return;
 
-#define DELETE(target, buf, size, sent) do { \
-	buf = xmalloc((oldlen - (tail - head) + sent) * size); \
+#define DELETE(target, buf, size) do { \
+	buf = xmalloc((oldlen - (tail - head) + 1) * size); \
 	memcpy(buf, target, head * size); \
-	memcpy(&buf[head], &target[tail], (oldlen - tail + sent) * size); \
+	memcpy(&buf[head], &target[tail], (oldlen - tail + 1) * size); \
 	free(target); \
 	target = buf; \
 } while (0);
-	DELETE(line->str,   strbuf,     sizeof(char32_t),   1);
-	DELETE(line->attr,  buf,        sizeof(int),        0);
-	DELETE(line->fg,    buf,        sizeof(int),        0);
-	DELETE(line->bg,    buf,        sizeof(int),        0);
+	DELETE(line->str,   strbuf,     sizeof(char32_t));
+	DELETE(line->attr,  buf,        sizeof(int));
+	DELETE(line->fg,    buf,        sizeof(int));
+	DELETE(line->bg,    buf,        sizeof(int));
 #undef DELETE
 	line->ver++;
 }
