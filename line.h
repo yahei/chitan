@@ -41,6 +41,8 @@ typedef struct CharCnt {
 
 Line *allocLine(void);
 void freeLine(Line *);
+void linecpy(Line *, const Line *);
+int linecmp(const Line *, const Line *, int, int);
 void insertU32s(Line *, int, const InsertLine *, int);
 void deleteChars(Line *, int, int);
 int eraseInLine(Line *, int, int);
