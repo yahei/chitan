@@ -18,11 +18,14 @@
 #define BELLCOLOR(c)    (pane->timer_lit[BELL_TIMER] ?\
 		BLEND_COLOR((c), 0.85, 0xffffffff, 0.15) : (c))
 #define SCROLLMAX(sb)   ((sb)->firstline - MAX((sb)->totallines - (sb)->maxlines, 0))
+#define CREATE_PIXMAP(i,w,h,d)  XCreatePixmap(i->disp, DefaultRootWindow(i->disp), w, h, d);
+#define DRAW_CREATE(i,p)        XftDrawCreate(i->disp, p, i->visual, i->cmap);
 
 static void drawLine(Pane *, Line *, int, int, int, int);
 static void drawCursor(Pane *, Line *, int, int, int);
 static void drawSelection(Pane *);
 static void drawLineRev(Pane *, Line *, int, int, int);
+static void clearScrBuf(Pane *, bool);
 static void bell(Pane *);
 
 Pane *
@@ -50,10 +53,14 @@ createPane(DispInfo *dinfo, XFont *xfont, int width, int height, float alpha, in
 		(0x00ffffff & pane->term->palette[defbg]);
 
 	/* 描画の準備 */
-	pane->pixmap = XCreatePixmap(dinfo->disp,
-			DefaultRootWindow(dinfo->disp), width, height, pane->depth);
+	pane->pixmap = CREATE_PIXMAP(pane->dinfo, width, height, pane->depth);
+	pane->pixbuf = CREATE_PIXMAP(pane->dinfo, width, height, pane->depth);
 	pane->gc = XCreateGC(dinfo->disp, pane->pixmap, 0, NULL);
-	pane->draw = XftDrawCreate(dinfo->disp, pane->pixmap, dinfo->visual, dinfo->cmap);
+	pane->gcb = XCreateGC(dinfo->disp, pane->pixmap, 0, NULL);
+	pane->draw = DRAW_CREATE(pane->dinfo, pane->pixmap);
+	pane->lines = xmalloc((pane->term->sb->rows + 3) * sizeof(Line *));
+	memset(pane->lines, 0, (pane->term->sb->rows + 3) * sizeof(Line *));
+	clearScrBuf(pane, true);
 
 	return pane;
 }
@@ -61,10 +68,17 @@ createPane(DispInfo *dinfo, XFont *xfont, int width, int height, float alpha, in
 void
 destroyPane(Pane *pane)
 {
+	Line **plines;
+
 	closeTerm(pane->term);
 	XftDrawDestroy(pane->draw);
 	XFreeGC(pane->dinfo->disp, pane->gc);
+	XFreeGC(pane->dinfo->disp, pane->gcb);
 	XFreePixmap(pane->dinfo->disp, pane->pixmap);
+	XFreePixmap(pane->dinfo->disp, pane->pixbuf);
+	for (plines = pane->lines; *plines; plines++)
+		freeLine(*plines);
+	free(pane->lines);
 	free(pane->sel.primary);
 	free(pane->sel.clip);
 	free(pane);
@@ -73,20 +87,25 @@ destroyPane(Pane *pane)
 void
 setPaneSize(Pane *pane, int width, int height)
 {
+	int oldrows = pane->term->sb->rows;
+
 	XftDrawDestroy(pane->draw);
 	XFreeGC(pane->dinfo->disp, pane->gc);
+	XFreeGC(pane->dinfo->disp, pane->gcb);
 	XFreePixmap(pane->dinfo->disp, pane->pixmap);
+	XFreePixmap(pane->dinfo->disp, pane->pixbuf);
 
-	pane->pixmap = XCreatePixmap(pane->dinfo->disp,
-			DefaultRootWindow(pane->dinfo->disp), width, height, pane->depth);
+	pane->pixmap = CREATE_PIXMAP(pane->dinfo, width, height, pane->depth);
+	pane->pixbuf = CREATE_PIXMAP(pane->dinfo, width, height, pane->depth);
 	pane->gc = XCreateGC(pane->dinfo->disp, pane->pixmap, 0, NULL);
-	pane->draw = XftDrawCreate(pane->dinfo->disp, pane->pixmap,
-			pane->dinfo->visual, pane->dinfo->cmap);
+	pane->gcb = XCreateGC(pane->dinfo->disp, pane->pixmap, 0, NULL);
+	pane->draw = DRAW_CREATE(pane->dinfo, pane->pixmap);
 	pane->width = width;
 	pane->height = height;
 
 	setWinSize(pane->term, (height - pane->ypad * 2) / pane->xfont->ch,
 			(width - pane->xpad * 2) / pane->xfont->cw, width, height);
+	clearScrBuf(pane, oldrows != pane->term->sb->rows);
 }
 
 void
@@ -282,6 +301,16 @@ drawPane(Pane *pane, Line *peline, int pecaret)
 		if ((line = getLine(pane->term, i - pane->scr)))
 			drawLine(pane, line, i, 0, pane->term->sb->cols + 2, 0);
 
+	/* 書いた文字とPixmapの状態を記録 */
+	for (i = 0; i < pane->term->sb->rows + 2; i++) {
+		if ((line = getLine(pane->term, i - pane->scr)))
+			linecpy(pane->lines[i], line);
+		else
+			PUT_NUL(pane->lines[i], 0);
+	}
+	XCopyArea(pane->dinfo->disp, pane->pixmap, pane->pixbuf, pane->gcb,
+			0, 0, pane->width, pane->height, 0, 0);
+
 	/* カーソルかPreeditを表示 */
 	XSetForeground(pane->dinfo->disp, pane->gc, pane->term->palette[deffg]);
 	if (u32slen(peline->str)) {
@@ -464,6 +493,35 @@ drawLineRev(Pane *pane, Line *line, int row, int col1, int col2)
 			u32swidth(line->str + li, len) * pane->xfont->cw, pane->xfont->ch);
 	drawXFontString(pane->draw, &xc, pane->xfont, 0, xoff, yoff + pane->xfont->ascent,
 			line->str + li, len);
+}
+
+void
+clearScrBuf(Pane *pane, bool realloc_lines)
+{
+	Line **plines;
+	int i;
+
+	/* 画面を消去 */
+	XSetForeground(pane->dinfo->disp, pane->gc, BELLCOLOR(pane->term->palette[defbg]));
+	XFillRectangle(pane->dinfo->disp, pane->pixmap, pane->gc, 0, 0, pane->width, pane->height);
+
+	XSetForeground(pane->dinfo->disp, pane->gcb, BELLCOLOR(pane->term->palette[defbg]));
+	XFillRectangle(pane->dinfo->disp, pane->pixbuf, pane->gcb, 0, 0, pane->width, pane->height);
+
+	/* 前回書いた内容の記録を消去 */
+	if (realloc_lines) {
+		/* 配列のリサイズや初期化が必要なとき */
+		for (plines = pane->lines; *plines; plines++)
+			freeLine(*plines);
+		pane->lines = xrealloc(pane->lines, (pane->term->sb->rows + 3) * sizeof(Line *));
+		for (i = 0; i < pane->term->sb->rows + 2; i++)
+			pane->lines[i] = allocLine();
+		pane->lines[pane->term->sb->rows + 2] = NULL;
+	} else {
+		/* サイズはそのままで内容だけ消去 */
+		for (plines = pane->lines; *plines; plines++)
+			PUT_NUL(*plines, 0);
+	}
 }
 
 void

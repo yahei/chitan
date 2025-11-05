@@ -15,10 +15,11 @@ enum timer_names { BELL_TIMER, BLINK_TIMER, RAPID_TIMER, CARET_TIMER, TIMER_NUM 
 typedef struct Pane {
 	DispInfo *dinfo;
 	XFont *xfont;
-	Pixmap pixmap;
+	Pixmap pixmap, pixbuf;
+	Line **lines;
 	unsigned int depth;
 	float alpha;
-	GC gc;
+	GC gc, gcb;
 	XftDraw *draw;
 	int width, height, xpad, ypad;
 	bool focus, redraw_flag;
@@ -33,7 +34,7 @@ typedef struct Pane {
 	} sel;
 	struct timespec timers[TIMER_NUM], now;
 	bool timer_active[TIMER_NUM];
-	bool timer_lit[TIMER_NUM];
+	bool timer_lit[TIMER_NUM], bell_b;
 } Pane;
 
 Pane *createPane(DispInfo *, XFont *, int, int, float, int, char *const []);
