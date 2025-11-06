@@ -25,7 +25,7 @@ static void drawLine(Pane *, Line *, int, int, int, int);
 static void drawCursor(Pane *, Line *, int, int, int);
 static void drawSelection(Pane *);
 static void drawLineRev(Pane *, Line *, int, int, int);
-static void clearScrBuf(Pane *, bool);
+static void resizeLines(Pane *);
 static void bell(Pane *);
 
 Pane *
@@ -58,9 +58,9 @@ createPane(DispInfo *dinfo, XFont *xfont, int width, int height, float alpha, in
 	pane->gc = XCreateGC(dinfo->disp, pane->pixmap, 0, NULL);
 	pane->gcb = XCreateGC(dinfo->disp, pane->pixmap, 0, NULL);
 	pane->draw = DRAW_CREATE(pane->dinfo, pane->pixmap);
-	pane->lines = xmalloc((pane->term->sb->rows + 3) * sizeof(Line *));
-	memset(pane->lines, 0, (pane->term->sb->rows + 3) * sizeof(Line *));
-	clearScrBuf(pane, true);
+	pane->lines = xmalloc(sizeof(Line *));
+	*pane->lines = NULL;
+	resizeLines(pane);
 
 	return pane;
 }
@@ -88,6 +88,7 @@ void
 setPaneSize(Pane *pane, int width, int height)
 {
 	int oldrows = pane->term->sb->rows;
+	Line **plines;
 
 	XftDrawDestroy(pane->draw);
 	XFreeGC(pane->dinfo->disp, pane->gc);
@@ -105,7 +106,11 @@ setPaneSize(Pane *pane, int width, int height)
 
 	setWinSize(pane->term, (height - pane->ypad * 2) / pane->xfont->ch,
 			(width - pane->xpad * 2) / pane->xfont->cw, width, height);
-	clearScrBuf(pane, oldrows != pane->term->sb->rows);
+	if (oldrows == pane->term->sb->rows)
+		for (plines = pane->lines; *plines; plines++)
+			PUT_NUL(*plines, 0);
+	else
+		resizeLines(pane);
 }
 
 void
@@ -278,7 +283,7 @@ manegeTimer(Pane *pane, struct timespec *timeout)
 void
 drawPane(Pane *pane, Line *peline, int pecaret)
 {
-	Line *line;
+	Line *line, **plines;
 	int pepos, pewidth, pecaretpos, caretrow;
 	int i;
 
@@ -294,7 +299,8 @@ drawPane(Pane *pane, Line *peline, int pecaret)
 
 	/* 画面をクリア */
 	if (pane->timer_lit[BELL_TIMER] != pane->bell_b) {
-		clearScrBuf(pane, false);
+		for (plines = pane->lines; *plines; plines++)
+			PUT_NUL(*plines, 0);
 		pane->bell_b = pane->timer_lit[BELL_TIMER];
 	}
 	XSetForeground(pane->dinfo->disp, pane->gc, BELLCOLOR(pane->term->palette[defbg]));
@@ -522,32 +528,19 @@ drawLineRev(Pane *pane, Line *line, int row, int col1, int col2)
 }
 
 void
-clearScrBuf(Pane *pane, bool realloc_lines)
+resizeLines(Pane *pane)
 {
 	Line **plines;
 	int i;
 
-	/* 画面を消去 */
-	XSetForeground(pane->dinfo->disp, pane->gc, BELLCOLOR(pane->term->palette[defbg]));
-	XFillRectangle(pane->dinfo->disp, pane->pixmap, pane->gc, 0, 0, pane->width, pane->height);
+	for (plines = pane->lines; *plines; plines++)
+		freeLine(*plines);
 
-	XSetForeground(pane->dinfo->disp, pane->gcb, BELLCOLOR(pane->term->palette[defbg]));
-	XFillRectangle(pane->dinfo->disp, pane->pixbuf, pane->gcb, 0, 0, pane->width, pane->height);
+	pane->lines = xrealloc(pane->lines, (pane->term->sb->rows + 3) * sizeof(Line *));
+	pane->lines[pane->term->sb->rows + 2] = NULL;
 
-	/* 前回書いた内容の記録を消去 */
-	if (realloc_lines) {
-		/* 配列のリサイズや初期化が必要なとき */
-		for (plines = pane->lines; *plines; plines++)
-			freeLine(*plines);
-		pane->lines = xrealloc(pane->lines, (pane->term->sb->rows + 3) * sizeof(Line *));
-		for (i = 0; i < pane->term->sb->rows + 2; i++)
-			pane->lines[i] = allocLine();
-		pane->lines[pane->term->sb->rows + 2] = NULL;
-	} else {
-		/* サイズはそのままで内容だけ消去 */
-		for (plines = pane->lines; *plines; plines++)
-			PUT_NUL(*plines, 0);
-	}
+	for (i = 0; i < pane->term->sb->rows + 2; i++)
+		pane->lines[i] = allocLine();
 }
 
 void
