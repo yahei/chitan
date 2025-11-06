@@ -19,7 +19,7 @@ typedef struct Pane {
 	Line **lines;
 	unsigned int depth;
 	float alpha;
-	GC gc, gcb;
+	GC gc;
 	XftDraw *draw;
 	int width, height, xpad, ypad;
 	bool focus, redraw_flag;

@@ -57,7 +57,6 @@ createPane(DispInfo *dinfo, XFont *xfont, int width, int height, float alpha, in
 	pane->pixmap = CREATE_PIXMAP(pane->dinfo, width, height, pane->depth);
 	pane->pixbuf = CREATE_PIXMAP(pane->dinfo, width, height, pane->depth);
 	pane->gc = XCreateGC(dinfo->disp, pane->pixmap, 0, NULL);
-	pane->gcb = XCreateGC(dinfo->disp, pane->pixmap, 0, NULL);
 	pane->draw = DRAW_CREATE(pane->dinfo, pane->pixmap);
 	pane->lines = xmalloc(sizeof(Line *));
 	*pane->lines = NULL;
@@ -74,7 +73,6 @@ destroyPane(Pane *pane)
 	closeTerm(pane->term);
 	XftDrawDestroy(pane->draw);
 	XFreeGC(pane->dinfo->disp, pane->gc);
-	XFreeGC(pane->dinfo->disp, pane->gcb);
 	XFreePixmap(pane->dinfo->disp, pane->pixmap);
 	XFreePixmap(pane->dinfo->disp, pane->pixbuf);
 	for (plines = pane->lines; *plines; plines++)
@@ -93,14 +91,12 @@ setPaneSize(Pane *pane, int width, int height)
 
 	XftDrawDestroy(pane->draw);
 	XFreeGC(pane->dinfo->disp, pane->gc);
-	XFreeGC(pane->dinfo->disp, pane->gcb);
 	XFreePixmap(pane->dinfo->disp, pane->pixmap);
 	XFreePixmap(pane->dinfo->disp, pane->pixbuf);
 
 	pane->pixmap = CREATE_PIXMAP(pane->dinfo, width, height, pane->depth);
 	pane->pixbuf = CREATE_PIXMAP(pane->dinfo, width, height, pane->depth);
 	pane->gc = XCreateGC(pane->dinfo->disp, pane->pixmap, 0, NULL);
-	pane->gcb = XCreateGC(pane->dinfo->disp, pane->pixmap, 0, NULL);
 	pane->draw = DRAW_CREATE(pane->dinfo, pane->pixmap);
 	pane->width = width;
 	pane->height = height;
@@ -319,7 +315,7 @@ drawPane(Pane *pane, Line *peline, int pecaret)
 		else
 			PUT_NUL(pane->lines[i], 0);
 	}
-	XCopyArea(pane->dinfo->disp, pane->pixmap, pane->pixbuf, pane->gcb,
+	XCopyArea(pane->dinfo->disp, pane->pixmap, pane->pixbuf, pane->gc,
 			0, 0, pane->width, pane->height, 0, 0);
 
 	/* カーソルかPreeditを表示 */
