@@ -293,10 +293,14 @@ drawPane(Pane *pane, Line *peline, int pecaret)
 	pane->timer_active[BLINK_TIMER] = pane->timer_active[RAPID_TIMER] = false;
 
 	/* 画面をクリア */
+	if (pane->timer_lit[BELL_TIMER] != pane->bell_b) {
+		clearScrBuf(pane, false);
+		pane->bell_b = pane->timer_lit[BELL_TIMER];
+	}
 	XSetForeground(pane->dinfo->disp, pane->gc, BELLCOLOR(pane->term->palette[defbg]));
 	XFillRectangle(pane->dinfo->disp, pane->pixmap, pane->gc, 0, 0, pane->width, pane->height);
 
-	/* 端末の内容をウィンドウに表示 */
+	/* 端末の内容をPixmapに書く */
 	for (i = 0; i < pane->term->sb->rows + 2; i++)
 		if ((line = getLine(pane->term, i - pane->scr)))
 			drawLine(pane, line, i, 0, pane->term->sb->cols + 2, 0);
@@ -350,6 +354,7 @@ drawLine(Pane *pane, Line *line, int row, int col, int width, int pos)
 	int attr, fg, bg;
 	XftColor xc;
 	Color fc, bc;
+	int draw_width, j;
 
 	if (width <= pos || line->str[i] == L'\0')
 		return;
@@ -371,6 +376,27 @@ drawLine(Pane *pane, Line *line, int row, int col, int width, int pos)
 	x = pane->xpad + (col + pos) * pane->xfont->cw;
 	y = pane->ypad + row * pane->xfont->ch;
 	w = pane->xfont->cw * u32swidth(&line->str[i], next - i);
+
+	/* コピーで済むならコピー */
+	draw_width = u32swidth(&line->str[i], next - i);
+	if (line->attr[i] & (ITALIC | BLINK | RAPID)) {
+		j = pane->term->sb->rows;
+	} else if (!linecmp(line, pane->lines[row], pos, draw_width)) {
+		j = row;
+	} else {
+		for (j = 0; j < pane->term->sb->rows; j++)
+			if (!linecmp(line, pane->lines[j], pos, draw_width))
+				break;
+	}
+	if (j < pane->term->sb->rows) {
+		int index = getCharCnt(pane->lines[j]->str, pos).index - 1;
+		if (index < 0 || !(pane->lines[j]->attr[index] & ITALIC)) {
+			XCopyArea(pane->dinfo->disp, pane->pixbuf, pane->pixmap, pane->gc,
+					x, pane->ypad + (j) * pane->xfont->ch,
+					w, pane->xfont->ch, x, y);
+			return;
+		}
+	}
 
 	/* 前処理 */
 	fg = line->attr[i] & NEGA ? line->bg[i] : line->fg[i];  /* 反転 */
