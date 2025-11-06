@@ -22,6 +22,7 @@
 #define DRAW_CREATE(i,p)        XftDrawCreate(i->disp, p, i->visual, i->cmap);
 
 static void drawLine(Pane *, Line *, int, int, int, int);
+static int linecmp(Pane *, Line *, Line *, int ,int, int);
 static void drawCursor(Pane *, Line *, int, int, int);
 static void drawSelection(Pane *);
 static void drawLineRev(Pane *, Line *, int, int, int);
@@ -360,7 +361,7 @@ drawLine(Pane *pane, Line *line, int row, int col, int width, int pos)
 	int attr, fg, bg;
 	XftColor xc;
 	Color fc, bc;
-	int draw_width, j;
+	int sl;
 
 	if (width <= pos || line->str[i] == L'\0')
 		return;
@@ -383,26 +384,24 @@ drawLine(Pane *pane, Line *line, int row, int col, int width, int pos)
 	y = pane->ypad + row * pane->xfont->ch;
 	w = pane->xfont->cw * u32swidth(&line->str[i], next - i);
 
-	/* コピーで済むならコピー */
-	draw_width = u32swidth(&line->str[i], next - i);
-	if (line->attr[i] & (ITALIC | BLINK | RAPID)) {
-		j = pane->term->sb->rows;
-	} else if (!linecmp(line, pane->lines[row], pos, draw_width)) {
-		j = row;
-	} else {
-		for (j = 0; j < pane->term->sb->rows; j++)
-			if (!linecmp(line, pane->lines[j], pos, draw_width))
+	/* 同じものがあればコピーして終了 */
+#define LINE_CMP(R) linecmp(pane, line, pane->lines[R], i,\
+		getCharCnt(pane->lines[R]->str, pos).index, next - i)
+	if (line->attr[i] & (ITALIC | BLINK | RAPID))
+		sl = pane->term->sb->rows;
+	else if (LINE_CMP(row))
+		sl = row;
+	else
+		for (sl = 0; sl < pane->term->sb->rows; sl++)
+			if (LINE_CMP(sl))
 				break;
+	if (sl < pane->term->sb->rows) {
+		XCopyArea(pane->dinfo->disp, pane->pixbuf, pane->pixmap, pane->gc,
+				x, pane->ypad + (sl) * pane->xfont->ch,
+				w, pane->xfont->ch, x, y);
+		return;
 	}
-	if (j < pane->term->sb->rows) {
-		int index = getCharCnt(pane->lines[j]->str, pos).index - 1;
-		if (index < 0 || !(pane->lines[j]->attr[index] & ITALIC)) {
-			XCopyArea(pane->dinfo->disp, pane->pixbuf, pane->pixmap, pane->gc,
-					x, pane->ypad + (j) * pane->xfont->ch,
-					w, pane->xfont->ch, x, y);
-			return;
-		}
-	}
+#undef LINE_CMP
 
 	/* 前処理 */
 	fg = line->attr[i] & NEGA ? line->bg[i] : line->fg[i];  /* 反転 */
@@ -437,6 +436,18 @@ drawLine(Pane *pane, Line *line, int row, int col, int width, int pos)
 		XSetForeground(pane->dinfo->disp, pane->gc, fc);
 		XDrawLine(pane->dinfo->disp, pane->pixmap, pane->gc, x, y + 1, x + w - 1, y + 1);
 	}
+}
+
+int
+linecmp(Pane *pane, Line *line, Line *line2, int index, int index2, int len)
+{
+#define CMP(A,T) !memcmp(&line->A[index], &line2->A[index2], len * sizeof(T))
+	if (index2 + len <= u32slen(line2->str) &&
+	    CMP(str, char32_t) && CMP(attr, int) && CMP(fg, int) && CMP(bg, int) &&
+	    (index2 < 1 || !(line2->attr[index2 - 1] & ITALIC)))
+			return 1;
+	return 0;
+#undef CMP
 }
 
 void

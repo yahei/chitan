@@ -61,19 +61,6 @@ linecpy(Line *dst, const Line *src)
 	memcpy(dst->bg,   src->bg,   len * sizeof(int));
 }
 
-int
-linecmp(const Line *line1, const Line *line2, int pos, int width)
-{
-	const int i1 = getCharCnt(line1->str, pos).index;
-	const int i2 = getCharCnt(line2->str, pos).index;
-	const int l1 = MIN(getCharCnt(line1->str, pos + width).index, u32slen(line1->str)) - i1;
-	const int l2 = MIN(getCharCnt(line2->str, pos + width).index, u32slen(line2->str)) - i2;
-
-#define CMP(A,T)        memcmp(&line1->A[i1], &line2->A[i2], MAX(l1, 0) * sizeof(T))
-	return  l1 != l2 || CMP(str, char32_t) || CMP(attr, int) || CMP(fg, int) || CMP(bg, int);
-#undef CMP
-}
-
 void
 insertU32s(Line *line, int head, const InsertLine *ins, int len)
 {

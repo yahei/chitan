@@ -42,15 +42,14 @@ typedef struct CharCnt {
 Line *allocLine(void);
 void freeLine(Line *);
 void linecpy(Line *, const Line *);
-int linecmp(const Line *, const Line *, int, int);
 void insertU32s(Line *, int, const InsertLine *, int);
 void deleteChars(Line *, int, int);
 int eraseInLine(Line *, int, int);
 int putU32s(Line *, int, const char32_t *, int, int, int, size_t);
 void putSPCs(Line *, int, int, size_t);
+int findNextSGR(const Line *, int);
 
 const char *u8sToU32s(char32_t *,const char *, size_t);
 size_t u32slen(const char32_t *);
 int u32swidth(const char32_t *, int);
 CharCnt getCharCnt(const char32_t *, int);
-int findNextSGR(const Line *, int);
