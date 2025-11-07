@@ -27,6 +27,7 @@ static void drawCursor(Pane *, Line *, int, int, int);
 static void drawSelection(Pane *);
 static void drawLineRev(Pane *, Line *, int, int, int);
 static void resizeLines(Pane *);
+static void clearPixmap(Pane *);
 static void bell(Pane *);
 
 Pane *
@@ -61,6 +62,7 @@ createPane(DispInfo *dinfo, XFont *xfont, int width, int height, float alpha, in
 	pane->lines = xmalloc(sizeof(Line *));
 	*pane->lines = NULL;
 	resizeLines(pane);
+	clearPixmap(pane);
 
 	return pane;
 }
@@ -108,6 +110,7 @@ setPaneSize(Pane *pane, int width, int height)
 			PUT_NUL(*plines, 0);
 	else
 		resizeLines(pane);
+	clearPixmap(pane);
 }
 
 void
@@ -282,6 +285,8 @@ drawPane(Pane *pane, Line *peline, int pecaret)
 {
 	Line *line, **plines;
 	int pepos, pewidth, pecaretpos, caretrow;
+	int x, y, w, width, width_b;
+	char32_t *str;
 	int i;
 
 	/* スクロール量の更新 */
@@ -294,19 +299,40 @@ drawPane(Pane *pane, Line *peline, int pecaret)
 	/* 点滅中フラグをクリア */
 	pane->timer_active[BLINK_TIMER] = pane->timer_active[RAPID_TIMER] = false;
 
-	/* 画面をクリア */
 	if (pane->timer_lit[BELL_TIMER] != pane->bell_b) {
+		/* 画面をクリア */
 		for (plines = pane->lines; *plines; plines++)
 			PUT_NUL(*plines, 0);
 		pane->bell_b = pane->timer_lit[BELL_TIMER];
+		clearPixmap(pane);
+	} else {
+		/* カーソルまたはPreeditを書く前の状態に戻す */
+		XCopyArea(pane->dinfo->disp, pane->pixbuf, pane->pixmap, pane->gc,
+				pane->cx_b, pane->cy_b,
+				pane->cw_b, pane->xfont->ch,
+				pane->cx_b, pane->cy_b);
 	}
-	XSetForeground(pane->dinfo->disp, pane->gc, BELLCOLOR(pane->term->palette[defbg]));
-	XFillRectangle(pane->dinfo->disp, pane->pixmap, pane->gc, 0, 0, pane->width, pane->height);
 
 	/* 端末の内容をPixmapに書く */
-	for (i = 0; i < pane->term->sb->rows + 2; i++)
-		if ((line = getLine(pane->term, i - pane->scr)))
+	for (i = 0; i < pane->term->sb->rows + 2; i++) {
+		line = getLine(pane->term, i - pane->scr);
+
+		/* 前回の方が長い場合の塗りつぶし */
+		str = line ? line->str : (char32_t *)L"";
+		width   = u32swidth(str, u32slen(str));
+		width_b = u32swidth(pane->lines[i]->str, u32slen(pane->lines[i]->str));
+		if (width < width_b) {
+			x = pane->xpad + pane->xfont->cw * width;
+			y = pane->ypad + pane->xfont->ch * i;
+			w = pane->xfont->cw * (width_b - width);
+			XSetForeground(pane->dinfo->disp, pane->gc, BELLCOLOR(pane->term->palette[defbg]));
+			XFillRectangle(pane->dinfo->disp, pane->pixmap, pane->gc, x, y, w, pane->xfont->ch);
+		}
+
+		/* 行を書く */
+		if (line)
 			drawLine(pane, line, i, 0, pane->term->sb->cols + 2, 0);
+	}
 
 	/* 書いた文字とPixmapの状態を記録 */
 	for (i = 0; i < pane->term->sb->rows + 2; i++) {
@@ -334,6 +360,11 @@ drawPane(Pane *pane, Line *peline, int pecaret)
 		/* Preeditとカーソルの描画 */
 		drawLine(pane, peline, pane->term->cy, pepos, pewidth, 0);
 		drawCursor(pane, peline, pane->term->cy, pepos + pecaretpos, 6);
+
+		/* 次回消去する位置と幅 */
+		pane->cx_b = pane->xpad + pane->xfont->cw * (pepos - 0.5);
+		pane->cy_b = pane->ypad + pane->xfont->ch * pane->term->cy;
+		pane->cw_b = pane->xfont->cw * (pewidth + 1);
 	} else if (1 <= pane->term->dec[25] && pane->term->cx < pane->term->sb->cols + 2) {
 		/* カーソルの描画 */
 		caretrow = pane->term->cy + pane->scr;
@@ -366,15 +397,6 @@ drawLine(Pane *pane, Line *line, int row, int col, int width, int pos)
 	next = MIN(findNextSGR(line, i), width);
 	drawLine(pane, line, row, col, width, pos + u32swidth(&line->str[i], next - i));
 
-	/* 点滅 */
-	if (line->attr[i] & BLINK)
-		pane->timer_active[BLINK_TIMER] = true;
-	if (line->attr[i] & RAPID)
-		pane->timer_active[RAPID_TIMER] = true;
-	if ((line->attr[i] & BLINK ? pane->timer_lit[BLINK_TIMER] ? 2 : 0 : 1) +
-	    (line->attr[i] & RAPID ? pane->timer_lit[RAPID_TIMER] ? 2 : 0 : 1) < 2)
-		return;
-
 	/* 座標 */
 	x = pane->xpad + (col + pos) * pane->xfont->cw;
 	y = pane->ypad + row * pane->xfont->ch;
@@ -386,7 +408,7 @@ drawLine(Pane *pane, Line *line, int row, int col, int width, int pos)
 	if (line->attr[i] & (ITALIC | BLINK | RAPID))
 		sl = pane->term->sb->rows;
 	else if (LINE_CMP(row))
-		sl = row;
+		return;
 	else
 		for (sl = 0; sl < pane->term->sb->rows; sl++)
 			if (LINE_CMP(sl))
@@ -409,17 +431,26 @@ drawLine(Pane *pane, Line *line, int row, int col, int width, int pos)
 	if (line->attr[i] & FAINT)                              /* 細字 */
 		fc = BLEND_COLOR(fc, 0.6, bc, 0.4);
 
-	/* 色をXftColorに変換 */
-	xc.color.red   =   RED(fc) << 8;
-	xc.color.green = GREEN(fc) << 8;
-	xc.color.blue  =  BLUE(fc) << 8;
-	xc.color.alpha = 0xffff;
-
 	/* 背景を塗る */
 	XSetForeground(pane->dinfo->disp, pane->gc, BELLCOLOR(bc));
 	XFillRectangle(pane->dinfo->disp, pane->pixmap, pane->gc, x, y, w, pane->xfont->ch);
 
 	y += pane->xfont->ascent;
+
+	/* 点滅 */
+	if (line->attr[i] & BLINK)
+		pane->timer_active[BLINK_TIMER] = true;
+	if (line->attr[i] & RAPID)
+		pane->timer_active[RAPID_TIMER] = true;
+	if ((line->attr[i] & BLINK ? pane->timer_lit[BLINK_TIMER] ? 2 : 0 : 1) +
+	    (line->attr[i] & RAPID ? pane->timer_lit[RAPID_TIMER] ? 2 : 0 : 1) < 2)
+		return;
+
+	/* 色をXftColorに変換 */
+	xc.color.red   =   RED(fc) << 8;
+	xc.color.green = GREEN(fc) << 8;
+	xc.color.blue  =  BLUE(fc) << 8;
+	xc.color.alpha = 0xffff;
 
 	/* 文字を書く */
 	attr = FONT_NONE;
@@ -483,6 +514,11 @@ drawCursor(Pane *pane, Line *line, int row, int col, int type)
 		XFillRectangle(dinfo->disp, pane->pixmap, pane->gc, x - 1, y, ch * 0.1, ch);
 		break;
 	}
+
+	/* 次回消去する位置と幅 */
+	pane->cx_b = x - pane->xfont->cw * 0.5;
+	pane->cy_b = y;
+	pane->cw_b = cw + pane->xfont->cw;
 }
 
 void
@@ -548,6 +584,15 @@ resizeLines(Pane *pane)
 
 	for (i = 0; i < pane->term->sb->rows + 2; i++)
 		pane->lines[i] = allocLine();
+}
+
+void
+clearPixmap(Pane *pane)
+{
+	XSetForeground(pane->dinfo->disp, pane->gc, BELLCOLOR(pane->term->palette[defbg]));
+	XFillRectangle(pane->dinfo->disp, pane->pixmap, pane->gc, 0, 0, pane->width, pane->height);
+	XSetForeground(pane->dinfo->disp, pane->gc, BELLCOLOR(pane->term->palette[defbg]));
+	XFillRectangle(pane->dinfo->disp, pane->pixbuf, pane->gc, 0, 0, pane->width, pane->height);
 }
 
 void
