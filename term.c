@@ -260,7 +260,7 @@ GCs(Term *term, const char *head)
 		}
 
 		/* 行が埋まる場合は自動改行を設定して行末までを書く */
-		term->sb->am = 0 < term->dec[7] && max < u32swidth(dp, u32slen(dp));
+		term->sb->am = 0 < term->dec[7] && max < u32swidth(dp);
 		wlen = term->sb->am ? getCharCnt(dp, max).index : u32slen(dp);
 		wlen = MAX(wlen, 1);
 

@@ -127,14 +127,14 @@ eraseInLine(Line *line, int col, int width)
 
 	cc = getCharCnt(line->str, col);
 	head = MIN(cc.index, linelen);
-	lpad = col - MIN(cc.col, u32swidth(line->str, linelen));
+	lpad = col - MIN(cc.col, u32snwidth(line->str, linelen));
 
 	cc = getCharCnt(line->str, col + width - 1);
 	tail = MIN(cc.index, linelen) + 1;
 	rpad = (cc.col + cc.width) - (col + width);
 
 	for (; tail < linelen; tail++)
-		if(0 < u32swidth(&line->str[tail], 1))
+		if(0 < u32snwidth(&line->str[tail], 1))
 			break;
 
 	deleteChars(line, head, tail - head);
@@ -148,7 +148,7 @@ eraseInLine(Line *line, int col, int width)
 int
 putU32s(Line *line, int col, const char32_t *str, int attr, int fg, int bg, size_t len)
 {
-	const int width = u32swidth(str, len);
+	const int width = u32snwidth(str, len);
 	int attrs[len], fgs[len], bgs[len];
 	int head;
 	InsertLine placed;
@@ -234,7 +234,7 @@ u32slen(const char32_t *str)
 }
 
 int
-u32swidth(const char32_t *str, int len)
+u32snwidth(const char32_t *str, int len)
 {
 	int width, total;
 	int i;

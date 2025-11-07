@@ -285,8 +285,7 @@ drawPane(Pane *pane, Line *peline, int pecaret)
 {
 	Line *line, **plines;
 	int pepos, pewidth, pecaretpos, caretrow;
-	int x, y, w, width, width_b;
-	char32_t *str;
+	int width, width_b;
 	int i;
 
 	/* スクロール量の更新 */
@@ -324,15 +323,15 @@ drawPane(Pane *pane, Line *peline, int pecaret)
 		line = getLine(pane->term, i - pane->scr);
 
 		/* 前回の方が長い場合の塗りつぶし */
-		str = line ? line->str : (char32_t *)L"";
-		width   = u32swidth(str, u32slen(str));
-		width_b = u32swidth(pane->lines[i]->str, u32slen(pane->lines[i]->str));
+		width   = line ? u32swidth(line->str) : 0;
+		width_b = u32swidth(pane->lines[i]->str);
 		if (width < width_b) {
-			x = pane->xpad + pane->xfont->cw * width;
-			y = pane->ypad + pane->xfont->ch * i;
-			w = pane->xfont->cw * (width_b - width);
 			XSetForeground(pane->dinfo->disp, pane->gc, BELLCOLOR(pane->term->palette[defbg]));
-			XFillRectangle(pane->dinfo->disp, pane->pixmap, pane->gc, x, y, w, pane->xfont->ch);
+			XFillRectangle(pane->dinfo->disp, pane->pixmap, pane->gc,
+					pane->xpad + pane->xfont->cw * width,
+					pane->ypad + pane->xfont->ch * i,
+					pane->xfont->cw * (width_b - width),
+					pane->xfont->ch);
 		}
 
 		/* 行を書く */
@@ -354,8 +353,8 @@ drawPane(Pane *pane, Line *peline, int pecaret)
 	XSetForeground(pane->dinfo->disp, pane->gc, pane->term->palette[deffg]);
 	if (u32slen(peline->str)) {
 		/* Preeditの幅とキャレットのPreedit内での位置を取得 */
-		pewidth = u32swidth(peline->str, u32slen(peline->str));
-		pecaretpos = u32swidth(peline->str, pecaret);
+		pewidth = u32swidth(peline->str);
+		pecaretpos = u32snwidth(peline->str, pecaret);
 
 		/* Preeditの画面上での描画位置を決める */
 		pepos = pane->term->cx - pecaretpos;
@@ -400,12 +399,12 @@ drawLine(Pane *pane, Line *line, int row, int col, int width, int pos)
 
 	/* 同じ属性の文字はまとめて処理する */
 	next = MIN(findNextSGR(line, i), width);
-	drawLine(pane, line, row, col, width, pos + u32swidth(&line->str[i], next - i));
+	drawLine(pane, line, row, col, width, pos + u32snwidth(&line->str[i], next - i));
 
 	/* 座標 */
 	x = pane->xpad + (col + pos) * pane->xfont->cw;
 	y = pane->ypad + row * pane->xfont->ch;
-	w = pane->xfont->cw * u32swidth(&line->str[i], next - i);
+	w = pane->xfont->cw * u32snwidth(&line->str[i], next - i);
 
 	/* 変化無し・コピー・書き直しの分岐 */
 #define LINE_CMP(R) linecmp(pane, line, pane->lines[R], pos, next - i)
@@ -491,7 +490,7 @@ drawCursor(Pane *pane, Line *line, int row, int col, int type)
 	char32_t *c = index < u32slen(line->str) ? &line->str[index] : (char32_t *)L" ";
 	const int x = pane->xpad + col * pane->xfont->cw;
 	const int y = pane->ypad + row * pane->xfont->ch;
-	const int cw = pane->xfont->cw * u32swidth(c, 1) - 1;
+	const int cw = pane->xfont->cw * u32snwidth(c, 1) - 1;
 	const int ch = pane->xfont->ch;
 	const DispInfo *dinfo = pane->dinfo;
 	int attr;
@@ -579,7 +578,7 @@ drawLineRev(Pane *pane, Line *line, int row, int col1, int col2)
 
 	XSetForeground(pane->dinfo->disp, pane->gc, BELLCOLOR(pane->term->palette[deffg]));
 	XFillRectangle(pane->dinfo->disp, pane->pixmap, pane->gc, xoff, yoff,
-			u32swidth(line->str + li, len) * pane->xfont->cw, pane->xfont->ch);
+			u32snwidth(line->str + li, len) * pane->xfont->cw, pane->xfont->ch);
 	drawXFontString(pane->draw, &xc, pane->xfont, 0, xoff, yoff + pane->xfont->ascent,
 			line->str + li, len);
 }
