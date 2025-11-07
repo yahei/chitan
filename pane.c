@@ -296,22 +296,28 @@ drawPane(Pane *pane, Line *peline, int pecaret)
 	pane->prevbuf = pane->term->sb;
 	pane->prevfst = pane->term->sb->firstline;
 
-	/* 点滅中フラグをクリア */
-	pane->timer_active[BLINK_TIMER] = pane->timer_active[RAPID_TIMER] = false;
-
+	/* 画面をクリア */
 	if (pane->timer_lit[BELL_TIMER] != pane->bell_b) {
-		/* 画面をクリア */
+		/* visual bellの点滅で全部書き直す */
 		for (plines = pane->lines; *plines; plines++)
 			PUT_NUL(*plines, 0);
 		pane->bell_b = pane->timer_lit[BELL_TIMER];
 		clearPixmap(pane);
 	} else {
-		/* カーソルまたはPreeditを書く前の状態に戻す */
+		/* カーソル等を書く前の状態に戻す */
 		XCopyArea(pane->dinfo->disp, pane->pixbuf, pane->pixmap, pane->gc,
 				pane->cx_b, pane->cy_b,
-				pane->cw_b, pane->xfont->ch,
+				pane->cw_b, pane->ch_b,
 				pane->cx_b, pane->cy_b);
 	}
+	/* 次回の消去範囲を設定 */
+	pane->cx_b = pane->xpad + pane->xfont->cw * (pane->term->cx - 0.5);
+	pane->cy_b = pane->ypad + pane->xfont->ch * pane->term->cy;
+	pane->cw_b = pane->xfont->cw * 2;
+	pane->ch_b = pane->xfont->ch;
+
+	/* 点滅中フラグをクリア */
+	pane->timer_active[BLINK_TIMER] = pane->timer_active[RAPID_TIMER] = false;
 
 	/* 端末の内容をPixmapに書く */
 	for (i = 0; i < pane->term->sb->rows + 2; i++) {
@@ -361,9 +367,8 @@ drawPane(Pane *pane, Line *peline, int pecaret)
 		drawLine(pane, peline, pane->term->cy, pepos, pewidth, 0);
 		drawCursor(pane, peline, pane->term->cy, pepos + pecaretpos, 6);
 
-		/* 次回消去する位置と幅 */
+		/* 次回の消去範囲を変更 */
 		pane->cx_b = pane->xpad + pane->xfont->cw * (pepos - 0.5);
-		pane->cy_b = pane->ypad + pane->xfont->ch * pane->term->cy;
 		pane->cw_b = pane->xfont->cw * (pewidth + 1);
 	} else if (1 <= pane->term->dec[25] && pane->term->cx < pane->term->sb->cols + 2) {
 		/* カーソルの描画 */
@@ -517,9 +522,7 @@ drawCursor(Pane *pane, Line *line, int row, int col, int type)
 		break;
 	}
 
-	/* 次回消去する位置と幅 */
-	pane->cx_b = x - pane->xfont->cw * 0.5;
-	pane->cy_b = y;
+	/* 次回の消去範囲を変更 */
 	pane->cw_b = cw + pane->xfont->cw;
 }
 
@@ -533,6 +536,9 @@ drawSelection(Pane *pane)
 
 	checkSelection(pane);
 
+	if (e + pane->scr < -1 || pane->term->sb->rows + 1 < s + pane->scr)
+		return;
+
 #define DRAW(n, a, b)   drawLineRev(pane, getLine(pane->term, n), n + pane->scr, a, b)
 	for (i = s; i < e + 1; i++) {
 		if (sel->rect || (sel->aline == sel->bline))
@@ -545,6 +551,12 @@ drawSelection(Pane *pane)
 			DRAW(i, 0, pane->term->sb->cols + 2);
 	}
 #undef DRAW
+
+	/* 次回の消去範囲を変更 */
+	pane->cx_b = 0;
+	pane->cy_b = 0;
+	pane->cw_b = pane->width;
+	pane->ch_b = pane->height;
 }
 
 void

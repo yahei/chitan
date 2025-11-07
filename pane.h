@@ -17,7 +17,7 @@ typedef struct Pane {
 	XFont *xfont;
 	Pixmap pixmap, pixbuf;
 	Line **lines;
-	int cx_b, cy_b, cw_b;
+	int cx_b, cy_b, cw_b, ch_b;
 	unsigned int depth;
 	float alpha;
 	GC gc;
