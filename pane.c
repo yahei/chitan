@@ -18,8 +18,8 @@
 #define BELLCOLOR(c)    (pane->timer_lit[BELL_TIMER] ?\
 		BLEND_COLOR((c), 0.85, 0xffffffff, 0.15) : (c))
 #define SCROLLMAX(sb)   ((sb)->firstline - MAX((sb)->totallines - (sb)->maxlines, 0))
-#define CREATE_PIXMAP(i,w,h,d)  XCreatePixmap(i->disp, DefaultRootWindow(i->disp), w, h, d);
-#define DRAW_CREATE(i,p)        XftDrawCreate(i->disp, p, i->visual, i->cmap);
+#define CREATE_PIXMAP(i,w,h,d)  XCreatePixmap(i->disp, DefaultRootWindow(i->disp), w, h, d)
+#define DRAW_CREATE(i,p)        XftDrawCreate(i->disp, p, i->visual, i->cmap)
 
 static void drawLine(Pane *, Line *, int, int, int, int);
 static int linecmp(Pane *, Line *, Line *, int, int);
