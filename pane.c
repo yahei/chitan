@@ -22,7 +22,7 @@
 #define DRAW_CREATE(i,p)        XftDrawCreate(i->disp, p, i->visual, i->cmap);
 
 static void drawLine(Pane *, Line *, int, int, int, int);
-static int linecmp(Pane *, Line *, Line *, int ,int, int);
+static int linecmp(Pane *, Line *, Line *, int, int);
 static void drawCursor(Pane *, Line *, int, int, int);
 static void drawSelection(Pane *);
 static void drawLineRev(Pane *, Line *, int, int, int);
@@ -402,9 +402,8 @@ drawLine(Pane *pane, Line *line, int row, int col, int width, int pos)
 	y = pane->ypad + row * pane->xfont->ch;
 	w = pane->xfont->cw * u32swidth(&line->str[i], next - i);
 
-	/* 同じものがあればコピーして終了 */
-#define LINE_CMP(R) linecmp(pane, line, pane->lines[R], i,\
-		getCharCnt(pane->lines[R]->str, pos).index, next - i)
+	/* 変化無し・コピー・書き直しの分岐 */
+#define LINE_CMP(R) linecmp(pane, line, pane->lines[R], pos, next - i)
 	if (line->attr[i] & (ITALIC | BLINK | RAPID))
 		sl = pane->term->sb->rows;
 	else if (LINE_CMP(row))
@@ -466,12 +465,15 @@ drawLine(Pane *pane, Line *line, int row, int col, int width, int pos)
 }
 
 int
-linecmp(Pane *pane, Line *line, Line *line2, int index, int index2, int len)
+linecmp(Pane *pane, Line *line1, Line *line2, int pos, int len)
 {
-#define CMP(A,T) !memcmp(&line->A[index], &line2->A[index2], len * sizeof(T))
-	if (index2 + len <= u32slen(line2->str) &&
+	CharCnt cc1 = getCharCnt(line1->str, pos);
+	CharCnt cc2 = getCharCnt(line2->str, pos);
+
+#define CMP(A,T) !memcmp(&line1->A[cc1.index], &line2->A[cc2.index], len * sizeof(T))
+	if (cc2.index + len <= u32slen(line2->str) && cc1.col == cc2.col &&
 	    CMP(str, char32_t) && CMP(attr, int) && CMP(fg, int) && CMP(bg, int) &&
-	    (index2 < 1 || !(line2->attr[index2 - 1] & ITALIC)))
+	    (cc2.index < 1 || !(line2->attr[cc2.index - 1] & ITALIC)))
 			return 1;
 	return 0;
 #undef CMP
