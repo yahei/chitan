@@ -196,7 +196,7 @@ run(void)
 		}
 
 		/* 点滅の処理をして次の待機時間を取得 */
-		manegeTimer(pane, &timeout);
+		manageTimer(pane, &timeout);
 
 		/* 再描画 */
 		if (pane->redraw_flag)

@@ -239,7 +239,7 @@ copySelection(Pane *pane, char **dst, int deltrail)
 }
 
 void
-manegeTimer(Pane *pane, struct timespec *timeout)
+manageTimer(Pane *pane, struct timespec *timeout)
 {
 	struct timespec nexttime;
 	static const struct timespec duration[] = {

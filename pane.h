@@ -47,5 +47,5 @@ void scrollPane(Pane *, int);
 void setSelection(Pane *, int, int, char, char);
 void checkSelection(Pane *);
 void copySelection(Pane *, char **, int);
-void manegeTimer(Pane *, struct timespec *);
+void manageTimer(Pane *, struct timespec *);
 void drawPane(Pane *, Line *, int);
