@@ -39,7 +39,6 @@ static void decset(Term *, unsigned int, int);
 static void setScrBufSize(Term *term, int, int);
 static void setSGR(Term *, const char *);
 static const char *designateCharSet(Term *, const char *, const char *);
-static void dumbbell(void *){};
 
 Term *
 openTerm(int row, int col, int bufsize, const char *program, char *const cmd[])
@@ -52,7 +51,7 @@ openTerm(int row, int col, int bufsize, const char *program, char *const cmd[])
 	/* 構造体の初期化 */
 	term = xmalloc(sizeof(Term));
 	*term = (Term){ .master = -1, .ctype = 2, .fg = deffg, .bg = defbg,
-		.bell = &dumbbell, .title = "chitan" };
+		.title = "chitan" };
 
 	/* スクリーンバッファの初期化 */
 	term->ori = term->alt = (struct ScreenBuffer){
@@ -283,7 +282,7 @@ CC(Term *term, const char *head, const char *tail)
 	/* C0 基本集合 */
 	switch (*head) {
 	case 0x00:                                              break; /* NUL */
-	case 0x07: term->bell(term->bellp);                     break; /* BEL */
+	case 0x07: term->bell_cnt++;                            break; /* BEL */
 	case 0x08: moveCursorPos(term, -1, 0);                  break; /* BS  */
 	case 0x09: moveCursorPos(term, 8 - term->cx % 8, 0);    break; /* HT  */
 	case 0x0a: linefeed(term);                              break; /* LF  */
@@ -640,6 +639,7 @@ OSC(Term *term, char *payload, const char *err)
 			if (endptr == &spec[7] && spec[7] == '\0') {
 				term->palette[pc] &= 0xff000000;
 				term->palette[pc] |= color;
+				term->pallet_cnt++;
 			}
 		} else if (strncmp(spec, "?", 2) == 0) {    /* 現在の値を返す */
 			if (pn == 4)

@@ -36,6 +36,7 @@ typedef struct Pane {
 	struct timespec timers[TIMER_NUM], now;
 	bool timer_active[TIMER_NUM];
 	bool timer_lit[TIMER_NUM], bell_b;
+	int bell_cnt, pallet_cnt;
 } Pane;
 
 Pane *createPane(DispInfo *, XFont *, int, int, float, int, char *const []);

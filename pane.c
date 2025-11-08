@@ -28,7 +28,6 @@ static void drawSelection(Pane *);
 static void drawLineRev(Pane *, Line *, int, int, int);
 static void resizeLines(Pane *);
 static void clearPixmap(Pane *);
-static void bell(Pane *);
 
 Pane *
 createPane(DispInfo *dinfo, XFont *xfont, int width, int height, float alpha, int lines, char *const cmd[])
@@ -49,8 +48,6 @@ createPane(DispInfo *dinfo, XFont *xfont, int width, int height, float alpha, in
 			(width - pane->xpad * 2) / xfont->cw, lines, cmd[0], cmd);
 	if (!pane->term)
 		errExit("openTerm failed.\n");
-	pane->term->bell = (void (*)(void *))bell;
-	pane->term->bellp = pane;
 	pane->term->palette[defbg] = ((0xff & (int)(0xff * alpha)) << 24) +
 		(0x00ffffff & pane->term->palette[defbg]);
 
@@ -294,6 +291,19 @@ drawPane(Pane *pane, Line *peline, int pecaret)
 	pane->scr = CLIP(pane->scr, 0, SCROLLMAX(pane->term->sb));
 	pane->prevbuf = pane->term->sb;
 	pane->prevfst = pane->term->sb->firstline;
+
+	/* ベルとパレット変更のチェック */
+	if (pane->bell_cnt != pane->term->bell_cnt) {
+		pane->timer_active[BELL_TIMER] = true;
+		pane->timers[BELL_TIMER] = pane->now;
+		pane->bell_cnt = pane->term->bell_cnt;
+	}
+	if (pane->pallet_cnt != pane->term->pallet_cnt) {
+		clearPixmap(pane);
+		for (plines = pane->lines; *plines; plines++)
+			PUT_NUL(*plines, 0);
+		pane->pallet_cnt = pane->term->pallet_cnt;
+	}
 
 	/* 画面をクリア */
 	if (pane->timer_lit[BELL_TIMER] != pane->bell_b) {
@@ -614,11 +624,4 @@ clearPixmap(Pane *pane)
 	XFillRectangle(pane->dinfo->disp, pane->pixmap, pane->gc, 0, 0, pane->width, pane->height);
 	XSetForeground(pane->dinfo->disp, pane->gc, BELLCOLOR(pane->term->palette[defbg]));
 	XFillRectangle(pane->dinfo->disp, pane->pixbuf, pane->gc, 0, 0, pane->width, pane->height);
-}
-
-void
-bell(Pane *pane)
-{
-	pane->timer_active[BELL_TIMER] = true;
-	pane->timers[BELL_TIMER] = pane->now;
 }
