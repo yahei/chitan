@@ -637,8 +637,10 @@ OSC(Term *term, char *payload, const char *err)
 		if (spec == NULL) {                         /* */
 		} else if (strncmp(spec, "#", 1) == 0) {    /* #rrggbb形式 */
 			color = strtol(&spec[1], &endptr, 16);
-			if (spec[7] == '\0' && endptr == &spec[7])
-				term->palette[pc] = color;
+			if (endptr == &spec[7] && spec[7] == '\0') {
+				term->palette[pc] &= 0xff000000;
+				term->palette[pc] |= color;
+			}
 		} else if (strncmp(spec, "?", 2) == 0) {    /* 現在の値を返す */
 			if (pn == 4)
 				snprintf(res, 8, "\e]%d;%d", pn, pc);
