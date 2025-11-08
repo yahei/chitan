@@ -449,6 +449,10 @@ drawLine(Pane *pane, Line *line, int row, int col, int width, int pos)
 	    (line->attr[i] & RAPID ? pane->timer_lit[RAPID_TIMER] ? 2 : 0 : 1) < 2)
 		return;
 
+	/* 非表示 */
+	if (line->attr[i] & CONCEAL)
+		return;
+
 	/* 色をXftColorに変換 */
 	xc.color.red   =   RED(fc) << 8;
 	xc.color.green = GREEN(fc) << 8;
@@ -462,10 +466,14 @@ drawLine(Pane *pane, Line *line, int row, int col, int width, int pos)
 	drawXFontString(pane->draw, &xc, pane->xfont, attr, x, y, &line->str[i], next - i);
 
 	/* 後処理 */
-	if (line->attr[i] & ULINE) { /* 下線 */
-		XSetForeground(pane->dinfo->disp, pane->gc, fc);
+	XSetForeground(pane->dinfo->disp, pane->gc, fc);
+	if (line->attr[i] & (ULINE | DULINE))   /* 下線 */
 		XDrawLine(pane->dinfo->disp, pane->pixmap, pane->gc, x, y + 1, x + w - 1, y + 1);
-	}
+	if (line->attr[i] & DULINE)             /* 二重下線 */
+		XDrawLine(pane->dinfo->disp, pane->pixmap, pane->gc, x, y + 3, x + w - 1, y + 3);
+	y -= pane->xfont->ascent * 0.4;         /* 取消 */
+	if (line->attr[i] & STRIKE)
+		XDrawLine(pane->dinfo->disp, pane->pixmap, pane->gc, x, y + 1, x + w - 1, y + 1);
 }
 
 int
