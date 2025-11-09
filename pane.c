@@ -24,8 +24,6 @@
 static void drawLine(Pane *, Line *, int, int, int, int);
 static int linecmp(Pane *, Line *, Line *, int, int);
 static void drawCursor(Pane *, Line *, int, int, int);
-static void drawSelection(Pane *);
-static void drawLineRev(Pane *, Line *, int, int, int);
 static void resizeLines(Pane *);
 static void clearPixmap(Pane *);
 
@@ -157,7 +155,7 @@ setSelection(Pane *pane, int line, int col, char start, char rect)
 	pane->redraw_flag = true;
 	line += first - pane->scr;
 	if (start) {
-		pane->sel.altbuf = pane->term->sb == &pane->term->alt;
+		pane->sel.sb = pane->term->sb;
 		pane->sel.acol  = MAX(col,  0);
 		pane->sel.aline = MAX(line, 0);
 	}
@@ -310,6 +308,11 @@ drawPane(Pane *pane, Line *peline, int pecaret)
 		pane->pallet_cnt = pane->term->pallet_cnt;
 	}
 
+	/* 選択範囲のチェック */
+	if ((pane->sel.aline != pane->sel.bline || pane->sel.acol != pane->sel.bcol) &&
+			pane->sel.sb == pane->term->sb)
+		checkSelection(pane);
+
 	/* 画面をクリア */
 	if (pane->timer_lit[BELL_TIMER] != pane->bell_b) {
 		/* visual bellの点滅で全部書き直す */
@@ -387,11 +390,6 @@ drawPane(Pane *pane, Line *peline, int pecaret)
 		if (caretrow <= pane->term->sb->rows && (line = getLine(pane->term, pane->term->cy)))
 			drawCursor(pane, line, caretrow, pane->term->cx, pane->term->ctype);
 	}
-
-	/* 選択範囲を書く */
-	if ((pane->sel.aline != pane->sel.bline || pane->sel.acol != pane->sel.bcol) &&
-	     pane->sel.altbuf == (pane->term->sb == &pane->term->alt))
-		drawSelection(pane);
 
 	pane->redraw_flag = false;
 }
@@ -544,64 +542,6 @@ drawCursor(Pane *pane, Line *line, int row, int col, int type)
 
 	/* 次回の消去範囲を変更 */
 	pane->cw_b = cw + pane->xfont->cw;
-}
-
-void
-drawSelection(Pane *pane)
-{
-	struct Selection *sel = &pane->sel;
-	const int s = MIN(sel->aline, sel->bline) - pane->term->sb->firstline;
-	const int e = MAX(sel->aline, sel->bline) - pane->term->sb->firstline;
-	int i;
-
-	checkSelection(pane);
-
-	if (e + pane->scr < -1 || pane->term->sb->rows + 1 < s + pane->scr)
-		return;
-
-#define DRAW(n, a, b)   drawLineRev(pane, getLine(pane->term, n), n + pane->scr, a, b)
-	for (i = s; i < e + 1; i++) {
-		if (sel->rect || (sel->aline == sel->bline))
-			DRAW(i, sel->acol, sel->bcol);
-		else if (i == s)
-			DRAW(s, (sel->aline < sel->bline ? sel->acol : sel->bcol), pane->term->sb->cols + 2);
-		else if (i == e)
-			DRAW(e, 0, (sel->aline < sel->bline ? sel->bcol : sel->acol));
-		else
-			DRAW(i, 0, pane->term->sb->cols + 2);
-	}
-#undef DRAW
-
-	/* 次回の消去範囲を変更 */
-	pane->cx_b = 0;
-	pane->cy_b = 0;
-	pane->cw_b = pane->width;
-	pane->ch_b = pane->height;
-}
-
-void
-drawLineRev(Pane *pane, Line *line, int row, int col1, int col2)
-{
-	const Color c = pane->term->palette[defbg];
-	XftColor xc = { 0, { RED(c) << 8, GREEN(c) << 8, BLUE(c) << 8, 0xffff } };
-	int li, ri;
-	int xoff, yoff, len;
-
-	if (!BETWEEN(row, -1, pane->term->sb->rows + 2) || (!line))
-		return;
-
-	li = MIN(getCharCnt(line->str, MIN(col1, col2)).index, u32slen(line->str));
-	ri = MIN(getCharCnt(line->str, MAX(col1, col2)).index, u32slen(line->str));
-
-	xoff = pane->xpad + getCharCnt(line->str, MIN(col1, col2)).col * pane->xfont->cw;
-	yoff = pane->ypad + row * pane->xfont->ch;
-	len = MIN(u32slen(line->str + li), ri - li);
-
-	XSetForeground(pane->dinfo->disp, pane->gc, BELLCOLOR(pane->term->palette[deffg]));
-	XFillRectangle(pane->dinfo->disp, pane->pixmap, pane->gc, xoff, yoff,
-			u32snwidth(line->str + li, len) * pane->xfont->cw, pane->xfont->ch);
-	drawXFontString(pane->draw, &xc, pane->xfont, 0, xoff, yoff + pane->xfont->ascent,
-			pane->width, line->str + li, len);
 }
 
 void

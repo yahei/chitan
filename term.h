@@ -50,8 +50,9 @@ typedef struct Term {
 
 /* 選択範囲 */
 typedef struct Selection {
+	struct ScreenBuffer *sb;
 	int aline, acol, bline, bcol;
-	int rect, altbuf;
+	int rect;
 	char *primary, *clip;
 	int *vers;
 } Selection;

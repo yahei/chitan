@@ -818,13 +818,38 @@ void
 getLines(Term *term, Line **lines, int len, int scr, const Selection *sel)
 {
 	Line *line;
-	int i;
+	int i, j, s, e, a, b, li, ri;
 
+	/* 指定された範囲をコピー */
 	for (i = 0; i < len; i++) {
 		if ((line = getLine(term, i - scr)))
 			linecpy(lines[i], line);
 		else
 			PUT_NUL(lines[i], 0);
+	}
+
+	/* selectionの範囲を反転色にする */
+	if (sel == NULL || sel->sb != term->sb)
+		return;
+	s = MIN(sel->aline, sel->bline) - term->sb->firstline + scr;
+	e = MAX(sel->aline, sel->bline) - term->sb->firstline + scr;
+	for (i = MAX(s, 0); i < MIN(e + 1, len); i++) {
+		a = 0;
+		b = term->sb->cols + 2;
+
+		if (sel->rect || (sel->aline == sel->bline)) {
+			a = MIN(sel->acol,  sel->bcol);
+			b = MAX(sel->acol,  sel->bcol);
+		} else if (i == s) {
+			a = sel->aline < sel->bline ? sel->acol : sel->bcol;
+		} else if (i == e) {
+			b = sel->aline < sel->bline ? sel->bcol : sel->acol;
+		}
+
+		li = getCharCnt(lines[i]->str, a).index;
+		ri = getCharCnt(lines[i]->str, b).index;
+		for (j = li; j < ri && j < u32slen(lines[i]->str); j++)
+			lines[i]->attr[j] ^= NEGA;
 	}
 }
 
