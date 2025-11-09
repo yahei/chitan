@@ -346,7 +346,7 @@ handleXEvent(Win *win)
 				pane->scr = 0;
 			} else {
 				dragging = pane;
-				setSelection(pane, my, mx, mb == 1, 0 < (state & Mod1Mask));
+				selectPane(pane, my, mx, mb == 1, 0 < (state & Mod1Mask));
 			}
 			break;
 
@@ -354,7 +354,7 @@ handleXEvent(Win *win)
 			if (!dragging)
 				mouseEvent(pane, &event);
 			else
-				setSelection(dragging, my, mx, 0, pane->sel.rect);
+				selectPane(dragging, my, mx, false, pane->sel.rect);
 			break;
 
 		case ButtonRelease:    /* マウス Release */
@@ -365,7 +365,7 @@ handleXEvent(Win *win)
 				    dragging->sel.acol  == dragging->sel.bcol)
 					break;
 				XSetSelectionOwner(dinfo.disp, atoms[PRIMARY], win->window, event.xkey.time);
-				copySelection(dragging, &win->primary, !dragging->sel.rect);
+				copySelection(dragging->term, &dragging->sel, &win->primary, !dragging->sel.rect);
 				dragging = NULL;
 			}
 			break;
@@ -471,7 +471,7 @@ keyPressEvent(Win *win, XEvent event, int bufsize)
 
 	/* C-S-cでコピー */
 	if (keysym == XK_C && event.xkey.state & ControlMask) {
-		copySelection(win->pane, &win->clip, !win->pane->sel.rect);
+		copySelection(win->pane->term, &win->pane->sel, &win->clip, !win->pane->sel.rect);
 		XSetSelectionOwner(dinfo.disp, atoms[CLIPBOARD], win->window, event.xkey.time);
 		return 0;
 	}

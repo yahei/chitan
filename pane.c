@@ -1,5 +1,3 @@
-#include <wchar.h>
-
 #include "pane.h"
 #include "util.h"
 
@@ -143,100 +141,10 @@ scrollPane(Pane *pane, int n)
 }
 
 void
-setSelection(Pane *pane, int line, int col, char start, char rect)
+selectPane(Pane *pane, int row, int col, bool start, bool rect)
 {
-	Line *pline;
-	int s, e, i, first = pane->term->sb->firstline;
-
-	/* 始点と終点をセット */
-	pane->sel.rect = rect;
 	pane->redraw_flag = true;
-	line += first - pane->scr;
-	if (start) {
-		pane->sel.sb = pane->term->sb;
-		pane->sel.acol  = MAX(col,  0);
-		pane->sel.aline = MAX(line, 0);
-	}
-	pane->sel.bcol  = MAX(col,  0);
-	pane->sel.bline = MAX(line, 0);
-
-	/* 行のバージョンを記録 */
-	s = MIN(pane->sel.aline, pane->sel.bline);
-	e = MAX(pane->sel.aline, pane->sel.bline);
-	pane->sel.vers = xrealloc(pane->sel.vers, (e - s + 1) * sizeof(int));
-	for (i = 0; i <= e - s; i++)
-		if ((pline = getLine(pane->term, s - first + i)))
-			pane->sel.vers[i] = pline->ver;
-}
-
-void
-checkSelection(Pane *pane)
-{
-	Line *line;
-	int s = MIN(pane->sel.aline, pane->sel.bline);
-	int e = MAX(pane->sel.aline, pane->sel.bline);
-	int i, first = pane->term->sb->firstline;
-
-	for (i = 0; i <= e - s; i++) {
-		if ((line = getLine(pane->term, s - first + i)) &&
-				pane->sel.vers[i] == line->ver)
-			continue;
-		pane->sel.aline = pane->sel.bline;
-		pane->sel.acol  = pane->sel.bcol;
-		return;
-	}
-}
-
-void
-copySelection(Pane *pane, char **dst, int deltrail)
-{
-	int len = 256;
-	char32_t *cp, *copy = xmalloc(len * sizeof(copy[0]));
-	int firstline = MIN(pane->sel.aline, pane->sel.bline);
-	int lastline  = MAX(pane->sel.aline, pane->sel.bline);
-	int left      = MIN(pane->sel.acol,  pane->sel.bcol);
-	int right     = MAX(pane->sel.acol,  pane->sel.bcol);
-	Line *line;
-	int i, j, l, r;
-
-	copy[0] = L'\0';
-
-	/* 選択範囲の文字列(UTF32)を読み出してコピー */
-	for(i = firstline; i <= lastline; i++) {
-		if (!(line = getLine(pane->term, i - pane->term->sb->firstline)))
-			continue;
-
-		l = MIN(getCharCnt(line->str,  left).index, u32slen(line->str));
-		r = MIN(getCharCnt(line->str, right).index, u32slen(line->str));
-		if (!pane->sel.rect) {
-			l = (i == firstline) ? l : 0;
-			r = (i ==  lastline) ? r : u32slen(line->str) + 1;
-		}
-
-		while (len < u32slen(copy) + r - l + 2) {
-			len += 256;
-			copy = xrealloc(copy, len * sizeof(copy[0]));
-		}
-		cp = copy + u32slen(copy);
-		wcsncpy((wchar_t *)cp, (wchar_t *)line->str + l, r - l);
-		cp[r - l] = L'\0';
-
-		if (deltrail) {
-			for (j = u32slen(cp); 0 < j; j--)
-				if (cp[j - 1] != L' ')
-					break;
-			cp[j] = L'\0';
-		}
-
-		if (i < lastline)
-			wcscat((wchar_t *)copy, L"\n");
-	}
-
-	/* UTF8に変換して保存 */
-	*dst = xrealloc(*dst, len * 4);
-	wcstombs(*dst, (wchar_t *)copy, len * 4);
-
-	free(copy);
+	setSelection(pane->term, &pane->sel, row - pane->scr, col, start, rect);
 }
 
 void
@@ -309,7 +217,7 @@ drawPane(Pane *pane, Line *peline, int pecaret)
 	/* 選択範囲のチェック */
 	if ((pane->sel.aline != pane->sel.bline || pane->sel.acol != pane->sel.bcol) &&
 			pane->sel.sb == pane->term->sb)
-		checkSelection(pane);
+		checkSelection(pane->term, &pane->sel);
 
 	/* 画面をクリア */
 	if (pane->timer_lit[BELL_TIMER] != pane->bell_b) {

@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <wchar.h>
 
 #include "term.h"
 #include "util.h"
@@ -1071,4 +1072,99 @@ designateCharSet(Term *term, const char *head, const char *tail)
 				strchr("\"%`&", name[0]) ? name[1] : '\0');
 
 	return head + 1;
+}
+
+void
+setSelection(Term *term, Selection *sel, int row, int col, bool start, bool rect)
+{
+	Line *line;
+	int s, e, i;
+
+	/* 範囲をセット */
+	if (start) {
+		sel->sb = term->sb;
+		sel->acol  = MAX(col,  0);
+		sel->aline = MAX(row + term->sb->firstline, 0);
+	}
+	sel->bcol  = MAX(col,  0);
+	sel->bline = MAX(row + term->sb->firstline, 0);
+	sel->rect = rect;
+
+	/* 行のバージョンを記録 */
+	s = MIN(sel->aline, sel->bline);
+	e = MAX(sel->aline, sel->bline);
+	sel->vers = xrealloc(sel->vers, (e - s + 1) * sizeof(int));
+	for (i = 0; i <= e - s; i++)
+		if ((line = getLine(term, s - term->sb->firstline + i)))
+			sel->vers[i] = line->ver;
+}
+
+void
+checkSelection(Term *term, Selection *sel)
+{
+	Line *line;
+	int s = MIN(sel->aline, sel->bline);
+	int e = MAX(sel->aline, sel->bline);
+	int i, first = term->sb->firstline;
+
+	for (i = 0; i <= e - s; i++) {
+		if ((line = getLine(term, s - first + i)) &&
+				sel->vers[i] == line->ver)
+			continue;
+		sel->aline = sel->bline;
+		sel->acol  = sel->bcol;
+		return;
+	}
+}
+
+void
+copySelection(Term *term, Selection *sel, char **dst, bool deltrail)
+{
+	int len = 256;
+	char32_t *cp, *copy = xmalloc(len * sizeof(copy[0]));
+	int firstline = MIN(sel->aline, sel->bline);
+	int lastline  = MAX(sel->aline, sel->bline);
+	int left      = MIN(sel->acol,  sel->bcol);
+	int right     = MAX(sel->acol,  sel->bcol);
+	Line *line;
+	int i, j, l, r;
+
+	copy[0] = L'\0';
+
+	/* 選択範囲の文字列(UTF32)を読み出してコピー */
+	for(i = firstline; i <= lastline; i++) {
+		if (!(line = getLine(term, i - term->sb->firstline)))
+			continue;
+
+		l = MIN(getCharCnt(line->str,  left).index, u32slen(line->str));
+		r = MIN(getCharCnt(line->str, right).index, u32slen(line->str));
+		if (!sel->rect) {
+			l = (i == firstline) ? l : 0;
+			r = (i ==  lastline) ? r : u32slen(line->str) + 1;
+		}
+
+		while (len < u32slen(copy) + r - l + 2) {
+			len += 256;
+			copy = xrealloc(copy, len * sizeof(copy[0]));
+		}
+		cp = copy + u32slen(copy);
+		wcsncpy((wchar_t *)cp, (wchar_t *)line->str + l, r - l);
+		cp[r - l] = L'\0';
+
+		if (deltrail) {
+			for (j = u32slen(cp); 0 < j; j--)
+				if (cp[j - 1] != L' ')
+					break;
+			cp[j] = L'\0';
+		}
+
+		if (i < lastline)
+			wcscat((wchar_t *)copy, L"\n");
+	}
+
+	/* UTF8に変換して保存 */
+	*dst = xrealloc(*dst, len * 4);
+	wcstombs(*dst, (wchar_t *)copy, len * 4);
+
+	free(copy);
 }

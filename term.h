@@ -1,3 +1,4 @@
+#include <stdbool.h>
 #include <stdlib.h>
 
 #include "line.h"
@@ -64,3 +65,7 @@ Line *getLine(Term *, int);
 void getLines(Term *, Line **, int, int, const Selection *);
 void setWinSize(Term *, int, int, int, int);
 void reportMouse(Term *, int, int, int, int);
+
+void setSelection(Term *, Selection *, int, int, bool, bool);
+void checkSelection(Term *, Selection *);
+void copySelection(Term *, Selection *, char **, bool);
