@@ -473,7 +473,8 @@ drawLine(Pane *pane, Line *line, int row, int col, int width, int pos)
 	attr = FONT_NONE;
 	attr |= line->attr[i] & BOLD   ? FONT_BOLD   : FONT_NONE;
 	attr |= line->attr[i] & ITALIC ? FONT_ITALIC : FONT_NONE;
-	drawXFontString(pane->draw, &xc, pane->xfont, attr, x, y, &line->str[i], next - i);
+	drawXFontString(pane->draw, &xc, pane->xfont, attr, x, y, pane->width,
+			&line->str[i], next - i);
 
 	/* 後処理 */
 	XSetForeground(pane->dinfo->disp, pane->gc, fc);
@@ -598,7 +599,7 @@ drawLineRev(Pane *pane, Line *line, int row, int col1, int col2)
 	XFillRectangle(pane->dinfo->disp, pane->pixmap, pane->gc, xoff, yoff,
 			u32snwidth(line->str + li, len) * pane->xfont->cw, pane->xfont->ch);
 	drawXFontString(pane->draw, &xc, pane->xfont, 0, xoff, yoff + pane->xfont->ascent,
-			line->str + li, len);
+			pane->width, line->str + li, len);
 }
 
 void

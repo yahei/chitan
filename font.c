@@ -62,11 +62,13 @@ closeFont(XFont *xfont)
 }
 
 void
-drawXFontString(XftDraw *draw, XftColor *color, XFont *xfont, int attr, int x, int y, const FcChar32 *str, int num)
+drawXFontString(XftDraw *draw, XftColor *color, XFont *xfont, int attr, int x, int y, int w, const FcChar32 *str, int num)
 {
+	XRectangle rect = { 0, -xfont->ascent, w, xfont->ch};
 	XftFontSuite *font;
 	int i;
 
+	XftDrawSetClipRectangles(draw, x, y, &rect, 1);
 	for (i = 0; i < num; i++) {
 		font = XftCharIndex(xfont->disp, (*xfont->fonts[0])[attr], str[i]) ?
 			xfont->fonts[0] : getFontSuiteGlyphs(xfont, str[i]);

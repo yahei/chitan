@@ -25,4 +25,4 @@ typedef struct XFont {
 
 XFont *openFont(Display *, const char *);
 void closeFont(XFont *);
-void drawXFontString(XftDraw *, XftColor *, XFont *, int, int, int, const FcChar32 *, int);
+void drawXFontString(XftDraw *, XftColor *, XFont *, int, int, int, int, const FcChar32 *, int);
