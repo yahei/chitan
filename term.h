@@ -48,10 +48,19 @@ typedef struct Term {
 	int pallet_cnt;         /* パレットを変更した回数 */
 } Term;
 
+/* 選択範囲 */
+typedef struct Selection {
+	int aline, acol, bline, bcol;
+	int rect, altbuf;
+	char *primary, *clip;
+	int *vers;
+} Selection;
+
 Term *openTerm(int, int, int, const char *, char *const []);
 void closeTerm(Term *);
 ssize_t readPty(Term *);
 ssize_t writePty(Term *, const char *, ssize_t);
 Line *getLine(Term *, int);
+void getLines(Term *, Line **, int, int, const Selection *);
 void setWinSize(Term *, int, int, int, int);
 void reportMouse(Term *, int, int, int, int);

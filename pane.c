@@ -58,6 +58,8 @@ createPane(DispInfo *dinfo, XFont *xfont, int width, int height, float alpha, in
 	pane->draw = DRAW_CREATE(pane->dinfo, pane->pixmap);
 	pane->lines = xmalloc(sizeof(Line *));
 	*pane->lines = NULL;
+	pane->lines_b = xmalloc(sizeof(Line *));
+	*pane->lines_b = NULL;
 	resizeLines(pane);
 	clearPixmap(pane);
 
@@ -77,6 +79,9 @@ destroyPane(Pane *pane)
 	for (plines = pane->lines; *plines; plines++)
 		freeLine(*plines);
 	free(pane->lines);
+	for (plines = pane->lines_b; *plines; plines++)
+		freeLine(*plines);
+	free(pane->lines_b);
 	free(pane->sel.primary);
 	free(pane->sel.clip);
 	free(pane);
@@ -103,7 +108,7 @@ setPaneSize(Pane *pane, int width, int height)
 	setWinSize(pane->term, (height - pane->ypad * 2) / pane->xfont->ch,
 			(width - pane->xpad * 2) / pane->xfont->cw, width, height);
 	if (oldrows == pane->term->sb->rows)
-		for (plines = pane->lines; *plines; plines++)
+		for (plines = pane->lines_b; *plines; plines++)
 			PUT_NUL(*plines, 0);
 	else
 		resizeLines(pane);
@@ -300,7 +305,7 @@ drawPane(Pane *pane, Line *peline, int pecaret)
 	}
 	if (pane->pallet_cnt != pane->term->pallet_cnt) {
 		clearPixmap(pane);
-		for (plines = pane->lines; *plines; plines++)
+		for (plines = pane->lines_b; *plines; plines++)
 			PUT_NUL(*plines, 0);
 		pane->pallet_cnt = pane->term->pallet_cnt;
 	}
@@ -308,7 +313,7 @@ drawPane(Pane *pane, Line *peline, int pecaret)
 	/* 画面をクリア */
 	if (pane->timer_lit[BELL_TIMER] != pane->bell_b) {
 		/* visual bellの点滅で全部書き直す */
-		for (plines = pane->lines; *plines; plines++)
+		for (plines = pane->lines_b; *plines; plines++)
 			PUT_NUL(*plines, 0);
 		pane->bell_b = pane->timer_lit[BELL_TIMER];
 		clearPixmap(pane);
@@ -321,7 +326,7 @@ drawPane(Pane *pane, Line *peline, int pecaret)
 	}
 	/* 次回の消去範囲を設定 */
 	pane->cx_b = pane->xpad + pane->xfont->cw * (pane->term->cx - 0.5);
-	pane->cy_b = pane->ypad + pane->xfont->ch * pane->term->cy;
+	pane->cy_b = pane->ypad + pane->xfont->ch * (pane->term->cy + pane->scr);
 	pane->cw_b = pane->xfont->cw * 2;
 	pane->ch_b = pane->xfont->ch;
 
@@ -329,12 +334,13 @@ drawPane(Pane *pane, Line *peline, int pecaret)
 	pane->timer_active[BLINK_TIMER] = pane->timer_active[RAPID_TIMER] = false;
 
 	/* 端末の内容をPixmapに書く */
+	getLines(pane->term, pane->lines, pane->term->sb->rows + 2, pane->scr, &pane->sel);
 	for (i = 0; i < pane->term->sb->rows + 2; i++) {
-		line = getLine(pane->term, i - pane->scr);
+		line = pane->lines[i];
 
 		/* 前回の方が長い場合の塗りつぶし */
 		width   = line ? u32swidth(line->str) : 0;
-		width_b = u32swidth(pane->lines[i]->str);
+		width_b = u32swidth(pane->lines_b[i]->str);
 		if (width < width_b) {
 			XSetForeground(pane->dinfo->disp, pane->gc, BELLCOLOR(pane->term->palette[defbg]));
 			XFillRectangle(pane->dinfo->disp, pane->pixmap, pane->gc,
@@ -350,12 +356,8 @@ drawPane(Pane *pane, Line *peline, int pecaret)
 	}
 
 	/* 書いた文字とPixmapの状態を記録 */
-	for (i = 0; i < pane->term->sb->rows + 2; i++) {
-		if ((line = getLine(pane->term, i - pane->scr)))
-			linecpy(pane->lines[i], line);
-		else
-			PUT_NUL(pane->lines[i], 0);
-	}
+	for (i = 0; i < pane->term->sb->rows + 2; i++)
+		linecpy(pane->lines_b[i], pane->lines[i]);
 	XCopyArea(pane->dinfo->disp, pane->pixmap, pane->pixbuf, pane->gc,
 			0, 0, pane->width, pane->height, 0, 0);
 
@@ -417,7 +419,7 @@ drawLine(Pane *pane, Line *line, int row, int col, int width, int pos)
 	w = pane->xfont->cw * u32snwidth(&line->str[i], next - i);
 
 	/* 変化無し・コピー・書き直しの分岐 */
-#define LINE_CMP(R) linecmp(pane, line, pane->lines[R], pos, next - i)
+#define LINE_CMP(R) linecmp(pane, line, pane->lines_b[R], pos, next - i)
 	if (line->attr[i] & (ITALIC | BLINK | RAPID))
 		sl = pane->term->sb->rows;
 	else if (LINE_CMP(row))
@@ -610,12 +612,18 @@ resizeLines(Pane *pane)
 
 	for (plines = pane->lines; *plines; plines++)
 		freeLine(*plines);
+	for (plines = pane->lines_b; *plines; plines++)
+		freeLine(*plines);
 
 	pane->lines = xrealloc(pane->lines, (pane->term->sb->rows + 3) * sizeof(Line *));
 	pane->lines[pane->term->sb->rows + 2] = NULL;
+	pane->lines_b = xrealloc(pane->lines_b, (pane->term->sb->rows + 3) * sizeof(Line *));
+	pane->lines_b[pane->term->sb->rows + 2] = NULL;
 
-	for (i = 0; i < pane->term->sb->rows + 2; i++)
+	for (i = 0; i < pane->term->sb->rows + 2; i++) {
 		pane->lines[i] = allocLine();
+		pane->lines_b[i] = allocLine();
+	}
 }
 
 void

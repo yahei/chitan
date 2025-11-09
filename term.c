@@ -815,6 +815,20 @@ getLine(Term *term, int row)
 }
 
 void
+getLines(Term *term, Line **lines, int len, int scr, const Selection *sel)
+{
+	Line *line;
+	int i;
+
+	for (i = 0; i < len; i++) {
+		if ((line = getLine(term, i - scr)))
+			linecpy(lines[i], line);
+		else
+			PUT_NUL(lines[i], 0);
+	}
+}
+
+void
 setWinSize(Term *term, int row, int col, int xpixel, int ypixel)
 {
 	struct winsize ws;

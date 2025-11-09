@@ -16,7 +16,7 @@ typedef struct Pane {
 	DispInfo *dinfo;
 	XFont *xfont;
 	Pixmap pixmap, pixbuf;
-	Line **lines;
+	Line **lines, **lines_b;
 	int cx_b, cy_b, cw_b, ch_b;
 	unsigned int depth;
 	float alpha;
@@ -27,12 +27,7 @@ typedef struct Pane {
 	Term *term;
 	int scr, prevfst;
 	struct ScreenBuffer *prevbuf;
-	struct Selection {
-		int aline, acol, bline, bcol;
-		int rect, altbuf;
-		char *primary, *clip;
-		int *vers;
-	} sel;
+	Selection sel;
 	struct timespec timers[TIMER_NUM], now;
 	bool timer_active[TIMER_NUM];
 	bool timer_lit[TIMER_NUM], bell_b;
