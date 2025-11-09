@@ -26,7 +26,7 @@ typedef struct Pane {
 	bool focus, redraw_flag;
 	Term *term;
 	int scr, prevfst;
-	struct ScreenBuffer *prevbuf;
+	struct ScrBuf *prevbuf;
 	Selection sel;
 	struct timespec timers[TIMER_NUM], now;
 	bool timer_active[TIMER_NUM];

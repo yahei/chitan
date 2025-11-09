@@ -365,7 +365,7 @@ handleXEvent(Win *win)
 				    dragging->sel.acol  == dragging->sel.bcol)
 					break;
 				XSetSelectionOwner(dinfo.disp, atoms[PRIMARY], win->window, event.xkey.time);
-				copySelection(dragging->term, &dragging->sel, &win->primary, !dragging->sel.rect);
+				copySelection(&dragging->sel, &win->primary, !dragging->sel.rect);
 				dragging = NULL;
 			}
 			break;
@@ -471,7 +471,7 @@ keyPressEvent(Win *win, XEvent event, int bufsize)
 
 	/* C-S-cでコピー */
 	if (keysym == XK_C && event.xkey.state & ControlMask) {
-		copySelection(win->pane->term, &win->pane->sel, &win->clip, !win->pane->sel.rect);
+		copySelection(&win->pane->sel, &win->clip, !win->pane->sel.rect);
 		XSetSelectionOwner(dinfo.disp, atoms[CLIPBOARD], win->window, event.xkey.time);
 		return 0;
 	}

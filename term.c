@@ -55,7 +55,7 @@ openTerm(int row, int col, int bufsize, const char *program, char *const cmd[])
 		.title = "chitan" };
 
 	/* スクリーンバッファの初期化 */
-	term->ori = term->alt = (struct ScreenBuffer){
+	term->ori = term->alt = (struct ScrBuf){
 		.firstline = 0,
 		.totallines = row,
 		.maxlines = row < bufsize ? bufsize : row,
@@ -265,7 +265,7 @@ GCs(Term *term, const char *head)
 		wlen = MAX(wlen, 1);
 
 		/* 書き込む */
-		if ((line = getLine(term, term->cy))) {
+		if ((line = getLine(term->sb, term->cy))) {
 			term->cx += putU32s(line, term->cx, dp, term->attr,
 					term->fg, term->bg, wlen);
 			cc = getCharCnt(line->str, term->sb->cols);
@@ -298,7 +298,7 @@ CC(Term *term, const char *head, const char *tail)
 const char *
 ESC(Term *term, const char *head, const char *tail)
 {
-	struct ScreenBuffer *sb = term->sb;
+	struct ScrBuf *sb = term->sb;
 
 	if (tail <= head)
 		return NULL;
@@ -361,7 +361,7 @@ ESC(Term *term, const char *head, const char *tail)
 const char *
 CSI(Term *term, const char *head, const char *tail)
 {
-	struct ScreenBuffer *sb = term->sb;
+	struct ScrBuf *sb = term->sb;
 	char param[tail - head + 1], *pp = param;
 	char inter[tail - head + 1];
 	char *str1, *str2;
@@ -386,7 +386,7 @@ CSI(Term *term, const char *head, const char *tail)
 	/* 終端バイト */
 	switch (head[index]) {
 	case 0x40: /* ICH 文字挿入 */
-		if ((line = getLine(term, term->cy))) {
+		if ((line = getLine(term->sb, term->cy))) {
 			int n = MAX(atoi(param), 1);
 			char32_t str[n];
 			int attr[n], fg[n], bg[n];
@@ -416,7 +416,7 @@ CSI(Term *term, const char *head, const char *tail)
 		break;
 
 	case 0x4a: /* ED ページ内消去 */
-		if (!(line = getLine(term, term->cy)))
+		if (!(line = getLine(term->sb, term->cy)))
 			break;
 		switch (*param) {
 		default:
@@ -437,12 +437,12 @@ CSI(Term *term, const char *head, const char *tail)
 			break;
 		}
 		for (i = begin; i < end; i++)
-			if ((line = getLine(term, i)))
+			if ((line = getLine(term->sb, i)))
 				PUT_NUL(line, 0);
 		break;
 
 	case 0x4b: /* EL 行内消去 */
-		if (!(line = getLine(term, term->cy)))
+		if (!(line = getLine(term->sb, term->cy)))
 			break;
 		switch (*param) {
 		default:
@@ -478,7 +478,7 @@ CSI(Term *term, const char *head, const char *tail)
 		break;
 
 	case 0x50: /* DHC 文字削除 */
-		if (!(line = getLine(term, term->cy)))
+		if (!(line = getLine(term->sb, term->cy)))
 			break;
 		eraseInLine(line, term->cx, MAX(atoi(param), 1));
 		break;
@@ -492,7 +492,7 @@ CSI(Term *term, const char *head, const char *tail)
 		break;
 
 	case 0x58: /* ECH 文字消去 */
-		if (!(line = getLine(term, term->cy)))
+		if (!(line = getLine(term->sb, term->cy)))
 			break;
 		putSPCs(line, term->cx, term->bg, atoi(param));
 		break;
@@ -664,7 +664,7 @@ OSC(Term *term, char *payload, const char *err)
 void
 linefeed(Term *term)
 {
-	struct ScreenBuffer *sb = term->sb;
+	struct ScrBuf *sb = term->sb;
 	Line *line;
 
 	if (term->cy < sb->scre) {
@@ -675,7 +675,7 @@ linefeed(Term *term)
 		sb->firstline++;
 		if (sb->totallines < sb->firstline + sb->rows)
 			sb->totallines++;
-		if ((line = getLine(term, term->cy)))
+		if ((line = getLine(term->sb, term->cy)))
 			PUT_NUL(line, 0);
 	}
 
@@ -698,7 +698,7 @@ moveCursorPos(Term *term, int dx, int dy)
 void
 areaScroll(Term *term, int first, int last, int num)
 {
-	struct ScreenBuffer *sb = term->sb;
+	struct ScrBuf *sb = term->sb;
 	int area = last - first + 1;
 	Line *tmp[area];
 	int index;
@@ -741,7 +741,7 @@ optset(Term *term, unsigned int num, int flag)
 void
 decset(Term *term, unsigned int num, int flag)
 {
-	struct ScreenBuffer *oldsb;
+	struct ScrBuf *oldsb;
 	Line *line;
 	int i;
 
@@ -775,7 +775,7 @@ decset(Term *term, unsigned int num, int flag)
 			term->svy = term->cy;
 			if (num == 1049)
 				for (i = 0; i < term->sb->rows; i++)
-					if ((line = getLine(term, i)))
+					if ((line = getLine(term->sb, i)))
 						PUT_NUL(line, 0);
 		} else {
 			setCursorPos(term, term->svx, term->svy);
@@ -802,58 +802,6 @@ writePty(Term *term, const char *buf, ssize_t n)
 	return size;
 }
 
-Line *
-getLine(Term *term, int row)
-{
-	struct ScreenBuffer *sb = term->sb;
-	int index = sb->firstline + row;
-	int oldest = MAX(sb->totallines - sb->maxlines, 0);
-
-	if (index < oldest || sb->totallines <= index || sb->rows <= row)
-		return NULL;
-
-	return LINE(sb, index);
-}
-
-void
-getLines(Term *term, Line **lines, int len, int scr, const Selection *sel)
-{
-	Line *line;
-	int i, j, s, e, a, b, li, ri;
-
-	/* 指定された範囲をコピー */
-	for (i = 0; i < len; i++) {
-		if ((line = getLine(term, i - scr)))
-			linecpy(lines[i], line);
-		else
-			PUT_NUL(lines[i], 0);
-	}
-
-	/* selectionの範囲を反転色にする */
-	if (sel == NULL || sel->sb != term->sb)
-		return;
-	s = MIN(sel->aline, sel->bline) - term->sb->firstline + scr;
-	e = MAX(sel->aline, sel->bline) - term->sb->firstline + scr;
-	for (i = MAX(s, 0); i < MIN(e + 1, len); i++) {
-		a = 0;
-		b = term->sb->cols + 2;
-
-		if (sel->rect || (sel->aline == sel->bline)) {
-			a = MIN(sel->acol,  sel->bcol);
-			b = MAX(sel->acol,  sel->bcol);
-		} else if (i == s) {
-			a = sel->aline < sel->bline ? sel->acol : sel->bcol;
-		} else if (i == e) {
-			b = sel->aline < sel->bline ? sel->bcol : sel->acol;
-		}
-
-		li = getCharCnt(lines[i]->str, a).index;
-		ri = getCharCnt(lines[i]->str, b).index;
-		for (j = li; j < ri && j < u32slen(lines[i]->str); j++)
-			lines[i]->attr[j] ^= NEGA;
-	}
-}
-
 void
 setWinSize(Term *term, int row, int col, int xpixel, int ypixel)
 {
@@ -871,7 +819,7 @@ setWinSize(Term *term, int row, int col, int xpixel, int ypixel)
 void
 setScrBufSize(Term *term, int row, int col)
 {
-	struct ScreenBuffer *sb = term->sb;
+	struct ScrBuf *sb = term->sb;
 	int newfst = sb->firstline;
 
 	/* 行数が減ってカーソルが画面外に出たとき */
@@ -1074,20 +1022,71 @@ designateCharSet(Term *term, const char *head, const char *tail)
 	return head + 1;
 }
 
+Line *
+getLine(ScrBuf *sb, int row)
+{
+	int index = sb->firstline + row;
+	int oldest = MAX(sb->totallines - sb->maxlines, 0);
+
+	if (index < oldest || sb->totallines <= index || sb->rows <= row)
+		return NULL;
+
+	return LINE(sb, index);
+}
+
 void
-setSelection(Term *term, Selection *sel, int row, int col, bool start, bool rect)
+getLines(ScrBuf *sb, Line **lines, int len, int scr, const Selection *sel)
+{
+	Line *line;
+	int i, j, s, e, a, b, li, ri;
+
+	/* 指定された範囲をコピー */
+	for (i = 0; i < len; i++) {
+		if ((line = getLine(sb, i - scr)))
+			linecpy(lines[i], line);
+		else
+			PUT_NUL(lines[i], 0);
+	}
+
+	/* selectionの範囲を反転色にする */
+	if (sel == NULL || sel->sb != sb)
+		return;
+	s = MIN(sel->aline, sel->bline) - sb->firstline + scr;
+	e = MAX(sel->aline, sel->bline) - sb->firstline + scr;
+	for (i = MAX(s, 0); i < MIN(e + 1, len); i++) {
+		a = 0;
+		b = sb->cols + 2;
+
+		if (sel->rect || (sel->aline == sel->bline)) {
+			a = MIN(sel->acol,  sel->bcol);
+			b = MAX(sel->acol,  sel->bcol);
+		} else if (i == s) {
+			a = sel->aline < sel->bline ? sel->acol : sel->bcol;
+		} else if (i == e) {
+			b = sel->aline < sel->bline ? sel->bcol : sel->acol;
+		}
+
+		li = getCharCnt(lines[i]->str, a).index;
+		ri = getCharCnt(lines[i]->str, b).index;
+		for (j = li; j < ri && j < u32slen(lines[i]->str); j++)
+			lines[i]->attr[j] ^= NEGA;
+	}
+}
+
+void
+setSelection(Selection *sel, ScrBuf *sb, int row, int col, bool start, bool rect)
 {
 	Line *line;
 	int s, e, i;
 
 	/* 範囲をセット */
 	if (start) {
-		sel->sb = term->sb;
+		sel->sb = sb;
 		sel->acol  = MAX(col,  0);
-		sel->aline = MAX(row + term->sb->firstline, 0);
+		sel->aline = MAX(row + sel->sb->firstline, 0);
 	}
 	sel->bcol  = MAX(col,  0);
-	sel->bline = MAX(row + term->sb->firstline, 0);
+	sel->bline = MAX(row + sel->sb->firstline, 0);
 	sel->rect = rect;
 
 	/* 行のバージョンを記録 */
@@ -1095,30 +1094,30 @@ setSelection(Term *term, Selection *sel, int row, int col, bool start, bool rect
 	e = MAX(sel->aline, sel->bline);
 	sel->vers = xrealloc(sel->vers, (e - s + 1) * sizeof(int));
 	for (i = 0; i <= e - s; i++)
-		if ((line = getLine(term, s - term->sb->firstline + i)))
+		if ((line = getLine(sel->sb, s - sel->sb->firstline + i)))
 			sel->vers[i] = line->ver;
 }
 
 void
-checkSelection(Term *term, Selection *sel)
+checkSelection(Selection *sel)
 {
+	const int s = MIN(sel->aline, sel->bline);
+	const int e = MAX(sel->aline, sel->bline);
 	Line *line;
-	int s = MIN(sel->aline, sel->bline);
-	int e = MAX(sel->aline, sel->bline);
-	int i, first = term->sb->firstline;
+	int i, first = sel->sb->firstline;
 
 	for (i = 0; i <= e - s; i++) {
-		if ((line = getLine(term, s - first + i)) &&
-				sel->vers[i] == line->ver)
-			continue;
-		sel->aline = sel->bline;
-		sel->acol  = sel->bcol;
-		return;
+		line = getLine(sel->sb, s - first + i);
+		if (line == NULL || line->ver != sel->vers[i]) {
+			sel->aline = sel->bline;
+			sel->acol  = sel->bcol;
+			return;
+		}
 	}
 }
 
 void
-copySelection(Term *term, Selection *sel, char **dst, bool deltrail)
+copySelection(Selection *sel, char **dst, bool deltrail)
 {
 	int len = 256;
 	char32_t *cp, *copy = xmalloc(len * sizeof(copy[0]));
@@ -1133,7 +1132,7 @@ copySelection(Term *term, Selection *sel, char **dst, bool deltrail)
 
 	/* 選択範囲の文字列(UTF32)を読み出してコピー */
 	for(i = firstline; i <= lastline; i++) {
-		if (!(line = getLine(term, i - term->sb->firstline)))
+		if (!(line = getLine(sel->sb, i - sel->sb->firstline)))
 			continue;
 
 		l = MIN(getCharCnt(line->str,  left).index, u32slen(line->str));

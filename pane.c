@@ -144,7 +144,7 @@ void
 selectPane(Pane *pane, int row, int col, bool start, bool rect)
 {
 	pane->redraw_flag = true;
-	setSelection(pane->term, &pane->sel, row - pane->scr, col, start, rect);
+	setSelection(&pane->sel, pane->term->sb, row - pane->scr, col, start, rect);
 }
 
 void
@@ -217,7 +217,7 @@ drawPane(Pane *pane, Line *peline, int pecaret)
 	/* 選択範囲のチェック */
 	if ((pane->sel.aline != pane->sel.bline || pane->sel.acol != pane->sel.bcol) &&
 			pane->sel.sb == pane->term->sb)
-		checkSelection(pane->term, &pane->sel);
+		checkSelection(&pane->sel);
 
 	/* 画面をクリア */
 	if (pane->timer_lit[BELL_TIMER] != pane->bell_b) {
@@ -243,7 +243,7 @@ drawPane(Pane *pane, Line *peline, int pecaret)
 	pane->timer_active[BLINK_TIMER] = pane->timer_active[RAPID_TIMER] = false;
 
 	/* 端末の内容をPixmapに書く */
-	getLines(pane->term, pane->lines, pane->term->sb->rows + 2, pane->scr, &pane->sel);
+	getLines(pane->term->sb, pane->lines, pane->term->sb->rows + 2, pane->scr, &pane->sel);
 	for (i = 0; i < pane->term->sb->rows + 2; i++) {
 		line = pane->lines[i];
 
@@ -293,7 +293,7 @@ drawPane(Pane *pane, Line *peline, int pecaret)
 	} else if (1 <= pane->term->dec[25] && pane->term->cx < pane->term->sb->cols + 2) {
 		/* カーソルの描画 */
 		caretrow = pane->term->cy + pane->scr;
-		if (caretrow <= pane->term->sb->rows && (line = getLine(pane->term, pane->term->cy)))
+		if (caretrow <= pane->term->sb->rows && (line = getLine(pane->term->sb, pane->term->cy)))
 			drawCursor(pane, line, caretrow, pane->term->cx, pane->term->ctype);
 	}
 
