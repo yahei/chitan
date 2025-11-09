@@ -35,6 +35,7 @@ typedef struct Win {
 	int width, height;
 	Pane *pane;
 	char name[TITLE_MAX];
+	char *primary, *clip;
 } Win;
 
 enum { PRIMARY, CLIPBOARD, UTF8_STRING, MY_SELECTION, WM_DELETE_WINDOW, ATOM_NUM };
@@ -275,6 +276,8 @@ closeWindow(Win *win)
 	XFreeGC(dinfo.disp, win->gc);
 	XFree(win->hint);
 	XDestroyWindow(dinfo.disp, win->window);
+	free(win->primary);
+	free(win->clip);
 	free(win);
 }
 
@@ -362,7 +365,7 @@ handleXEvent(Win *win)
 				    dragging->sel.acol  == dragging->sel.bcol)
 					break;
 				XSetSelectionOwner(dinfo.disp, atoms[PRIMARY], win->window, event.xkey.time);
-				copySelection(dragging, &dragging->sel.primary, !dragging->sel.rect);
+				copySelection(dragging, &win->primary, !dragging->sel.rect);
 				dragging = NULL;
 			}
 			break;
@@ -390,8 +393,7 @@ handleXEvent(Win *win)
 
 		case SelectionRequest:  /* 貼り付ける文字列を送る */
 			sre = &event.xselectionrequest;
-			sel = sre->selection == atoms[PRIMARY] ?
-				pane->sel.primary : pane->sel.clip;
+			sel = sre->selection == atoms[PRIMARY] ? win->primary : win->clip;
 			if (!sel)
 				sel = "";
 			if (sre->property == None)
@@ -469,7 +471,7 @@ keyPressEvent(Win *win, XEvent event, int bufsize)
 
 	/* C-S-cでコピー */
 	if (keysym == XK_C && event.xkey.state & ControlMask) {
-		copySelection(win->pane, &win->pane->sel.clip, !win->pane->sel.rect);
+		copySelection(win->pane, &win->clip, !win->pane->sel.rect);
 		XSetSelectionOwner(dinfo.disp, atoms[CLIPBOARD], win->window, event.xkey.time);
 		return 0;
 	}

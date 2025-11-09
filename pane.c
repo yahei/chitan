@@ -80,8 +80,6 @@ destroyPane(Pane *pane)
 	for (plines = pane->lines_b; *plines; plines++)
 		freeLine(*plines);
 	free(pane->lines_b);
-	free(pane->sel.primary);
-	free(pane->sel.clip);
 	free(pane);
 }
 

@@ -53,7 +53,6 @@ typedef struct Selection {
 	struct ScreenBuffer *sb;
 	int aline, acol, bline, bcol;
 	int rect;
-	char *primary, *clip;
 	int *vers;
 } Selection;
 
