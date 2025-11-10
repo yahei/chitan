@@ -10,7 +10,7 @@ typedef struct DispInfo {
 	Colormap cmap;
 } DispInfo;
 
-enum timer_names { BELL_TIMER, BLINK_TIMER, RAPID_TIMER, CARET_TIMER, TIMER_NUM };
+enum timer_names { BLINK_TIMER, RAPID_TIMER, CARET_TIMER, TIMER_NUM };
 
 typedef struct Pane {
 	DispInfo *dinfo;
@@ -28,9 +28,9 @@ typedef struct Pane {
 	int scr, prevfst;
 	struct ScrBuf *prevbuf;
 	Selection sel;
-	struct timespec timers[TIMER_NUM], now;
+	struct timespec timers[TIMER_NUM], bell_time;
 	bool timer_active[TIMER_NUM];
-	bool timer_lit[TIMER_NUM], bell_b;
+	bool timer_lit[TIMER_NUM], bell_lit;
 	int bell_cnt, pallet_cnt;
 } Pane;
 
@@ -40,5 +40,6 @@ void setPaneSize(Pane *, int, int);
 void mouseEvent(Pane *, XEvent *);
 void scrollPane(Pane *, int);
 void selectPane(Pane *, int, int, bool, bool);
-void manageTimer(Pane *, struct timespec *);
-void drawPane(Pane *, Line *, int);
+void manageTimer(Pane *, const struct timespec *);
+void getNextTime(Pane *, struct timespec *, const struct timespec *);
+void drawPane(Pane *, const struct timespec *, Line *, int);

@@ -13,7 +13,7 @@
 		((int)(  RED(c1) * (a1) +   RED(c2) * (a2)) << 16) +\
 		((int)(GREEN(c1) * (a1) + GREEN(c2) * (a2)) <<  8) +\
 		((int)( BLUE(c1) * (a1) +  BLUE(c2) * (a2)) <<  0))
-#define BELLCOLOR(c)    (pane->timer_lit[BELL_TIMER] ?\
+#define BELLCOLOR(c)    (pane->bell_lit ?\
 		BLEND_COLOR((c), 0.85, 0xffffffff, 0.15) : (c))
 #define SCROLLMAX(sb)   ((sb)->firstline - MAX((sb)->totallines - (sb)->maxlines, 0))
 #define CREATE_PIXMAP(i,w,h,d)  XCreatePixmap(i->disp, DefaultRootWindow(i->disp), w, h, d)
@@ -148,15 +148,14 @@ selectPane(Pane *pane, int row, int col, bool start, bool rect)
 }
 
 void
-manageTimer(Pane *pane, struct timespec *timeout)
+manageTimer(Pane *pane, const struct timespec *now)
 {
-	struct timespec nexttime;
 	static const struct timespec duration[] = {
-		[BELL_TIMER]  = { 0, 150 * 1000 * 1000 },
 		[BLINK_TIMER] = { 0, 800 * 1000 * 1000 },
 		[RAPID_TIMER] = { 0, 200 * 1000 * 1000 },
 		[CARET_TIMER] = { 0, 500 * 1000 * 1000 },
 	};
+	Line **plines;
 	int i;
 
 	/* 点滅させる必要がないときはキャレットのタイマーを止める */
@@ -164,35 +163,65 @@ manageTimer(Pane *pane, struct timespec *timeout)
 		(pane->term->cy + pane->scr <= pane->term->sb->rows) &&
 		(!pane->term->ctype || pane->term->ctype % 2);
 
-	/* タイムアウトの設定 */
-	nexttime = (struct timespec){ 1 << 16, 0 };
-	timespecadd(&pane->now, &nexttime, &nexttime);
+	/* 点滅の処理 */
 	for (i = 0; i < TIMER_NUM; i++) {
-		if (!pane->timer_active[i])
-			continue;
-		if (timespeccmp(&pane->timers[i], &pane->now, <=)) {
+		if (pane->timer_active[i] && timespeccmp(&pane->timers[i], now, <)) {
 			pane->timer_lit[i] = !pane->timer_lit[i];
 			pane->redraw_flag = true;
 			timespecadd(&pane->timers[i], &duration[i], &pane->timers[i]);
-			if (timespeccmp(&pane->timers[i], &pane->now, <=))
-				timespecadd(&pane->now, &duration[i], &pane->timers[i]);
+			if (timespeccmp(&pane->timers[i], now, <=))
+				timespecadd(now, &duration[i], &pane->timers[i]);
 		}
-		nexttime = *CHOOSE(CHOOSE(&pane->timers[i], &nexttime, <), &pane->now, >);
 	}
-	timespecsub(&nexttime, &pane->now, timeout);
 
-	/* ベルは繰り返さない */
-	if (pane->timer_lit[BELL_TIMER] == false)
-		pane->timer_active[BELL_TIMER] = false;
+	/* ベルの処理 */
+	if (timespeccmp(now, &pane->bell_time, <) != pane->bell_lit) {
+		/* 点灯状態が変化したら画面全体を書き直す */
+		pane->bell_lit ^= true;
+		pane->redraw_flag = true;
+		for (plines = pane->lines_b; *plines; plines++)
+			PUT_NUL(*plines, 0);
+		clearPixmap(pane);
+	}
 }
 
 void
-drawPane(Pane *pane, Line *peline, int pecaret)
+getNextTime(Pane *pane, struct timespec *timeout, const struct timespec *now)
 {
+	struct timespec nexttime = (struct timespec){ 1 << 16, 0 };
+	int i;
+
+	timespecadd(now, &nexttime, &nexttime);
+
+	/* 点滅の時刻 */
+	for (i = 0; i < TIMER_NUM; i++)
+		if (pane->timer_active[i] &&
+		    timespeccmp(now, &pane->timers[i], <) &&
+		    timespeccmp(&pane->timers[i], &nexttime, <))
+			nexttime = pane->timers[i];
+
+	/* ベルの時刻 */
+	if (timespeccmp(now, &pane->bell_time, <) &&
+	    timespeccmp(&pane->bell_time, &nexttime, <))
+		nexttime = pane->bell_time;
+
+	timespecsub(&nexttime, now, timeout);
+}
+
+void
+drawPane(Pane *pane, const struct timespec *now, Line *peline, int pecaret)
+{
+	struct timespec bell_duration = { 0, 150 * 1000 * 1000 };
 	Line *line, **plines;
 	int pepos, pewidth, pecaretpos, caretrow;
 	int width, width_b;
 	int i;
+
+	/* タイマーの処理 */
+	manageTimer(pane, now);
+
+	if (!pane->redraw_flag)
+		return;
 
 	/* スクロール量の更新 */
 	pane->scr = (pane->prevbuf != pane->term->sb) ? 0 : pane->scr;
@@ -203,8 +232,7 @@ drawPane(Pane *pane, Line *peline, int pecaret)
 
 	/* ベルとパレット変更のチェック */
 	if (pane->bell_cnt != pane->term->bell_cnt) {
-		pane->timer_active[BELL_TIMER] = true;
-		pane->timers[BELL_TIMER] = pane->now;
+		timespecadd(now, &bell_duration, &pane->bell_time);
 		pane->bell_cnt = pane->term->bell_cnt;
 	}
 	if (pane->pallet_cnt != pane->term->pallet_cnt) {
@@ -220,19 +248,12 @@ drawPane(Pane *pane, Line *peline, int pecaret)
 		checkSelection(&pane->sel);
 
 	/* 画面をクリア */
-	if (pane->timer_lit[BELL_TIMER] != pane->bell_b) {
-		/* visual bellの点滅で全部書き直す */
-		for (plines = pane->lines_b; *plines; plines++)
-			PUT_NUL(*plines, 0);
-		pane->bell_b = pane->timer_lit[BELL_TIMER];
-		clearPixmap(pane);
-	} else {
-		/* カーソル等を書く前の状態に戻す */
-		XCopyArea(pane->dinfo->disp, pane->pixbuf, pane->pixmap, pane->gc,
-				pane->cx_b, pane->cy_b,
-				pane->cw_b, pane->ch_b,
-				pane->cx_b, pane->cy_b);
-	}
+	/* カーソル等を書く前の状態に戻す */
+	XCopyArea(pane->dinfo->disp, pane->pixbuf, pane->pixmap, pane->gc,
+			pane->cx_b, pane->cy_b,
+			pane->cw_b, pane->ch_b,
+			pane->cx_b, pane->cy_b);
+
 	/* 次回の消去範囲を設定 */
 	pane->cx_b = pane->xpad + pane->xfont->cw * (pane->term->cx - 0.5);
 	pane->cy_b = pane->ypad + pane->xfont->ch * (pane->term->cy + pane->scr);

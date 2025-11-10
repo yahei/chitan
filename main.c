@@ -170,7 +170,6 @@ run(void)
 				errExit("pselect failed.\n");
 		}
 		clock_gettime(CLOCK_MONOTONIC, &now);
-		pane->now = now;
 
 		/* ウィンドウのイベント処理 */
 		if (handleXEvent(win))
@@ -196,12 +195,11 @@ run(void)
 			XSetICValues(win->ime.xic, XNPreeditAttributes, win->ime.spotlist, NULL);
 		}
 
-		/* 点滅の処理をして次の待機時間を取得 */
-		manageTimer(pane, &timeout);
-
 		/* 再描画 */
-		if (pane->redraw_flag)
-			redraw(win);
+		redraw(win);
+
+		/* 次の待機時間を取得 */
+		getNextTime(pane, &timeout, &now);
 	}
 }
 
@@ -507,7 +505,7 @@ void
 redraw(Win *win)
 {
 	setWindowName(win, win->pane->term->title);
-	drawPane(win->pane, win->ime.peline, win->ime.caret);
+	drawPane(win->pane, &now, win->ime.peline, win->ime.caret);
 	XCopyArea(dinfo.disp, win->pane->pixmap, win->window, win->gc, 0, 0,
 			win->pane->width, win->pane->height, 0, 0);
 	XFlush(dinfo.disp);
