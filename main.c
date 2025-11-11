@@ -180,8 +180,7 @@ run(void)
 		while (0 < readPty(pane->term)) {
 			pane->redraw_flag = true;
 			clock_gettime(CLOCK_MONOTONIC, &time);
-			timespecsub(&time, &now, &time);
-			if (1 < time.tv_sec || 20 * 1000 * 1000 < time.tv_nsec)
+			if (20 * 1000 * 1000 < tstons(time) - tstons(now))
 				break;
 			usleep(1);
 		}
@@ -196,10 +195,11 @@ run(void)
 		}
 
 		/* 再描画 */
-		redraw(win);
+		if (pane->redraw_flag || (!FD_ISSET(tfd, &rfds) && !FD_ISSET(xfd, &rfds)))
+			redraw(win);
 
 		/* 次の待機時間を取得 */
-		getNextTime(pane, &timeout, &now);
+		getNextTime(pane, &timeout, tstons(now));
 	}
 }
 
@@ -324,8 +324,7 @@ handleXEvent(Win *win)
 		switch (event.type) {
 		case KeyPress:          /* キーボード入力 */
 			if (keyPressEvent(win, event, 64)) {
-				pane->timer_lit[CARET_TIMER] = true;
-				pane->timers[CARET_TIMER] = now;
+				pane->caret_time = tstons(now);
 				pane->scr = 0;
 			}
 			break;
@@ -505,7 +504,7 @@ void
 redraw(Win *win)
 {
 	setWindowName(win, win->pane->term->title);
-	drawPane(win->pane, &now, win->ime.peline, win->ime.caret);
+	drawPane(win->pane, tstons(now), win->ime.peline, win->ime.caret);
 	XCopyArea(dinfo.disp, win->pane->pixmap, win->window, win->gc, 0, 0,
 			win->pane->width, win->pane->height, 0, 0);
 	XFlush(dinfo.disp);

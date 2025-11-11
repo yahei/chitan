@@ -7,7 +7,6 @@
  * Pixmapを持ち、そこに端末の内容を書く
  */
 
-#define CHOOSE(a, b, c) (timespeccmp((a), (b), c) ? (a) : (b))
 #define BLEND_COLOR(c1, a1, c2, a2) (\
 		((int)(ALPHA(c1) * (a1) + ALPHA(c2) * (a2)) << 24) +\
 		((int)(  RED(c1) * (a1) +   RED(c2) * (a2)) << 16) +\
@@ -18,10 +17,14 @@
 #define SCROLLMAX(sb)   ((sb)->firstline - MAX((sb)->totallines - (sb)->maxlines, 0))
 #define CREATE_PIXMAP(i,w,h,d)  XCreatePixmap(i->disp, DefaultRootWindow(i->disp), w, h, d)
 #define DRAW_CREATE(i,p)        XftDrawCreate(i->disp, p, i->visual, i->cmap)
+const long long blink_duration = 800 * 1000 * 1000;
+const long long rapid_duration = 200 * 1000 * 1000;
+const long long caret_duration = 500 * 1000 * 1000;
 
-static void drawLine(Pane *, Line *, int, int, int, int);
+static void manageTimer(Pane *, nsec);
+static void drawLine(Pane *, Line *, int, int, int, int, nsec);
 static int linecmp(Pane *, Line *, Line *, int, int);
-static void drawCursor(Pane *, Line *, int, int, int);
+static void drawCursor(Pane *, Line *, int, int, int, nsec);
 static void resizeLines(Pane *);
 static void clearPixmap(Pane *);
 
@@ -35,9 +38,7 @@ createPane(DispInfo *dinfo, XFont *xfont, int width, int height, float alpha, in
 		.width = width, .height = height,
 		.xpad = xfont->cw / 2, .ypad = xfont->cw / 2
 	};
-	memset(&pane->timers, 0, TIMER_NUM * sizeof(struct timespec));
 	memset(&pane->timer_active, 0, TIMER_NUM);
-	memset(&pane->timer_lit, 0, TIMER_NUM);
 
 	/* 端末をオープン */
 	pane->term = openTerm((height - pane->ypad * 2) / xfont->ch,
@@ -148,34 +149,17 @@ selectPane(Pane *pane, int row, int col, bool start, bool rect)
 }
 
 void
-manageTimer(Pane *pane, const struct timespec *now)
+manageTimer(Pane *pane, nsec now)
 {
-	static const struct timespec duration[] = {
-		[BLINK_TIMER] = { 0, 800 * 1000 * 1000 },
-		[RAPID_TIMER] = { 0, 200 * 1000 * 1000 },
-		[CARET_TIMER] = { 0, 500 * 1000 * 1000 },
-	};
 	Line **plines;
-	int i;
 
 	/* 点滅させる必要がないときはキャレットのタイマーを止める */
 	pane->timer_active[CARET_TIMER] = pane->focus &&
 		(pane->term->cy + pane->scr <= pane->term->sb->rows) &&
 		(!pane->term->ctype || pane->term->ctype % 2);
 
-	/* 点滅の処理 */
-	for (i = 0; i < TIMER_NUM; i++) {
-		if (pane->timer_active[i] && timespeccmp(&pane->timers[i], now, <)) {
-			pane->timer_lit[i] = !pane->timer_lit[i];
-			pane->redraw_flag = true;
-			timespecadd(&pane->timers[i], &duration[i], &pane->timers[i]);
-			if (timespeccmp(&pane->timers[i], now, <=))
-				timespecadd(now, &duration[i], &pane->timers[i]);
-		}
-	}
-
 	/* ベルの処理 */
-	if (timespeccmp(now, &pane->bell_time, <) != pane->bell_lit) {
+	if ((now < pane->bell_time) != pane->bell_lit) {
 		/* 点灯状態が変化したら画面全体を書き直す */
 		pane->bell_lit ^= true;
 		pane->redraw_flag = true;
@@ -183,45 +167,43 @@ manageTimer(Pane *pane, const struct timespec *now)
 			PUT_NUL(*plines, 0);
 		clearPixmap(pane);
 	}
+
+	if (pane->timer_active[BLINK_TIMER] ||
+	    pane->timer_active[RAPID_TIMER] ||
+	    pane->timer_active[CARET_TIMER])
+		pane->redraw_flag = true;
 }
 
 void
-getNextTime(Pane *pane, struct timespec *timeout, const struct timespec *now)
+getNextTime(Pane *pane, struct timespec *timeout, nsec now)
 {
-	struct timespec nexttime = (struct timespec){ 1 << 16, 0 };
-	int i;
+	long long int time = (long long int)2 << 32;
 
-	timespecadd(now, &nexttime, &nexttime);
+	/* ベルの時間 */
+	if (now < pane->bell_time)
+		time = pane->bell_time - now;
 
+#define wait(t, d)      ((d) - (now - (t)) % (d))
 	/* 点滅の時刻 */
-	for (i = 0; i < TIMER_NUM; i++)
-		if (pane->timer_active[i] &&
-		    timespeccmp(now, &pane->timers[i], <) &&
-		    timespeccmp(&pane->timers[i], &nexttime, <))
-			nexttime = pane->timers[i];
+	if (pane->timer_active[BLINK_TIMER])
+		time = MIN(wait(pane->blink_time, blink_duration), time);
+	if (pane->timer_active[RAPID_TIMER])
+		time = MIN(wait(pane->blink_time, rapid_duration), time);
+	if (pane->timer_active[CARET_TIMER])
+		time = MIN(wait(pane->caret_time, caret_duration), time);
+#undef wait
 
-	/* ベルの時刻 */
-	if (timespeccmp(now, &pane->bell_time, <) &&
-	    timespeccmp(&pane->bell_time, &nexttime, <))
-		nexttime = pane->bell_time;
-
-	timespecsub(&nexttime, now, timeout);
+	*timeout = nstots(time);
 }
 
 void
-drawPane(Pane *pane, const struct timespec *now, Line *peline, int pecaret)
+drawPane(Pane *pane, nsec now, Line *peline, int pecaret)
 {
-	struct timespec bell_duration = { 0, 150 * 1000 * 1000 };
+	nsec bell_duration = 150 * 1000 * 1000;
 	Line *line, **plines;
 	int pepos, pewidth, pecaretpos, caretrow;
 	int width, width_b;
 	int i;
-
-	/* タイマーの処理 */
-	manageTimer(pane, now);
-
-	if (!pane->redraw_flag)
-		return;
 
 	/* スクロール量の更新 */
 	pane->scr = (pane->prevbuf != pane->term->sb) ? 0 : pane->scr;
@@ -232,7 +214,7 @@ drawPane(Pane *pane, const struct timespec *now, Line *peline, int pecaret)
 
 	/* ベルとパレット変更のチェック */
 	if (pane->bell_cnt != pane->term->bell_cnt) {
-		timespecadd(now, &bell_duration, &pane->bell_time);
+		pane->bell_time = now + bell_duration;
 		pane->bell_cnt = pane->term->bell_cnt;
 	}
 	if (pane->pallet_cnt != pane->term->pallet_cnt) {
@@ -241,6 +223,9 @@ drawPane(Pane *pane, const struct timespec *now, Line *peline, int pecaret)
 			PUT_NUL(*plines, 0);
 		pane->pallet_cnt = pane->term->pallet_cnt;
 	}
+
+	/* タイマーの処理 */
+	manageTimer(pane, now);
 
 	/* 選択範囲のチェック */
 	if ((pane->sel.aline != pane->sel.bline || pane->sel.acol != pane->sel.bcol) &&
@@ -282,7 +267,7 @@ drawPane(Pane *pane, const struct timespec *now, Line *peline, int pecaret)
 
 		/* 行を書く */
 		if (line)
-			drawLine(pane, line, i, 0, pane->term->sb->cols + 2, 0);
+			drawLine(pane, line, i, 0, pane->term->sb->cols + 2, 0, now);
 	}
 
 	/* 書いた文字とPixmapの状態を記録 */
@@ -305,8 +290,8 @@ drawPane(Pane *pane, const struct timespec *now, Line *peline, int pecaret)
 		pepos = MIN(pepos, pane->term->cx);
 
 		/* Preeditとカーソルの描画 */
-		drawLine(pane, peline, pane->term->cy, pepos, pewidth, 0);
-		drawCursor(pane, peline, pane->term->cy, pepos + pecaretpos, 6);
+		drawLine(pane, peline, pane->term->cy, pepos, pewidth, 0, now);
+		drawCursor(pane, peline, pane->term->cy, pepos + pecaretpos, 6, now);
 
 		/* 次回の消去範囲を変更 */
 		pane->cx_b = pane->xpad + pane->xfont->cw * (pepos - 0.5);
@@ -315,14 +300,14 @@ drawPane(Pane *pane, const struct timespec *now, Line *peline, int pecaret)
 		/* カーソルの描画 */
 		caretrow = pane->term->cy + pane->scr;
 		if (caretrow <= pane->term->sb->rows && (line = getLine(pane->term->sb, pane->term->cy)))
-			drawCursor(pane, line, caretrow, pane->term->cx, pane->term->ctype);
+			drawCursor(pane, line, caretrow, pane->term->cx, pane->term->ctype, now);
 	}
 
 	pane->redraw_flag = false;
 }
 
 void
-drawLine(Pane *pane, Line *line, int row, int col, int width, int pos)
+drawLine(Pane *pane, Line *line, int row, int col, int width, int pos, nsec now)
 {
 	int next, i = getCharCnt(line->str, pos).index;
 	int x, y, w;
@@ -336,7 +321,7 @@ drawLine(Pane *pane, Line *line, int row, int col, int width, int pos)
 
 	/* 同じ属性の文字はまとめて処理する */
 	next = MIN(findNextSGR(line, i), width);
-	drawLine(pane, line, row, col, width, pos + u32snwidth(&line->str[i], next - i));
+	drawLine(pane, line, row, col, width, pos + u32snwidth(&line->str[i], next - i), now);
 
 	/* 座標 */
 	x = pane->xpad + (col + pos) * pane->xfont->cw;
@@ -382,8 +367,8 @@ drawLine(Pane *pane, Line *line, int row, int col, int width, int pos)
 		pane->timer_active[BLINK_TIMER] = true;
 	if (line->attr[i] & RAPID)
 		pane->timer_active[RAPID_TIMER] = true;
-	if ((line->attr[i] & BLINK ? pane->timer_lit[BLINK_TIMER] ? 2 : 0 : 1) +
-	    (line->attr[i] & RAPID ? pane->timer_lit[RAPID_TIMER] ? 2 : 0 : 1) < 2)
+	if ((line->attr[i] & BLINK ? ((now / blink_duration) % 2) ? 2 : 0 : 1) +
+	    (line->attr[i] & RAPID ? ((now / rapid_duration) % 2) ? 2 : 0 : 1) < 2)
 		return;
 
 	/* 非表示 */
@@ -430,7 +415,7 @@ linecmp(Pane *pane, Line *line1, Line *line2, int pos, int len)
 }
 
 void
-drawCursor(Pane *pane, Line *line, int row, int col, int type)
+drawCursor(Pane *pane, Line *line, int row, int col, int type, nsec now)
 {
 	const int index = getCharCnt(line->str, col).index;
 	char32_t *c = index < u32slen(line->str) ? &line->str[index] : (char32_t *)L" ";
@@ -443,7 +428,8 @@ drawCursor(Pane *pane, Line *line, int row, int col, int type)
 	Line cursor;
 
 	/* 点滅 */
-	if (pane->focus && (!type || type % 2) && (pane->timer_lit[CARET_TIMER]))
+	if (((now - pane->caret_time) / caret_duration) % 2 &&
+			pane->focus && (!type || type % 2))
 		return;
 
 	XSetForeground(dinfo->disp, pane->gc, BELLCOLOR(pane->term->palette[deffg]));
@@ -453,7 +439,7 @@ drawCursor(Pane *pane, Line *line, int row, int col, int type)
 		if (pane->focus) {
 			attr = index < u32slen(line->str) ? line->attr[index] : 0;
 			cursor = (Line){c, &attr, &defbg, &deffg};
-			drawLine(pane, &cursor, row, col, 1, 0);
+			drawLine(pane, &cursor, row, col, 1, 0, now);
 		} else {
 			XDrawRectangle(dinfo->disp, pane->pixmap, pane->gc, x, y, cw, ch - 1);
 			XDrawPoint(dinfo->disp, pane->pixmap, pane->gc, x + cw, y + ch - 1);

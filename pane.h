@@ -4,6 +4,11 @@
 #include "term.h"
 #include "font.h"
 
+typedef long long int   nsec;
+#define GIGA            (1000000000)
+#define tstons(t)       ((long long)(t).tv_sec * GIGA + (t).tv_nsec)
+#define nstots(t)       ((struct timespec){ (t) / GIGA, (t) % GIGA })
+
 typedef struct DispInfo {
 	Display *disp;
 	Visual *visual;
@@ -28,9 +33,9 @@ typedef struct Pane {
 	int scr, prevfst;
 	struct ScrBuf *prevbuf;
 	Selection sel;
-	struct timespec timers[TIMER_NUM], bell_time;
+	nsec blink_time, caret_time, bell_time;
 	bool timer_active[TIMER_NUM];
-	bool timer_lit[TIMER_NUM], bell_lit;
+	bool bell_lit;
 	int bell_cnt, pallet_cnt;
 } Pane;
 
@@ -40,6 +45,5 @@ void setPaneSize(Pane *, int, int);
 void mouseEvent(Pane *, XEvent *);
 void scrollPane(Pane *, int);
 void selectPane(Pane *, int, int, bool, bool);
-void manageTimer(Pane *, const struct timespec *);
-void getNextTime(Pane *, struct timespec *, const struct timespec *);
-void drawPane(Pane *, const struct timespec *, Line *, int);
+void getNextTime(Pane *, struct timespec *, nsec);
+void drawPane(Pane *, nsec, Line *, int);
