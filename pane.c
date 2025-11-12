@@ -52,6 +52,7 @@ createPane(DispInfo *dinfo, XFont *xfont, int width, int height, float alpha, in
 	pane->pixmap = CREATE_PIXMAP(pane->dinfo, width, height, pane->depth);
 	pane->pixbuf = CREATE_PIXMAP(pane->dinfo, width, height, pane->depth);
 	pane->gc = XCreateGC(dinfo->disp, pane->pixmap, 0, NULL);
+	XSetGraphicsExposures(dinfo->disp, pane->gc, false);
 	pane->draw = DRAW_CREATE(pane->dinfo, pane->pixmap);
 	pane->lines = xmalloc(sizeof(Line *));
 	*pane->lines = NULL;
@@ -96,6 +97,7 @@ setPaneSize(Pane *pane, int width, int height)
 	pane->pixmap = CREATE_PIXMAP(pane->dinfo, width, height, pane->depth);
 	pane->pixbuf = CREATE_PIXMAP(pane->dinfo, width, height, pane->depth);
 	pane->gc = XCreateGC(pane->dinfo->disp, pane->pixmap, 0, NULL);
+	XSetGraphicsExposures(pane->dinfo->disp, pane->gc, false);
 	pane->draw = DRAW_CREATE(pane->dinfo, pane->pixmap);
 	pane->width = width;
 	pane->height = height;
