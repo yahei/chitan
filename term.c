@@ -1108,7 +1108,7 @@ checkSelection(Selection *sel)
 
 	for (i = 0; i <= e - s; i++) {
 		line = getLine(sel->sb, s - first + i);
-		if (line == NULL || line->ver != sel->vers[i]) {
+		if (line != NULL && line->ver != sel->vers[i]) {
 			sel->aline = sel->bline;
 			sel->acol  = sel->bcol;
 			return;
