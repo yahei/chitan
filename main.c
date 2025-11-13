@@ -335,7 +335,7 @@ handleXEvent(Win *win)
 			mb = event.xbutton.button;
 			if ((mb == 4 || mb == 5) && pane->term->sb == &pane->term->ori) {
 				scrollPane(pane, (mb == 4 ? 1 : -1) * 3);
-			} else if (!BETWEEN(mb, 1, 4) || (state & ~(ShiftMask | Mod1Mask)) ||
+			} else if (!BETWEEN(mb, 1, 4) || (state & ~(ShiftMask | Mod1Mask | Mod2Mask)) ||
 					(pane->term->sb == &pane->term->alt && !(state & ShiftMask))) {
 				mouseEvent(pane, &event);
 			} else if (mb == 2) {
