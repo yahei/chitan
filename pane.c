@@ -17,6 +17,8 @@
 #define SCROLLMAX(sb)   ((sb)->firstline - MAX((sb)->totallines - (sb)->maxlines, 0))
 #define CREATE_PIXMAP(i,w,h,d)  XCreatePixmap(i->disp, DefaultRootWindow(i->disp), w, h, d)
 #define DRAW_CREATE(i,p)        XftDrawCreate(i->disp, p, i->visual, i->cmap)
+#define LINE(p, n)      (pane->lines[n + 1])
+#define LINE_B(p, n)    (pane->lines_b[n + 1])
 const long long blink_duration = 800 * 1000 * 1000;
 const long long rapid_duration = 200 * 1000 * 1000;
 const long long caret_duration = 500 * 1000 * 1000;
@@ -226,14 +228,21 @@ drawPane(Pane *pane, nsec now, Line *peline, int pecaret)
 	/* 点滅中フラグをクリア */
 	pane->timer_active[BLINK_TIMER] = pane->timer_active[RAPID_TIMER] = false;
 
-	/* 端末の内容をPixmapに書く */
-	getLines(pane->term->sb, pane->lines, pane->term->sb->rows + 2, pane->scr, &pane->sel);
-	for (i = 0; i < pane->term->sb->rows + 2; i++) {
-		line = pane->lines[i];
+	/* 端末の内容を取得 */
+	getLines(pane->term->sb, pane->lines, pane->term->sb->rows + 3, pane->scr + 1, &pane->sel);
+
+	/* -1行目は画面端をまたいで選択してる場合だけ書く */
+	if ((pane->sel.aline < pane->term->sb->firstline - pane->scr) ==
+	    (pane->sel.bline < pane->term->sb->firstline - pane->scr))
+		PUT_NUL(LINE(pane, -1), 0);
+
+	/* Pixmapに書く */
+	for (i = -1; i < pane->term->sb->rows + 2; i++) {
+		line = LINE(pane, i);
 
 		/* 前回の方が長い場合の塗りつぶし */
 		width   = line ? u32swidth(line->str) : 0;
-		width_b = u32swidth(pane->lines_b[i]->str);
+		width_b = u32swidth(LINE_B(pane, i)->str);
 		if (width < width_b) {
 			XSetForeground(pane->dinfo->disp, pane->gc, BELLCOLOR(pane->term->palette[defbg]));
 			XFillRectangle(pane->dinfo->disp, pane->pixmap, pane->gc,
@@ -249,8 +258,8 @@ drawPane(Pane *pane, nsec now, Line *peline, int pecaret)
 	}
 
 	/* 書いた文字とPixmapの状態を記録 */
-	for (i = 0; i < pane->term->sb->rows + 2; i++)
-		linecpy(pane->lines_b[i], pane->lines[i]);
+	for (i = -1; i < pane->term->sb->rows + 2; i++)
+		linecpy(LINE_B(pane, i), LINE(pane, i));
 	XCopyArea(pane->dinfo->disp, pane->pixmap, pane->pixbuf, pane->gc,
 			0, 0, pane->width, pane->height, 0, 0);
 
@@ -277,7 +286,8 @@ drawPane(Pane *pane, nsec now, Line *peline, int pecaret)
 	} else if (1 <= pane->term->dec[25] && pane->term->cx < pane->term->sb->cols + 2) {
 		/* カーソルの描画 */
 		caretrow = pane->term->cy + pane->scr;
-		if (caretrow <= pane->term->sb->rows && (line = getLine(pane->term->sb, pane->term->cy)))
+		line = LINE(pane, caretrow);
+		if (caretrow <= pane->term->sb->rows)
 			drawCursor(pane, line, caretrow, pane->term->cx, pane->term->ctype, now);
 	}
 
@@ -309,10 +319,10 @@ drawLine(Pane *pane, Line *line, int row, int col, int width, int pos, nsec now)
 	w = pane->xfont->cw * u32snwidth(&line->str[i], next - i);
 
 	/* 変化無し・コピー・書き直しの分岐 */
-#define LINE_CMP(R) linecmp(pane, line, pane->lines_b[R], pos, next - i)
+#define LINE_CMP(R) linecmp(pane, line, LINE_B(pane, R), pos, next - i)
 	if (line->attr[i] & (ITALIC | BLINK | RAPID))
 		sl = pane->term->sb->rows;
-	else if (LINE_CMP(row))
+	else if (BETWEEN(row, -1, pane->term->sb->rows + 2) && LINE_CMP(row))
 		return;
 	else
 		for (sl = 0; sl < pane->term->sb->rows; sl++)
@@ -475,11 +485,11 @@ clearPixmap(Pane *pane, nsec now)
 	if (pane->lines_b)
 		for (plines = pane->lines_b; *plines; plines++)
 			freeLine(*plines);
-	pane->lines = xrealloc(pane->lines, (pane->term->sb->rows + 3) * sizeof(Line *));
-	pane->lines[pane->term->sb->rows + 2] = NULL;
-	pane->lines_b = xrealloc(pane->lines_b, (pane->term->sb->rows + 3) * sizeof(Line *));
-	pane->lines_b[pane->term->sb->rows + 2] = NULL;
-	for (i = 0; i < pane->term->sb->rows + 2; i++) {
+	pane->lines = xrealloc(pane->lines, (pane->term->sb->rows + 4) * sizeof(Line *));
+	pane->lines[pane->term->sb->rows + 3] = NULL;
+	pane->lines_b = xrealloc(pane->lines_b, (pane->term->sb->rows + 4) * sizeof(Line *));
+	pane->lines_b[pane->term->sb->rows + 3] = NULL;
+	for (i = 0; i < pane->term->sb->rows + 3; i++) {
 		pane->lines[i] = allocLine();
 		pane->lines_b[i] = allocLine();
 	}
