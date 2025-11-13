@@ -6,6 +6,7 @@
 #include <time.h>
 #include <unistd.h>
 #include <wchar.h>
+#include <X11/Xatom.h>
 #include <X11/Xlib.h>
 
 #include "pane.h"
@@ -38,7 +39,7 @@ typedef struct Win {
 	char *primary, *clip;
 } Win;
 
-enum { PRIMARY, CLIPBOARD, UTF8_STRING, MY_SELECTION, WM_DELETE_WINDOW, ATOM_NUM };
+enum { CLIPBOARD, UTF8_STRING, WM_DELETE_WINDOW, ATOM_NUM };
 
 static Atom atoms[ATOM_NUM];
 static DispInfo dinfo;
@@ -141,7 +142,7 @@ init(void)
 		fatal("XftFontOpen failed.\n");
 
 	/* Selection */
-	names = (char *[]){ "PRIMARY", "CLIPBOARD", "UTF8_STRING", "_MY_SELECTION_", "WM_DELETE_WINDOW" };
+	names = (char *[]){ "CLIPBOARD", "UTF8_STRING", "WM_DELETE_WINDOW" };
 	for (i = 0; i < ATOM_NUM; i++)
 		atoms[i] = XInternAtom(dinfo.disp, names[i], True);
 	
@@ -338,8 +339,8 @@ handleXEvent(Win *win)
 					(pane->term->sb == &pane->term->alt && !(state & ShiftMask))) {
 				mouseEvent(pane, &event);
 			} else if (mb == 2) {
-				XConvertSelection(dinfo.disp, atoms[PRIMARY], atoms[UTF8_STRING],
-						atoms[MY_SELECTION], win->window, event.xkey.time);
+				XConvertSelection(dinfo.disp, XA_PRIMARY, atoms[UTF8_STRING],
+						XA_PRIMARY, win->window, CurrentTime);
 				pane->scr = 0;
 			} else {
 				dragging = pane;
@@ -361,7 +362,7 @@ handleXEvent(Win *win)
 				if (dragging->sel.aline == dragging->sel.bline &&
 				    dragging->sel.acol  == dragging->sel.bcol)
 					break;
-				XSetSelectionOwner(dinfo.disp, atoms[PRIMARY], win->window, event.xkey.time);
+				XSetSelectionOwner(dinfo.disp, XA_PRIMARY, win->window, CurrentTime);
 				copySelection(&dragging->sel, &win->primary, !dragging->sel.rect);
 				dragging = NULL;
 			}
@@ -390,7 +391,7 @@ handleXEvent(Win *win)
 
 		case SelectionRequest:  /* 貼り付ける文字列を送る */
 			sre = &event.xselectionrequest;
-			sel = sre->selection == atoms[PRIMARY] ? win->primary : win->clip;
+			sel = sre->selection == XA_PRIMARY ? win->primary : win->clip;
 			if (!sel)
 				sel = "";
 			if (sre->property == None)
@@ -469,14 +470,14 @@ keyPressEvent(Win *win, XEvent event, int bufsize)
 	/* C-S-cでコピー */
 	if (keysym == XK_C && event.xkey.state & ControlMask) {
 		copySelection(&win->pane->sel, &win->clip, !win->pane->sel.rect);
-		XSetSelectionOwner(dinfo.disp, atoms[CLIPBOARD], win->window, event.xkey.time);
+		XSetSelectionOwner(dinfo.disp, atoms[CLIPBOARD], win->window, CurrentTime);
 		return 0;
 	}
 
 	/* C-S-vで貼り付け */
 	if (keysym == XK_V && event.xkey.state & ControlMask) {
 		XConvertSelection(dinfo.disp, atoms[CLIPBOARD], atoms[UTF8_STRING],
-				atoms[MY_SELECTION], win->window, event.xkey.time);
+				atoms[CLIPBOARD], win->window, CurrentTime);
 		return 1;
 	}
 
