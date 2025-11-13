@@ -12,7 +12,7 @@
 		((int)(  RED(c1) * (a1) +   RED(c2) * (a2)) << 16) +\
 		((int)(GREEN(c1) * (a1) + GREEN(c2) * (a2)) <<  8) +\
 		((int)( BLUE(c1) * (a1) +  BLUE(c2) * (a2)) <<  0))
-#define BELLCOLOR(c)    (pane->bell_lit ?\
+#define BELLCOLOR(c)    (now < pane->bell_time ?\
 		BLEND_COLOR((c), 0.85, 0xffffffff, 0.15) : (c))
 #define SCROLLMAX(sb)   ((sb)->firstline - MAX((sb)->totallines - (sb)->maxlines, 0))
 #define CREATE_PIXMAP(i,w,h,d)  XCreatePixmap(i->disp, DefaultRootWindow(i->disp), w, h, d)
@@ -25,8 +25,8 @@ static void manageTimer(Pane *, nsec);
 static void drawLine(Pane *, Line *, int, int, int, int, nsec);
 static int linecmp(Pane *, Line *, Line *, int, int);
 static void drawCursor(Pane *, Line *, int, int, int, nsec);
-static void resizeLines(Pane *);
-static void clearPixmap(Pane *);
+static void resizeLines(Pane *, nsec);
+static void clearPixmap(Pane *, nsec);
 
 Pane *
 createPane(DispInfo *dinfo, XFont *xfont, int width, int height, float alpha, int lines, char *const cmd[])
@@ -58,8 +58,7 @@ createPane(DispInfo *dinfo, XFont *xfont, int width, int height, float alpha, in
 	*pane->lines = NULL;
 	pane->lines_b = xmalloc(sizeof(Line *));
 	*pane->lines_b = NULL;
-	resizeLines(pane);
-	clearPixmap(pane);
+	resizeLines(pane, pane->time_b);
 
 	return pane;
 }
@@ -87,7 +86,6 @@ void
 setPaneSize(Pane *pane, int width, int height)
 {
 	int oldrows = pane->term->sb->rows;
-	Line **plines;
 
 	XftDrawDestroy(pane->draw);
 	XFreeGC(pane->dinfo->disp, pane->gc);
@@ -104,12 +102,10 @@ setPaneSize(Pane *pane, int width, int height)
 
 	setWinSize(pane->term, (height - pane->ypad * 2) / pane->xfont->ch,
 			(width - pane->xpad * 2) / pane->xfont->cw, width, height);
-	if (oldrows == pane->term->sb->rows)
-		for (plines = pane->lines_b; *plines; plines++)
-			PUT_NUL(*plines, 0);
+	if (oldrows != pane->term->sb->rows)
+		resizeLines(pane, pane->time_b);
 	else
-		resizeLines(pane);
-	clearPixmap(pane);
+		clearPixmap(pane, pane->time_b);
 }
 
 void
@@ -153,27 +149,26 @@ selectPane(Pane *pane, int row, int col, bool start, bool rect)
 void
 manageTimer(Pane *pane, nsec now)
 {
-	Line **plines;
-
 	/* 点滅させる必要がないときはキャレットのタイマーを止める */
 	pane->timer_active[CARET_TIMER] = pane->focus &&
 		(pane->term->cy + pane->scr <= pane->term->sb->rows) &&
 		(!pane->term->ctype || pane->term->ctype % 2);
 
-	/* ベルの処理 */
-	if ((now < pane->bell_time) != pane->bell_lit) {
-		/* 点灯状態が変化したら画面全体を書き直す */
-		pane->bell_lit ^= true;
-		pane->redraw_flag = true;
-		for (plines = pane->lines_b; *plines; plines++)
-			PUT_NUL(*plines, 0);
-		clearPixmap(pane);
-	}
+	/* ベル */
+	if (pane->time_b < pane->bell_time && pane->bell_time <= now)
+		clearPixmap(pane, now);
 
-	if (pane->timer_active[BLINK_TIMER] ||
-	    pane->timer_active[RAPID_TIMER] ||
-	    pane->timer_active[CARET_TIMER])
+	/* 点滅 */
+#define LIT(T,D) (((T) / (D)) % 2)
+#define CHECK(T,D,B) (pane->timer_active[T] && LIT(pane->time_b - (B), D) != LIT( now - (B), D))
+	if (CHECK(BLINK_TIMER, blink_duration, 0) ||
+	    CHECK(RAPID_TIMER, rapid_duration, 0) ||
+	    CHECK(CARET_TIMER, caret_duration, pane->caret_time))
 		pane->redraw_flag = true;
+#undef CHECK
+#undef LIT
+
+	pane->time_b = now;
 }
 
 void
@@ -188,9 +183,9 @@ getNextTime(Pane *pane, struct timespec *timeout, nsec now)
 #define wait(t, d)      ((d) - (now - (t)) % (d))
 	/* 点滅の時刻 */
 	if (pane->timer_active[BLINK_TIMER])
-		time = MIN(wait(pane->blink_time, blink_duration), time);
+		time = MIN(wait(0, blink_duration), time);
 	if (pane->timer_active[RAPID_TIMER])
-		time = MIN(wait(pane->blink_time, rapid_duration), time);
+		time = MIN(wait(0, rapid_duration), time);
 	if (pane->timer_active[CARET_TIMER])
 		time = MIN(wait(pane->caret_time, caret_duration), time);
 #undef wait
@@ -198,11 +193,11 @@ getNextTime(Pane *pane, struct timespec *timeout, nsec now)
 	*timeout = nstots(time);
 }
 
-void
+int
 drawPane(Pane *pane, nsec now, Line *peline, int pecaret)
 {
 	nsec bell_duration = 150 * 1000 * 1000;
-	Line *line, **plines;
+	Line *line;
 	int pepos, pewidth, pecaretpos, caretrow;
 	int width, width_b;
 	int i;
@@ -218,16 +213,20 @@ drawPane(Pane *pane, nsec now, Line *peline, int pecaret)
 	if (pane->bell_cnt != pane->term->bell_cnt) {
 		pane->bell_time = now + bell_duration;
 		pane->bell_cnt = pane->term->bell_cnt;
+		/* ベル発生時の画面クリア */
+		clearPixmap(pane, now);
 	}
 	if (pane->pallet_cnt != pane->term->pallet_cnt) {
-		clearPixmap(pane);
-		for (plines = pane->lines_b; *plines; plines++)
-			PUT_NUL(*plines, 0);
 		pane->pallet_cnt = pane->term->pallet_cnt;
+		/* パレット変更時の再描画 */
+		clearPixmap(pane, now);
 	}
 
 	/* タイマーの処理 */
 	manageTimer(pane, now);
+
+	if (!pane->redraw_flag)
+		return 0;
 
 	/* 選択範囲のチェック */
 	if ((pane->sel.aline != pane->sel.bline || pane->sel.acol != pane->sel.bcol) &&
@@ -306,6 +305,8 @@ drawPane(Pane *pane, nsec now, Line *peline, int pecaret)
 	}
 
 	pane->redraw_flag = false;
+
+	return 1;
 }
 
 void
@@ -460,7 +461,7 @@ drawCursor(Pane *pane, Line *line, int row, int col, int type, nsec now)
 }
 
 void
-resizeLines(Pane *pane)
+resizeLines(Pane *pane, nsec now)
 {
 	Line **plines;
 	int i;
@@ -479,11 +480,19 @@ resizeLines(Pane *pane)
 		pane->lines[i] = allocLine();
 		pane->lines_b[i] = allocLine();
 	}
+
+	clearPixmap(pane, now);
 }
 
 void
-clearPixmap(Pane *pane)
+clearPixmap(Pane *pane, nsec now)
 {
+	Line **plines;
+
+	pane->redraw_flag = true;
+	for (plines = pane->lines_b; *plines; plines++)
+		PUT_NUL(*plines, 0);
+
 	XSetForeground(pane->dinfo->disp, pane->gc, BELLCOLOR(pane->term->palette[defbg]));
 	XFillRectangle(pane->dinfo->disp, pane->pixmap, pane->gc, 0, 0, pane->width, pane->height);
 	XSetForeground(pane->dinfo->disp, pane->gc, BELLCOLOR(pane->term->palette[defbg]));

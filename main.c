@@ -195,8 +195,7 @@ run(void)
 		}
 
 		/* 再描画 */
-		if (pane->redraw_flag || (!FD_ISSET(tfd, &rfds) && !FD_ISSET(xfd, &rfds)))
-			redraw(win);
+		redraw(win);
 
 		/* 次の待機時間を取得 */
 		getNextTime(pane, &timeout, tstons(now));
@@ -505,9 +504,9 @@ void
 redraw(Win *win)
 {
 	setWindowName(win, win->pane->term->title);
-	drawPane(win->pane, tstons(now), win->ime.peline, win->ime.caret);
-	XCopyArea(dinfo.disp, win->pane->pixmap, win->window, win->gc, 0, 0,
-			win->pane->width, win->pane->height, 0, 0);
+	if (drawPane(win->pane, tstons(now), win->ime.peline, win->ime.caret))
+		XCopyArea(dinfo.disp, win->pane->pixmap, win->window, win->gc,
+				0, 0, win->pane->width, win->pane->height, 0, 0);
 	XFlush(dinfo.disp);
 }
 
@@ -612,6 +611,7 @@ void
 preeditDone(XIM xim, Win *win, XPointer call)
 {
 	PUT_NUL(win->ime.peline, 0);
+	win->pane->redraw_flag = true;
 	redraw(win);
 }
 
@@ -673,6 +673,7 @@ preeditDraw(XIM xim, Win *win, XIMPreeditDrawCallbackStruct *call)
 	free(fg);
 	free(bg);
 
+	win->pane->redraw_flag = true;
 	redraw(win);
 }
 
@@ -680,5 +681,6 @@ void
 preeditCaret(XIM xim, Win *win, XIMPreeditCaretCallbackStruct *call)
 {
 	win->ime.caret = call->position;
+	win->pane->redraw_flag = true;
 	redraw(win);
 }

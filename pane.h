@@ -22,6 +22,7 @@ typedef struct Pane {
 	XFont *xfont;
 	Pixmap pixmap, pixbuf;
 	Line **lines, **lines_b;
+	nsec time_b;
 	int cx_b, cy_b, cw_b, ch_b;
 	unsigned int depth;
 	float alpha;
@@ -33,9 +34,8 @@ typedef struct Pane {
 	int scr, prevfst;
 	struct ScrBuf *prevbuf;
 	Selection sel;
-	nsec blink_time, caret_time, bell_time;
+	nsec caret_time, bell_time;
 	bool timer_active[TIMER_NUM];
-	bool bell_lit;
 	int bell_cnt, pallet_cnt;
 } Pane;
 
@@ -46,4 +46,4 @@ void mouseEvent(Pane *, XEvent *);
 void scrollPane(Pane *, int);
 void selectPane(Pane *, int, int, bool, bool);
 void getNextTime(Pane *, struct timespec *, nsec);
-void drawPane(Pane *, nsec, Line *, int);
+int drawPane(Pane *, nsec, Line *, int);
