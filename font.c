@@ -48,7 +48,7 @@ closeFont(XFont *xfont)
 	int i, j;
 
 	for (i = 0; i < xfont->fonts_len; i++) {
-		for (j = 0; j < 8; j++)
+		for (j = 0; j < 4; j++)
 			if ((*xfont->fonts[i])[j])
 				XftFontClose(xfont->disp, (*xfont->fonts[i])[j]);
 		free(xfont->fonts[i]);
@@ -118,7 +118,7 @@ getFontSuiteFonts(XFont *xfont, const char *pattern)
 
 	/* フォントをロードしてリストに追加 */
 	font = xmalloc(sizeof(XftFontSuite));
-	for (i = 0; i < 8; i++) {
+	for (i = 0; i < 4; i++) {
 		strcpy(name, pattern);
 		strcat(name, i & FONT_BOLD   ? ":bold"   : "");
 		strcat(name, i & FONT_ITALIC ? ":italic" : "");
