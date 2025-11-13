@@ -25,7 +25,8 @@ static void manageTimer(Pane *, nsec);
 static void drawLine(Pane *, Line *, int, int, int, int, nsec);
 static int linecmp(Pane *, Line *, Line *, int, int);
 static void drawCursor(Pane *, Line *, int, int, int, nsec);
-static void resizeLines(Pane *, nsec);
+static void freePixmap(Pane *);
+static void createPixmap(Pane *, int, int);
 static void clearPixmap(Pane *, nsec);
 
 Pane *
@@ -36,7 +37,7 @@ createPane(DispInfo *dinfo, XFont *xfont, int width, int height, float alpha, in
 	*pane = (Pane){
 		.dinfo = dinfo, .xfont = xfont, .depth = 32, .alpha = alpha,
 		.width = width, .height = height,
-		.xpad = xfont->cw / 2, .ypad = xfont->cw / 2
+		.xpad = xfont->cw / 2, .ypad = xfont->cw / 2,
 	};
 	memset(&pane->timer_active, 0, TIMER_NUM);
 
@@ -49,16 +50,8 @@ createPane(DispInfo *dinfo, XFont *xfont, int width, int height, float alpha, in
 		(0x00ffffff & pane->term->palette[defbg]);
 
 	/* 描画の準備 */
-	pane->pixmap = CREATE_PIXMAP(pane->dinfo, width, height, pane->depth);
-	pane->pixbuf = CREATE_PIXMAP(pane->dinfo, width, height, pane->depth);
-	pane->gc = XCreateGC(dinfo->disp, pane->pixmap, 0, NULL);
-	XSetGraphicsExposures(dinfo->disp, pane->gc, false);
-	pane->draw = DRAW_CREATE(pane->dinfo, pane->pixmap);
-	pane->lines = xmalloc(sizeof(Line *));
-	*pane->lines = NULL;
-	pane->lines_b = xmalloc(sizeof(Line *));
-	*pane->lines_b = NULL;
-	resizeLines(pane, pane->time_b);
+	createPixmap(pane, width, height);
+	clearPixmap(pane, pane->time_b);
 
 	return pane;
 }
@@ -69,10 +62,7 @@ destroyPane(Pane *pane)
 	Line **plines;
 
 	closeTerm(pane->term);
-	XftDrawDestroy(pane->draw);
-	XFreeGC(pane->dinfo->disp, pane->gc);
-	XFreePixmap(pane->dinfo->disp, pane->pixmap);
-	XFreePixmap(pane->dinfo->disp, pane->pixbuf);
+	freePixmap(pane);
 	for (plines = pane->lines; *plines; plines++)
 		freeLine(*plines);
 	free(pane->lines);
@@ -85,27 +75,14 @@ destroyPane(Pane *pane)
 void
 setPaneSize(Pane *pane, int width, int height)
 {
-	int oldrows = pane->term->sb->rows;
-
-	XftDrawDestroy(pane->draw);
-	XFreeGC(pane->dinfo->disp, pane->gc);
-	XFreePixmap(pane->dinfo->disp, pane->pixmap);
-	XFreePixmap(pane->dinfo->disp, pane->pixbuf);
-
-	pane->pixmap = CREATE_PIXMAP(pane->dinfo, width, height, pane->depth);
-	pane->pixbuf = CREATE_PIXMAP(pane->dinfo, width, height, pane->depth);
-	pane->gc = XCreateGC(pane->dinfo->disp, pane->pixmap, 0, NULL);
-	XSetGraphicsExposures(pane->dinfo->disp, pane->gc, false);
-	pane->draw = DRAW_CREATE(pane->dinfo, pane->pixmap);
 	pane->width = width;
 	pane->height = height;
 
 	setWinSize(pane->term, (height - pane->ypad * 2) / pane->xfont->ch,
 			(width - pane->xpad * 2) / pane->xfont->cw, width, height);
-	if (oldrows != pane->term->sb->rows)
-		resizeLines(pane, pane->time_b);
-	else
-		clearPixmap(pane, pane->time_b);
+	freePixmap(pane);
+	createPixmap(pane, width, height);
+	clearPixmap(pane, pane->time_b);
 }
 
 void
@@ -461,40 +438,51 @@ drawCursor(Pane *pane, Line *line, int row, int col, int type, nsec now)
 }
 
 void
-resizeLines(Pane *pane, nsec now)
+freePixmap(Pane *pane)
 {
-	Line **plines;
-	int i;
+	XftDrawDestroy(pane->draw);
+	XFreeGC(pane->dinfo->disp, pane->gc);
+	XFreePixmap(pane->dinfo->disp, pane->pixmap);
+	XFreePixmap(pane->dinfo->disp, pane->pixbuf);
+}
 
-	for (plines = pane->lines; *plines; plines++)
-		freeLine(*plines);
-	for (plines = pane->lines_b; *plines; plines++)
-		freeLine(*plines);
-
-	pane->lines = xrealloc(pane->lines, (pane->term->sb->rows + 3) * sizeof(Line *));
-	pane->lines[pane->term->sb->rows + 2] = NULL;
-	pane->lines_b = xrealloc(pane->lines_b, (pane->term->sb->rows + 3) * sizeof(Line *));
-	pane->lines_b[pane->term->sb->rows + 2] = NULL;
-
-	for (i = 0; i < pane->term->sb->rows + 2; i++) {
-		pane->lines[i] = allocLine();
-		pane->lines_b[i] = allocLine();
-	}
-
-	clearPixmap(pane, now);
+void
+createPixmap(Pane *pane, int width, int height)
+{
+	pane->pixmap = CREATE_PIXMAP(pane->dinfo, width, height, pane->depth);
+	pane->pixbuf = CREATE_PIXMAP(pane->dinfo, width, height, pane->depth);
+	pane->gc = XCreateGC(pane->dinfo->disp, pane->pixmap, 0, NULL);
+	XSetGraphicsExposures(pane->dinfo->disp, pane->gc, false);
+	pane->draw = DRAW_CREATE(pane->dinfo, pane->pixmap);
 }
 
 void
 clearPixmap(Pane *pane, nsec now)
 {
 	Line **plines;
+	int i;
 
-	pane->redraw_flag = true;
-	for (plines = pane->lines_b; *plines; plines++)
-		PUT_NUL(*plines, 0);
-
+	/* Pixmapを背景色でクリア */
 	XSetForeground(pane->dinfo->disp, pane->gc, BELLCOLOR(pane->term->palette[defbg]));
 	XFillRectangle(pane->dinfo->disp, pane->pixmap, pane->gc, 0, 0, pane->width, pane->height);
 	XSetForeground(pane->dinfo->disp, pane->gc, BELLCOLOR(pane->term->palette[defbg]));
 	XFillRectangle(pane->dinfo->disp, pane->pixbuf, pane->gc, 0, 0, pane->width, pane->height);
+
+	/* Lineバッファをクリア */
+	if (pane->lines)
+		for (plines = pane->lines; *plines; plines++)
+			freeLine(*plines);
+	if (pane->lines_b)
+		for (plines = pane->lines_b; *plines; plines++)
+			freeLine(*plines);
+	pane->lines = xrealloc(pane->lines, (pane->term->sb->rows + 3) * sizeof(Line *));
+	pane->lines[pane->term->sb->rows + 2] = NULL;
+	pane->lines_b = xrealloc(pane->lines_b, (pane->term->sb->rows + 3) * sizeof(Line *));
+	pane->lines_b[pane->term->sb->rows + 2] = NULL;
+	for (i = 0; i < pane->term->sb->rows + 2; i++) {
+		pane->lines[i] = allocLine();
+		pane->lines_b[i] = allocLine();
+	}
+
+	pane->redraw_flag = true;
 }
