@@ -405,7 +405,7 @@ handleXEvent(Win *win)
 
 		case SelectionNotify:   /* 貼り付ける文字列が届いた */
 			if ((prop = event.xselection.property) != None) {
-				XGetWindowProperty(dinfo.disp, win->window, prop, 0, 256,
+				XGetWindowProperty(dinfo.disp, win->window, prop, 0, 2 << 14,
 						False, atoms[UTF8_STRING], &type,
 						&format, &ntimes, &after, &props);
 				if (1 < pane->term->dec[2004])
