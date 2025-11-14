@@ -233,7 +233,8 @@ drawPane(Pane *pane, nsec now, Line *peline, int pecaret)
 
 	/* -1行目は画面端をまたいで選択してる場合だけ書く */
 	if ((pane->sel.aline < pane->term->sb->firstline - pane->scr) ==
-	    (pane->sel.bline < pane->term->sb->firstline - pane->scr))
+	    (pane->sel.bline < pane->term->sb->firstline - pane->scr) ||
+	     pane->term->sb != pane->sel.sb)
 		PUT_NUL(LINE(pane, -1), 0);
 
 	/* Pixmapに書く */
