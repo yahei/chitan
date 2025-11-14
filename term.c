@@ -762,6 +762,10 @@ decset(Term *term, unsigned int num, int flag)
 		term->sb->am = 0;
 		break;
 
+	case 12:   /* Start blinking cursor */
+		term->ctype = (MAX(term->ctype - 1, 0) & ~1) + !flag + 1;
+		break;
+
 	case 1047:  /* Alternate Screen Buffer */
 	case 1049:  /* Alternate Screen Buffer clear */
 		oldsb = term->sb;
