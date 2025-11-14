@@ -71,6 +71,8 @@ chitan|chitan-256color|chitan terminal emulator,
 	invis=\e[8m,
 	setaf=\e[38;5;%p1%dm,
 	setab=\e[48;5;%p1%dm,
+	setf=\e[3%?%p1%{1}%=%t4%e%p1%{3}%=%t6%e%p1%{4}%=%t1%e%p1%{6}%=%t3%e%p1%d%;m,
+	setb=\e[4%?%p1%{1}%=%t4%e%p1%{3}%=%t6%e%p1%{4}%=%t1%e%p1%{6}%=%t3%e%p1%d%;m,
 	op=\e[39;49m,
 	oc=\e[39;49m,
 
