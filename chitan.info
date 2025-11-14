@@ -59,6 +59,10 @@ chitan|chitan-256color|chitan terminal emulator,
 	smacs=\e(0,
 	rmacs=\e(B,
 	initc=\e]4;%p1%d;#%p2%{255}%*%{1000}%/%02x%p3%{255}%*%{1000}%/%02x%p4%{255}%*%{1000}%/%02x\a,
+	BE=\e[?2004h,
+	BD=\e[?2004l,
+	PS=\e[200~,
+	PE=\e[201~,
 
 # SGR
 	sgr0=\e[0m,
