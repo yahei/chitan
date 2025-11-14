@@ -303,7 +303,7 @@ handleXEvent(Win *win)
 	const XClientMessageEvent *cme = (XClientMessageEvent *)&event;
 	XSelectionRequestEvent *sre;
 	XSelectionEvent se;
-	int mx, my, state, mb = 0;
+	int mx, my, ms, mb;
 	Atom prop, type;
 	int format;
 	unsigned long ntimes, after;
@@ -321,6 +321,8 @@ handleXEvent(Win *win)
 
 		mx = (event.xbutton.x - pane->xpad + xfont->cw / 2) / xfont->cw;
 		my = (event.xbutton.y - pane->ypad) / xfont->ch;
+		mb = event.xbutton.button;
+		ms = event.xbutton.state;
 
 		switch (event.type) {
 		case KeyPress:          /* キーボード入力 */
@@ -331,12 +333,10 @@ handleXEvent(Win *win)
 			break;
 
 		case ButtonPress:       /* マウス Press */
-			state = event.xbutton.state;
-			mb = event.xbutton.button;
 			if ((mb == 4 || mb == 5) && pane->term->sb == &pane->term->ori) {
 				scrollPane(pane, (mb == 4 ? 1 : -1) * 3);
-			} else if (!BETWEEN(mb, 1, 4) || (state & ~(ShiftMask | Mod1Mask | Mod2Mask)) ||
-					(pane->term->sb == &pane->term->alt && !(state & ShiftMask))) {
+			} else if (!BETWEEN(mb, 1, 4) || (ms & ~(ShiftMask | Mod1Mask | Mod2Mask)) ||
+					(pane->term->sb == &pane->term->alt && !(ms & ShiftMask))) {
 				mouseEvent(pane, &event);
 			} else if (mb == 2) {
 				XConvertSelection(dinfo.disp, XA_PRIMARY, atoms[UTF8_STRING],
@@ -344,7 +344,7 @@ handleXEvent(Win *win)
 				pane->scr = 0;
 			} else {
 				dragging = pane;
-				selectPane(pane, my, mx, mb == 1, 0 < (state & Mod1Mask));
+				selectPane(pane, my, mx, mb == 1, 0 < (ms & Mod1Mask));
 			}
 			break;
 
@@ -356,15 +356,15 @@ handleXEvent(Win *win)
 			break;
 
 		case ButtonRelease:    /* マウス Release */
-			if (!dragging) {
-				mouseEvent(pane, &event);
-			} else {
+			if (dragging && (mb == 1 || mb == 3)) {
 				if (dragging->sel.aline == dragging->sel.bline &&
 				    dragging->sel.acol  == dragging->sel.bcol)
 					break;
 				XSetSelectionOwner(dinfo.disp, XA_PRIMARY, win->window, CurrentTime);
 				copySelection(&dragging->sel, &win->primary, !dragging->sel.rect);
 				dragging = NULL;
+			} else {
+				mouseEvent(pane, &event);
 			}
 			break;
 
