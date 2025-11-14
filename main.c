@@ -425,34 +425,34 @@ handleXEvent(Win *win)
 int
 keyPressEvent(Win *win, XEvent event, int bufsize)
 {
-	struct Key { int symbol; char *normal; char *app; } keys[] = {
-		{ XK_Up,        "\e[A",         "\eOA" },
-		{ XK_Down,      "\e[B",         "\eOB" },
-		{ XK_Right,     "\e[C",         "\eOC" },
-		{ XK_Left,      "\e[D",         "\eOD" },
-		{ XK_Home,      "\e[H",         "\eOH" },
-		{ XK_End,       "\e[F",         "\eOF" },
-		{ XK_Page_Up,   "\e[5~",        "\e[5~" },
-		{ XK_Page_Down, "\e[6~",        "\e[6~" },
-		{ XK_Insert,    "\e[2~",        "\e[2~" },
-		{ XK_Delete,    "\e[3~",        "\e[3~" },
-		{ XK_BackSpace, "\x7f",         "\x7f" },
-		{ XK_F1,        "\eOP",         "\eOP" },
-		{ XK_F2,        "\eOQ",         "\eOQ" },
-		{ XK_F3,        "\eOR",         "\eOR" },
-		{ XK_F4,        "\eOS",         "\eOS" },
-		{ XK_F5,        "\e[15~",       "\e[15~" },
-		{ XK_F6,        "\e[17~",       "\e[17~" },
-		{ XK_F7,        "\e[18~",       "\e[18~" },
-		{ XK_F8,        "\e[19~",       "\e[19~" },
-		{ XK_F9,        "\e[20~",       "\e[20~" },
-		{ XK_F10,       "\e[21~",       "\e[21~" },
-		{ XK_F11,       "\e[23~",       "\e[23~" },
-		{ XK_F12,       "\e[24~",       "\e[24~" },
+	struct Key { int symbol; char *normal, *app, *normal_m, *app_m;} keys[] = {
+		{ XK_Up,        "\e[A",         "\eOA",         "\e[1;%dA",     "\e[1;%dA",     },
+		{ XK_Down,      "\e[B",         "\eOB",         "\e[1;%dB",     "\e[1;%dB",     },
+		{ XK_Right,     "\e[C",         "\eOC",         "\e[1;%dC",     "\e[1;%dC",     },
+		{ XK_Left,      "\e[D",         "\eOD",         "\e[1;%dD",     "\e[1;%dD",     },
+		{ XK_Home,      "\e[H",         "\eOH",         "\e[1;%dH",     "\e[1;%dH",     },
+		{ XK_End,       "\e[F",         "\eOF",         "\e[1;%dF",     "\e[1;%dF",     },
+		{ XK_Page_Up,   "\e[5~",        "\e[5~",        "\e[5;%d~",     "\e[5;%d~",     },
+		{ XK_Page_Down, "\e[6~",        "\e[6~",        "\e[6;%d~",     "\e[6;%d~",     },
+		{ XK_Insert,    "\e[2~",        "\e[2~",        "\e[2;%d~",     "\e[2;%d~",     },
+		{ XK_Delete,    "\e[3~",        "\e[3~",        "\e[3;%d~",     "\e[3;%d~",     },
+		{ XK_BackSpace, "\x7f",         "\x7f",         "\x7f",         "\x7f",         },
+		{ XK_F1,        "\eOP",         "\eOP",         "\e[1;%dP",     "\e[1;%dP",     },
+		{ XK_F2,        "\eOQ",         "\eOQ",         "\e[1;%dQ",     "\e[1;%dQ",     },
+		{ XK_F3,        "\eOR",         "\eOR",         "\e[1;%dR",     "\e[1;%dR",     },
+		{ XK_F4,        "\eOS",         "\eOS",         "\e[1;%dS",     "\e[1;%dS",     },
+		{ XK_F5,        "\e[15~",       "\e[15~",       "\e[15;%d~",    "\e[15;%d~",    },
+		{ XK_F6,        "\e[17~",       "\e[17~",       "\e[17;%d~",    "\e[17;%d~",    },
+		{ XK_F7,        "\e[18~",       "\e[18~",       "\e[18;%d~",    "\e[18;%d~",    },
+		{ XK_F8,        "\e[19~",       "\e[19~",       "\e[19;%d~",    "\e[19;%d~",    },
+		{ XK_F9,        "\e[20~",       "\e[20~",       "\e[20;%d~",    "\e[20;%d~",    },
+		{ XK_F10,       "\e[21~",       "\e[21~",       "\e[21;%d~",    "\e[21;%d~",    },
+		{ XK_F11,       "\e[23~",       "\e[23~",       "\e[23;%d~",    "\e[23;%d~",    },
+		{ XK_F12,       "\e[24~",       "\e[24~",       "\e[24;%d~",    "\e[24;%d~",    },
 		{ XK_VoidSymbol }
 	}, *key;
-	char buf[bufsize], *str;
-	int len;
+	char buf[MAX(bufsize, 16)], *str;
+	int len, mod;
 	KeySym keysym;
 	Status status = XLookupChars;
 
@@ -482,10 +482,22 @@ keyPressEvent(Win *win, XEvent event, int bufsize)
 	}
 
 	/* カーソルキー等を送る */
+	mod = (event.xkey.state & ShiftMask   ? 1 : 0) +
+	      (event.xkey.state & Mod1Mask    ? 2 : 0) +
+	      (event.xkey.state & ControlMask ? 4 : 0) +
+	      (event.xkey.state & Mod4Mask    ? 8 : 0);
 	for (key = keys; key->symbol != XK_VoidSymbol; key++) {
 		if (key->symbol != keysym)
 			continue;
-		str = win->pane->term->dec[1] < 2 ? key->normal : key->app;
+
+		if (mod == 0) {
+			str = win->pane->term->dec[1] < 2 ? key->normal : key->app;
+		} else {
+			str = win->pane->term->dec[1] < 2 ? key->normal_m : key->app_m;
+			snprintf(buf, bufsize, str, mod + 1);
+			str = buf;
+		}
+
 		writePty(win->pane->term, str, strlen(str));
 		return 1;
 	}
