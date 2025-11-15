@@ -71,5 +71,5 @@ Line *getLine(ScrBuf *, int);
 void getLines(ScrBuf *, Line **, int, int, const Selection *);
 
 void setSelection(Selection *, ScrBuf *sb, int, int, bool, bool);
-void checkSelection(Selection *);
+bool checkSelection(Selection *);
 void copySelection(Selection *, char **, bool);

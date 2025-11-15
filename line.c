@@ -61,6 +61,21 @@ linecpy(Line *dst, const Line *src)
 	memcpy(dst->bg,   src->bg,   len * sizeof(int));
 }
 
+int
+linecmp(Line *line1, Line *line2, int pos, int len)
+{
+	CharCnt cc1 = getCharCnt(line1->str, pos);
+	CharCnt cc2 = getCharCnt(line2->str, pos);
+
+#define CMP(A,T) !memcmp(&line1->A[cc1.index], &line2->A[cc2.index], len * sizeof(T))
+	if (cc2.index + len <= u32slen(line2->str) && cc1.col == cc2.col &&
+	    CMP(str, char32_t) && CMP(attr, int) && CMP(fg, int) && CMP(bg, int) &&
+	    (cc2.index < 1 || !(line2->attr[cc2.index - 1] & ITALIC)))
+			return 1;
+	return 0;
+#undef CMP
+}
+
 void
 insertU32s(Line *line, int head, const InsertLine *ins, int len)
 {
@@ -266,4 +281,10 @@ getCharCnt(const char32_t *str, int col)
 	}
 
 	return (CharCnt){ len + (col - total), col, 1 };
+}
+
+int
+getIndex(const char32_t *str, int col)
+{
+	return getCharCnt(str, col).index;
 }

@@ -12,32 +12,29 @@
 		((int)(  RED(c1) * (a1) +   RED(c2) * (a2)) << 16) +\
 		((int)(GREEN(c1) * (a1) + GREEN(c2) * (a2)) <<  8) +\
 		((int)( BLUE(c1) * (a1) +  BLUE(c2) * (a2)) <<  0))
-#define BELLCOLOR(c)    (now < pane->bell_time ?\
-		BLEND_COLOR((c), 0.85, 0xffffffff, 0.15) : (c))
+#define BELLCOLOR(c)    (now < pane->bell_time ? BLEND_COLOR((c), 0.85, 0xffffffff, 0.15) : (c))
 #define SCROLLMAX(sb)   ((sb)->firstline - MAX((sb)->totallines - (sb)->maxlines, 0))
-#define CREATE_PIXMAP(i,w,h,d)  XCreatePixmap(i->disp, DefaultRootWindow(i->disp), w, h, d)
-#define DRAW_CREATE(i,p)        XftDrawCreate(i->disp, p, i->visual, i->cmap)
+#define CREATE_PIXMAP(i, w, h, d)       XCreatePixmap(i->disp, i->root, w, h, d)
+#define DRAW_CREATE(i, p)               XftDrawCreate(i->disp, p, i->visual, i->cmap)
 #define LINE(p, n)      (pane->lines[n + 1])
 #define LINE_B(p, n)    (pane->lines_b[n + 1])
 const long long blink_duration = 800 * 1000 * 1000;
 const long long rapid_duration = 200 * 1000 * 1000;
 const long long caret_duration = 500 * 1000 * 1000;
 
-static void manageTimer(Pane *, nsec);
 static void drawLine(Pane *, Line *, int, int, int, int, nsec);
-static int linecmp(Pane *, Line *, Line *, int, int);
 static void drawCursor(Pane *, Line *, int, int, int, nsec);
 static void freePixmap(Pane *);
 static void createPixmap(Pane *, int, int);
 static void clearPixmap(Pane *, nsec);
 
 Pane *
-createPane(DispInfo *dinfo, XFont *xfont, int width, int height, float alpha, int lines, char *const cmd[])
+createPane(DispInfo *dinfo, XFont *xfont, int width, int height, float alpha, int bufsize, char *const cmd[])
 {
 	Pane *pane = xmalloc(sizeof(Pane));
 
 	*pane = (Pane){
-		.dinfo = dinfo, .xfont = xfont, .depth = 32, .alpha = alpha,
+		.dinfo = dinfo, .xfont = xfont, .depth = 32,
 		.width = width, .height = height,
 		.xpad = xfont->cw / 2, .ypad = xfont->cw / 2,
 	};
@@ -45,7 +42,7 @@ createPane(DispInfo *dinfo, XFont *xfont, int width, int height, float alpha, in
 
 	/* 端末をオープン */
 	pane->term = openTerm((height - pane->ypad * 2) / xfont->ch,
-			(width - pane->xpad * 2) / xfont->cw, lines, cmd[0], cmd);
+			(width - pane->xpad * 2) / xfont->cw, bufsize, cmd[0], cmd);
 	if (!pane->term)
 		errExit("openTerm failed.\n");
 	pane->term->palette[defbg] = ((0xff & (int)(0xff * alpha)) << 24) +
@@ -79,7 +76,6 @@ setPaneSize(Pane *pane, int width, int height)
 {
 	pane->width = width;
 	pane->height = height;
-
 	setWinSize(pane->term, (height - pane->ypad * 2) / pane->xfont->ch,
 			(width - pane->xpad * 2) / pane->xfont->cw, width, height);
 	freePixmap(pane);
@@ -114,8 +110,7 @@ void
 scrollPane(Pane *pane, int n)
 {
 	pane->redraw_flag = true;
-	pane->scr += n;
-	pane->scr = CLIP(pane->scr, 0, SCROLLMAX(pane->term->sb));
+	pane->scr = CLIP(pane->scr + n, 0, SCROLLMAX(pane->term->sb));
 }
 
 void
@@ -123,31 +118,6 @@ selectPane(Pane *pane, int row, int col, bool start, bool rect)
 {
 	pane->redraw_flag = true;
 	setSelection(&pane->sel, pane->term->sb, row - pane->scr, col, start, rect);
-}
-
-void
-manageTimer(Pane *pane, nsec now)
-{
-	/* 点滅させる必要がないときはキャレットのタイマーを止める */
-	pane->timer_active[CARET_TIMER] = pane->focus &&
-		(pane->term->cy + pane->scr <= pane->term->sb->rows) &&
-		(!pane->term->ctype || pane->term->ctype % 2);
-
-	/* ベル */
-	if (pane->time_b < pane->bell_time && pane->bell_time <= now)
-		clearPixmap(pane, now);
-
-	/* 点滅 */
-#define LIT(T,D) (((T) / (D)) % 2)
-#define CHECK(T,D,B) (pane->timer_active[T] && LIT(pane->time_b - (B), D) != LIT( now - (B), D))
-	if (CHECK(BLINK_TIMER, blink_duration, 0) ||
-	    CHECK(RAPID_TIMER, rapid_duration, 0) ||
-	    CHECK(CARET_TIMER, caret_duration, pane->caret_time))
-		pane->redraw_flag = true;
-#undef CHECK
-#undef LIT
-
-	pane->time_b = now;
 }
 
 nsec
@@ -175,58 +145,77 @@ getNextTime(Pane *pane, nsec now)
 int
 drawPane(Pane *pane, nsec now, Line *peline, int pecaret)
 {
-	nsec bell_duration = 150 * 1000 * 1000;
+	const nsec bell_duration = 150 * 1000 * 1000;
 	Line *line;
 	int pepos, pewidth, pecaretpos, caretrow;
 	int width, width_b;
 	int i;
 
-	/* スクロール量の更新 */
+	/* --- タイマーの処理 --- */
+
+	/* 点滅させる必要がないときはキャレットのタイマーを止める */
+	pane->timer_active[CARET_TIMER] = pane->focus &&
+		(pane->term->cy + pane->scr <= pane->term->sb->rows) &&
+		(!pane->term->ctype || pane->term->ctype % 2);
+
+	/* ベルの消灯時刻をまたいでいたら画面クリア */
+	if (pane->time_b < pane->bell_time && pane->bell_time <= now)
+		clearPixmap(pane, now);
+
+	/* 点滅の切り替わり時刻をまたいでいたら再描画 */
+#define LIT(T,D) (((T) / (D)) % 2)
+#define CHECK(T,D,B) (pane->timer_active[T] && LIT(pane->time_b - (B), D) != LIT( now - (B), D))
+	if (CHECK(BLINK_TIMER, blink_duration, 0) ||
+	    CHECK(RAPID_TIMER, rapid_duration, 0) ||
+	    CHECK(CARET_TIMER, caret_duration, pane->caret_time))
+		pane->redraw_flag = true;
+#undef CHECK
+#undef LIT
+
+	pane->time_b = now;
+
+	if (!pane->redraw_flag)
+		return 0;
+
+	/* --- 描画前の処理 --- */
+
+	/* ベルやパレットの更新をチェック */
+	if (pane->bell_cnt != pane->term->bell_cnt) {
+		pane->bell_time = now + bell_duration;
+		pane->bell_cnt = pane->term->bell_cnt;
+		clearPixmap(pane, now);
+	}
+	if (pane->pallet_cnt != pane->term->pallet_cnt) {
+		pane->pallet_cnt = pane->term->pallet_cnt;
+		clearPixmap(pane, now);
+	}
+
+	/* バッファの切り替えや行の追加を見てスクロール量を更新 */
 	pane->scr = (pane->prevbuf != pane->term->sb) ? 0 : pane->scr;
 	pane->scr += (0 < pane->scr) ? pane->term->sb->firstline - pane->prevfst : 0;
 	pane->scr = CLIP(pane->scr, 0, SCROLLMAX(pane->term->sb));
 	pane->prevbuf = pane->term->sb;
 	pane->prevfst = pane->term->sb->firstline;
 
-	/* ベルとパレット変更のチェック */
-	if (pane->bell_cnt != pane->term->bell_cnt) {
-		pane->bell_time = now + bell_duration;
-		pane->bell_cnt = pane->term->bell_cnt;
-		/* ベル発生時の画面クリア */
-		clearPixmap(pane, now);
-	}
-	if (pane->pallet_cnt != pane->term->pallet_cnt) {
-		pane->pallet_cnt = pane->term->pallet_cnt;
-		/* パレット変更時の再描画 */
-		clearPixmap(pane, now);
+	/* 選択範囲をチェックして変更があったら解除 */
+	if (pane->sel.sb == pane->term->sb && checkSelection(&pane->sel)) {
+		pane->sel.aline = pane->sel.bline;
+		pane->sel.acol  = pane->sel.bcol;
 	}
 
-	/* タイマーの処理 */
-	manageTimer(pane, now);
+	/* --- 端末の内容を描画 --- */
 
-	if (!pane->redraw_flag)
-		return 0;
-
-	/* 選択範囲のチェック */
-	if ((pane->sel.aline != pane->sel.bline || pane->sel.acol != pane->sel.bcol) &&
-			pane->sel.sb == pane->term->sb)
-		checkSelection(&pane->sel);
-
-	/* 画面をクリア */
-	/* カーソル等を書く前の状態に戻す */
+	/* 画面をカーソル等を書く前の状態に戻す */
 	XCopyArea(pane->dinfo->disp, pane->pixbuf, pane->pixmap, pane->gc,
-			pane->cx_b, pane->cy_b,
-			pane->cw_b, pane->ch_b,
-			pane->cx_b, pane->cy_b);
+			pane->clear_x, pane->clear_y,
+			pane->clear_w, pane->clear_h,
+			pane->clear_x, pane->clear_y);
 
 	/* 次回の消去範囲を設定 */
-	pane->cx_b = pane->xpad + pane->xfont->cw * (pane->term->cx - 0.5);
-	pane->cy_b = pane->ypad + pane->xfont->ch * (pane->term->cy + pane->scr);
-	pane->cw_b = pane->xfont->cw * 2;
-	pane->ch_b = pane->xfont->ch;
-
-	/* 点滅中フラグをクリア */
-	pane->timer_active[BLINK_TIMER] = pane->timer_active[RAPID_TIMER] = false;
+	pane->clear_x = pane->xpad + pane->xfont->cw * (pane->term->cx - 0.5);
+	pane->clear_y = pane->ypad + pane->xfont->ch * (pane->term->cy + pane->scr);
+	pane->clear_w = pane->xfont->cw * 2;
+	pane->clear_h = pane->xfont->ch;
 
 	/* 端末の内容を取得 */
 	getLines(pane->term->sb, pane->lines, pane->term->sb->rows + 3, pane->scr + 1, &pane->sel);
@@ -237,25 +226,27 @@ drawPane(Pane *pane, nsec now, Line *peline, int pecaret)
 	     pane->term->sb != pane->sel.sb)
 		PUT_NUL(LINE(pane, -1), 0);
 
+	/* 点滅中フラグを一旦クリア */
+	pane->timer_active[BLINK_TIMER] = pane->timer_active[RAPID_TIMER] = false;
+
 	/* Pixmapに書く */
 	for (i = -1; i < pane->term->sb->rows + 2; i++) {
-		line = LINE(pane, i);
+		/* 行を書く */
+		if ((line = LINE(pane, i)))
+			drawLine(pane, line, i, 0, pane->term->sb->cols + 2, 0, now);
 
 		/* 前回の方が長い場合の塗りつぶし */
 		width   = line ? u32swidth(line->str) : 0;
 		width_b = u32swidth(LINE_B(pane, i)->str);
 		if (width < width_b) {
-			XSetForeground(pane->dinfo->disp, pane->gc, BELLCOLOR(pane->term->palette[defbg]));
+			XSetForeground(pane->dinfo->disp, pane->gc,
+					BELLCOLOR(pane->term->palette[defbg]));
 			XFillRectangle(pane->dinfo->disp, pane->pixmap, pane->gc,
 					pane->xpad + pane->xfont->cw * width,
 					pane->ypad + pane->xfont->ch * i,
 					pane->xfont->cw * (width_b - width),
 					pane->xfont->ch);
 		}
-
-		/* 行を書く */
-		if (line)
-			drawLine(pane, line, i, 0, pane->term->sb->cols + 2, 0, now);
 	}
 
 	/* 書いた文字とPixmapの状態を記録 */
@@ -264,7 +255,8 @@ drawPane(Pane *pane, nsec now, Line *peline, int pecaret)
 	XCopyArea(pane->dinfo->disp, pane->pixmap, pane->pixbuf, pane->gc,
 			0, 0, pane->width, pane->height, 0, 0);
 
-	/* カーソルかPreeditを表示 */
+	/* --- カーソル/Preeditの描画 --- */
+
 	XSetForeground(pane->dinfo->disp, pane->gc, pane->term->palette[deffg]);
 	if (u32slen(peline->str)) {
 		/* Preeditの幅とキャレットのPreedit内での位置を取得 */
@@ -282,8 +274,8 @@ drawPane(Pane *pane, nsec now, Line *peline, int pecaret)
 		drawCursor(pane, peline, pane->term->cy, pepos + pecaretpos, 6, now);
 
 		/* 次回の消去範囲を変更 */
-		pane->cx_b = pane->xpad + pane->xfont->cw * (pepos - 0.5);
-		pane->cw_b = pane->xfont->cw * (pewidth + 1);
+		pane->clear_x = pane->xpad + pane->xfont->cw * (pepos - 0.5);
+		pane->clear_w = pane->xfont->cw * (pewidth + 1);
 	} else if (1 <= pane->term->dec[25] && pane->term->cx < pane->term->sb->cols + 2) {
 		/* カーソルの描画 */
 		caretrow = pane->term->cy + pane->scr;
@@ -300,9 +292,9 @@ drawPane(Pane *pane, nsec now, Line *peline, int pecaret)
 void
 drawLine(Pane *pane, Line *line, int row, int col, int width, int pos, nsec now)
 {
-	int next, i = getCharCnt(line->str, pos).index;
+	int next, i = getIndex(line->str, pos);
 	int x, y, w;
-	int attr, fg, bg;
+	int attr, fg, bg, blink, rapid;
 	XftColor xc;
 	Color fc, bc;
 	int sl;
@@ -320,7 +312,7 @@ drawLine(Pane *pane, Line *line, int row, int col, int width, int pos, nsec now)
 	w = pane->xfont->cw * u32snwidth(&line->str[i], next - i);
 
 	/* 変化無し・コピー・書き直しの分岐 */
-#define LINE_CMP(R) linecmp(pane, line, LINE_B(pane, R), pos, next - i)
+#define LINE_CMP(R) linecmp(line, LINE_B(pane, R), pos, next - i)
 	if (line->attr[i] & (ITALIC | BLINK | RAPID))
 		sl = pane->term->sb->rows;
 	else if (BETWEEN(row, -1, pane->term->sb->rows + 2) && LINE_CMP(row))
@@ -351,20 +343,15 @@ drawLine(Pane *pane, Line *line, int row, int col, int width, int pos, nsec now)
 	XSetForeground(pane->dinfo->disp, pane->gc, BELLCOLOR(bc));
 	XFillRectangle(pane->dinfo->disp, pane->pixmap, pane->gc, x, y, w, pane->xfont->ch);
 
+	/* 非表示・点滅 */
+	pane->timer_active[BLINK_TIMER] |= line->attr[i] & BLINK;
+	pane->timer_active[RAPID_TIMER] |= line->attr[i] & RAPID;
+	blink = line->attr[i] & BLINK ? ((now / blink_duration) % 2) ? 2 : 0 : 1;
+	rapid = line->attr[i] & RAPID ? ((now / rapid_duration) % 2) ? 2 : 0 : 1;
+	if (line->attr[i] & CONCEAL || blink + rapid < 2)
+		return;
+
 	y += pane->xfont->ascent;
-
-	/* 点滅 */
-	if (line->attr[i] & BLINK)
-		pane->timer_active[BLINK_TIMER] = true;
-	if (line->attr[i] & RAPID)
-		pane->timer_active[RAPID_TIMER] = true;
-	if ((line->attr[i] & BLINK ? ((now / blink_duration) % 2) ? 2 : 0 : 1) +
-	    (line->attr[i] & RAPID ? ((now / rapid_duration) % 2) ? 2 : 0 : 1) < 2)
-		return;
-
-	/* 非表示 */
-	if (line->attr[i] & CONCEAL)
-		return;
 
 	/* 色をXftColorに変換 */
 	xc.color.red   =   RED(fc) << 8;
@@ -390,25 +377,10 @@ drawLine(Pane *pane, Line *line, int row, int col, int width, int pos, nsec now)
 		XDrawLine(pane->dinfo->disp, pane->pixmap, pane->gc, x, y + 1, x + w - 1, y + 1);
 }
 
-int
-linecmp(Pane *pane, Line *line1, Line *line2, int pos, int len)
-{
-	CharCnt cc1 = getCharCnt(line1->str, pos);
-	CharCnt cc2 = getCharCnt(line2->str, pos);
-
-#define CMP(A,T) !memcmp(&line1->A[cc1.index], &line2->A[cc2.index], len * sizeof(T))
-	if (cc2.index + len <= u32slen(line2->str) && cc1.col == cc2.col &&
-	    CMP(str, char32_t) && CMP(attr, int) && CMP(fg, int) && CMP(bg, int) &&
-	    (cc2.index < 1 || !(line2->attr[cc2.index - 1] & ITALIC)))
-			return 1;
-	return 0;
-#undef CMP
-}
-
 void
 drawCursor(Pane *pane, Line *line, int row, int col, int type, nsec now)
 {
-	const int index = getCharCnt(line->str, col).index;
+	const int index = getIndex(line->str, col);
 	char32_t *c = index < u32slen(line->str) ? &line->str[index] : (char32_t *)L" ";
 	const int x = pane->xpad + col * pane->xfont->cw;
 	const int y = pane->ypad + row * pane->xfont->ch;
@@ -437,15 +409,17 @@ drawCursor(Pane *pane, Line *line, int row, int col, int type, nsec now)
 		}
 		break;
 	case 3: case 4: /* 下線 */
-		XFillRectangle(dinfo->disp, pane->pixmap, pane->gc, x, y + 1 + pane->xfont->ascent, cw, ch * 0.1);
+		XFillRectangle(dinfo->disp, pane->pixmap, pane->gc,
+				x, y + 1 + pane->xfont->ascent, cw, ch * 0.1);
 		break;
 	case 5: case 6: /* 縦線 */
-		XFillRectangle(dinfo->disp, pane->pixmap, pane->gc, x - 1, y, ch * 0.1, ch);
+		XFillRectangle(dinfo->disp, pane->pixmap, pane->gc,
+				x - 1, y, ch * 0.1, ch);
 		break;
 	}
 
 	/* 次回の消去範囲を変更 */
-	pane->cw_b = cw + pane->xfont->cw;
+	pane->clear_w = cw + pane->xfont->cw;
 }
 
 void

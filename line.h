@@ -43,6 +43,7 @@ typedef struct CharCnt {
 Line *allocLine(void);
 void freeLine(Line *);
 void linecpy(Line *, const Line *);
+int linecmp(Line *, Line *, int, int);
 void insertU32s(Line *, int, const InsertLine *, int);
 void deleteChars(Line *, int, int);
 int eraseInLine(Line *, int, int);
@@ -54,3 +55,4 @@ const char *u8sToU32s(char32_t *,const char *, size_t);
 size_t u32slen(const char32_t *);
 int u32snwidth(const char32_t *, int);
 CharCnt getCharCnt(const char32_t *, int);
+int getIndex(const char32_t *, int);

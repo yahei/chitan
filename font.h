@@ -1,3 +1,4 @@
+#include <stdint.h>
 #include <X11/Xft/Xft.h>
 
 typedef uint_least32_t char32_t;

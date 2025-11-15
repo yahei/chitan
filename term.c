@@ -1102,7 +1102,7 @@ setSelection(Selection *sel, ScrBuf *sb, int row, int col, bool start, bool rect
 			sel->vers[i] = line->ver;
 }
 
-void
+bool
 checkSelection(Selection *sel)
 {
 	const int s = MIN(sel->aline, sel->bline);
@@ -1112,12 +1112,11 @@ checkSelection(Selection *sel)
 
 	for (i = 0; i <= e - s; i++) {
 		line = getLine(sel->sb, s - first + i);
-		if (line != NULL && line->ver != sel->vers[i]) {
-			sel->aline = sel->bline;
-			sel->acol  = sel->bcol;
-			return;
-		}
+		if (line != NULL && line->ver != sel->vers[i])
+			return true;
 	}
+
+	return false;
 }
 
 void

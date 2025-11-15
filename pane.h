@@ -1,13 +1,13 @@
 #include <stdbool.h>
 #include <time.h>
 
-#include "term.h"
 #include "font.h"
+#include "term.h"
 
 typedef long long int   nsec;
 #define GIGA            (1000000000)
 #define tstons(t)       ((long long)(t).tv_sec * GIGA + (t).tv_nsec)
-#define nstots(t)       ((struct timespec){ (t) / GIGA, (t) % GIGA })
+#define nstots(t)       (struct timespec){ (t) / GIGA, (t) % GIGA }
 
 typedef struct DispInfo {
 	Display *disp;
@@ -23,21 +23,20 @@ typedef struct Pane {
 	DispInfo *dinfo;
 	XFont *xfont;
 	Pixmap pixmap, pixbuf;
-	Line **lines, **lines_b;
-	nsec time_b;
-	int cx_b, cy_b, cw_b, ch_b;
 	unsigned int depth;
-	float alpha;
 	GC gc;
 	XftDraw *draw;
 	int width, height, xpad, ypad;
 	bool focus, redraw_flag;
-	Term *term;
-	int scr, prevfst;
-	struct ScrBuf *prevbuf;
-	Selection sel;
+	nsec time_b;
 	nsec caret_time, bell_time;
 	bool timer_active[TIMER_NUM];
+	Term *term;
+	Line **lines, **lines_b;
+	Selection sel;
+	struct ScrBuf *prevbuf;
+	int scr, prevfst;
+	int clear_x, clear_y, clear_w, clear_h;
 	int bell_cnt, pallet_cnt;
 } Pane;
 
