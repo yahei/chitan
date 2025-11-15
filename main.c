@@ -15,13 +15,9 @@
 typedef struct IME {
 	XIC xic;
 	XICCallback icdestroy;
-	XIMCallback pestart;
-	XIMCallback pedone;
-	XIMCallback pedraw;
-	XIMCallback pecaret;
+	XIMCallback pestart, pedone, pedraw, pecaret;
+	XVaNestedList peattrs, spotlist;
 	XPoint spot;
-	XVaNestedList spotlist;
-	XVaNestedList peattrs;
 	Line *peline;
 	int caret;
 } IME;
@@ -30,13 +26,13 @@ typedef struct Win {
 	Window window;
 	XClassHint *hint;
 	XSetWindowAttributes attr;
-	IME ime;
 	GC gc;
 	XftDraw *draw;
 	int width, height;
-	Pane *pane;
 	char name[TITLE_MAX];
 	char *primary, *clip;
+	IME ime;
+	Pane *pane, *dragging;
 } Win;
 
 enum { CLIPBOARD, UTF8_STRING, WM_DELETE_WINDOW, ATOM_NUM };
@@ -49,7 +45,7 @@ static Win *win;
 static struct timespec now;
 static float alpha;
 static int loglines;
-static char **cmd, *pattern;
+static char *pattern, **cmd;
 
 static void init(void);
 static void run(void);
@@ -73,8 +69,8 @@ static void preeditDone(XIM, Win *, XPointer);
 static void preeditDraw(XIM, Win *, XIMPreeditDrawCallbackStruct *);
 static void preeditCaret(XIM, Win *, XIMPreeditCaretCallbackStruct *);
 
-static char *version = "chitan 0.0.0";
-static char *help = "usage: chitan [-options] [[-e] command [args ...]]\n"
+static const char version[] = "chitan 0.0.0";
+static const char help[] = "usage: chitan [-options] [[-e] command [args ...]]\n"
 "        -a alpha                background opacity (0.0-1.0)\n"
 "        -f font                 font selection pattern (ex. monospace:size=12)\n"
 "        -h                      show this help\n"
@@ -88,6 +84,7 @@ main(int argc, char *argv[])
 	alpha = 1.0;
 	loglines = 1024;
 	pattern = "monospace";
+	cmd = (char *[]){ NULL };
 
 	while (1) {
 		switch (getopt(argc, argv, "+a:f:l:hve:")) {
@@ -127,13 +124,14 @@ init(void)
 	dinfo.disp= XOpenDisplay(NULL);
 	if (dinfo.disp== NULL)
 		fatal("XOpenDisplay failed.\n");
-	XMatchVisualInfo(dinfo.disp, XDefaultScreen(dinfo.disp), 32, TrueColor, &vinfo);
+	dinfo.screen = XDefaultScreen(dinfo.disp);
+	dinfo.root = DefaultRootWindow(dinfo.disp);
+	XMatchVisualInfo(dinfo.disp, dinfo.screen, 32, TrueColor, &vinfo);
 	dinfo.visual = vinfo.visual;
-	dinfo.cmap = XCreateColormap(dinfo.disp, DefaultRootWindow(dinfo.disp), dinfo.visual, None);
+	dinfo.cmap = XCreateColormap(dinfo.disp, dinfo.root, dinfo.visual, None);
 
 	/* XIM */
-	XRegisterIMInstantiateCallback(dinfo.disp, NULL, NULL, NULL,
-			ximOpen, NULL);
+	XRegisterIMInstantiateCallback(dinfo.disp, NULL, NULL, NULL, ximOpen, NULL);
 
 	/* 文字描画の準備 */
 	FcInit();
@@ -141,7 +139,7 @@ init(void)
 	if (xfont == NULL)
 		fatal("XftFontOpen failed.\n");
 
-	/* Selection */
+	/* Atomを取得 */
 	names = (char *[]){ "CLIPBOARD", "UTF8_STRING", "WM_DELETE_WINDOW" };
 	for (i = 0; i < ATOM_NUM; i++)
 		atoms[i] = XInternAtom(dinfo.disp, names[i], True);
@@ -154,17 +152,18 @@ void
 run(void)
 {
 	Pane *pane = win->pane;
-	struct timespec timeout = { 0, 1000 }, time;
+	struct timespec timeout = { 0, 0 }, time;
 	fd_set rfds;
-	int tfd = pane->term->master;
-	int xfd = XConnectionNumber(dinfo.disp);
+	const int xfd = XConnectionNumber(dinfo.disp);
+	const int tfd = pane->term->master;
+	const int nfds = MAX(xfd, tfd) + 1;
 
 	while (1) {
 		/* ファイルディスクリプタの監視 */
 		FD_ZERO(&rfds);
-		FD_SET(tfd, &rfds);
 		FD_SET(xfd, &rfds);
-		if (pselect(MAX(tfd, xfd) + 1, &rfds, NULL, NULL, &timeout, NULL) < 0) {
+		FD_SET(tfd, &rfds);
+		if (pselect(nfds, &rfds, NULL, NULL, &timeout, NULL)< 0) {
 			if (errno == EINTR)
 				fprintf(stderr, "signal.\n");
 			else
@@ -199,7 +198,7 @@ run(void)
 		redraw(win);
 
 		/* 次の待機時間を取得 */
-		getNextTime(pane, &timeout, tstons(now));
+		timeout = nstots(getNextTime(pane, tstons(now)));
 	}
 }
 
@@ -296,7 +295,6 @@ setWindowName(Win *win, char *name)
 int
 handleXEvent(Win *win)
 {
-	static Pane *dragging = NULL;
 	Pane *pane = win->pane;
 	XEvent event;
 	const XConfigureEvent *ce = (XConfigureEvent *)&event;
@@ -319,6 +317,7 @@ handleXEvent(Win *win)
 		if (xim && XFilterEvent(&event, None) == True)
 			continue;
 
+		/* マウス関連 */
 		mx = (event.xbutton.x - pane->xpad + xfont->cw / 2) / xfont->cw;
 		my = (event.xbutton.y - pane->ypad) / xfont->ch;
 		mb = event.xbutton.button;
@@ -343,26 +342,28 @@ handleXEvent(Win *win)
 						XA_PRIMARY, win->window, CurrentTime);
 				pane->scr = 0;
 			} else {
-				dragging = pane;
+				win->dragging = pane;
 				selectPane(pane, my, mx, mb == 1, 0 < (ms & Mod1Mask));
 			}
 			break;
 
 		case MotionNotify:     /* マウス Move */
-			if (!dragging)
+			if (!win->dragging)
 				mouseEvent(pane, &event);
 			else
-				selectPane(dragging, my, mx, false, pane->sel.rect);
+				selectPane(win->dragging, my, mx, false, pane->sel.rect);
 			break;
 
 		case ButtonRelease:    /* マウス Release */
-			if (dragging && (mb == 1 || mb == 3)) {
-				if (dragging->sel.aline == dragging->sel.bline &&
-				    dragging->sel.acol  == dragging->sel.bcol)
+			if (win->dragging && (mb == 1 || mb == 3)) {
+				if (win->dragging->sel.aline == win->dragging->sel.bline &&
+				    win->dragging->sel.acol  == win->dragging->sel.bcol)
 					break;
-				XSetSelectionOwner(dinfo.disp, XA_PRIMARY, win->window, CurrentTime);
-				copySelection(&dragging->sel, &win->primary, !dragging->sel.rect);
-				dragging = NULL;
+				XSetSelectionOwner(dinfo.disp, XA_PRIMARY,
+						win->window, CurrentTime);
+				copySelection(&win->dragging->sel, &win->primary,
+						!win->dragging->sel.rect);
+				win->dragging = NULL;
 			} else {
 				mouseEvent(pane, &event);
 			}
@@ -373,11 +374,11 @@ handleXEvent(Win *win)
 			break;
 
 		case ConfigureNotify:   /* ウィンドウサイズ変更 */
-			if (win->width == ce->width && win->height == ce->height)
-				break;
-			win->width  = ce->width;
-			win->height = ce->height;
-			setPaneSize(pane, ce->width, ce->height);
+			if (win->width != ce->width || win->height != ce->height) {
+				win->width  = ce->width;
+				win->height = ce->height;
+				setPaneSize(pane, ce->width, ce->height);
+			}
 			break;
 
 		case FocusIn:
@@ -425,7 +426,7 @@ handleXEvent(Win *win)
 int
 keyPressEvent(Win *win, XEvent event, int bufsize)
 {
-	struct Key { int symbol; char *normal, *app, *normal_m, *app_m;} keys[] = {
+	const struct Key { int symbol; char *normal, *app, *normal_m, *app_m;} keys[] = {
 		{ XK_Up,        "\e[A",         "\eOA",         "\e[1;%dA",     "\e[1;%dA",     },
 		{ XK_Down,      "\e[B",         "\eOB",         "\e[1;%dB",     "\e[1;%dB",     },
 		{ XK_Right,     "\e[C",         "\eOC",         "\e[1;%dC",     "\e[1;%dC",     },
@@ -487,19 +488,17 @@ keyPressEvent(Win *win, XEvent event, int bufsize)
 	      (event.xkey.state & ControlMask ? 4 : 0) +
 	      (event.xkey.state & Mod4Mask    ? 8 : 0);
 	for (key = keys; key->symbol != XK_VoidSymbol; key++) {
-		if (key->symbol != keysym)
-			continue;
-
-		if (mod == 0) {
-			str = win->pane->term->dec[1] < 2 ? key->normal : key->app;
-		} else {
-			str = win->pane->term->dec[1] < 2 ? key->normal_m : key->app_m;
-			snprintf(buf, bufsize, str, mod + 1);
-			str = buf;
+		if (key->symbol == keysym) {
+			if (mod == 0) {
+				str = win->pane->term->dec[1] < 2 ? key->normal : key->app;
+			} else {
+				str = win->pane->term->dec[1] < 2 ? key->normal_m : key->app_m;
+				snprintf(buf, bufsize, str, mod + 1);
+				str = buf;
+			}
+			writePty(win->pane->term, str, strlen(str));
+			return 1;
 		}
-
-		writePty(win->pane->term, str, strlen(str));
-		return 1;
 	}
 
 	/* 文字列を送る */
@@ -517,10 +516,11 @@ void
 redraw(Win *win)
 {
 	setWindowName(win, win->pane->term->title);
-	if (drawPane(win->pane, tstons(now), win->ime.peline, win->ime.caret))
+	if (drawPane(win->pane, tstons(now), win->ime.peline, win->ime.caret)) {
 		XCopyArea(dinfo.disp, win->pane->pixmap, win->window, win->gc,
 				0, 0, win->pane->width, win->pane->height, 0, 0);
-	XFlush(dinfo.disp);
+		XFlush(dinfo.disp);
+	}
 }
 
 void

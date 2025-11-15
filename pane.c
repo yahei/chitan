@@ -150,10 +150,10 @@ manageTimer(Pane *pane, nsec now)
 	pane->time_b = now;
 }
 
-void
-getNextTime(Pane *pane, struct timespec *timeout, nsec now)
+nsec
+getNextTime(Pane *pane, nsec now)
 {
-	long long int time = (long long int)2 << 32;
+	nsec time = (nsec)2 << 32;
 
 	/* ベルの時間 */
 	if (now < pane->bell_time)
@@ -169,7 +169,7 @@ getNextTime(Pane *pane, struct timespec *timeout, nsec now)
 		time = MIN(wait(pane->caret_time, caret_duration), time);
 #undef wait
 
-	*timeout = nstots(time);
+	return time;
 }
 
 int

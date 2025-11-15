@@ -11,6 +11,8 @@ typedef long long int   nsec;
 
 typedef struct DispInfo {
 	Display *disp;
+	int screen;
+	Window root;
 	Visual *visual;
 	Colormap cmap;
 } DispInfo;
@@ -45,5 +47,5 @@ void setPaneSize(Pane *, int, int);
 void mouseEvent(Pane *, XEvent *);
 void scrollPane(Pane *, int);
 void selectPane(Pane *, int, int, bool, bool);
-void getNextTime(Pane *, struct timespec *, nsec);
+nsec getNextTime(Pane *, nsec);
 int drawPane(Pane *, nsec, Line *, int);
