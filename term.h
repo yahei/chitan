@@ -41,7 +41,7 @@ typedef struct Selection {
 
 /* 端末 */
 typedef struct Term {
-	int master;     /* 疑似端末のファイルディスクリプタ */
+	int master;             /* 疑似端末のFD */
 	ScrBuf ori, alt, *sb;   /* ログ */
 	int cx, cy;             /* カーソル位置 */
 	int svx, svy;           /* 保存したカーソル位置 */

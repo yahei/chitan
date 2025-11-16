@@ -136,7 +136,7 @@ setDefaultPalette(Term *term)
 	int i;
 
 	/* Selenized Black (https://github.com/jan-warchol/selenized) */
-	term->palette[  0] = 0xff3b3b3b;
+	term->palette[  0] = 0xff252525;
 	term->palette[  1] = 0xffed4a46;
 	term->palette[  2] = 0xff70b433;
 	term->palette[  3] = 0xffdbb32d;
@@ -145,7 +145,7 @@ setDefaultPalette(Term *term)
 	term->palette[  6] = 0xff3fc5b7;
 	term->palette[  7] = 0xffb9b9b9;
 
-	term->palette[  8] = 0xff545454;
+	term->palette[  8] = 0xff3b3b3b;
 	term->palette[  9] = 0xffff5e56;
 	term->palette[ 10] = 0xff83c746;
 	term->palette[ 11] = 0xffefc541;
@@ -261,7 +261,7 @@ GCs(Term *term, const char *head)
 
 		/* 行が埋まる場合は自動改行を設定して行末までを書く */
 		term->sb->am = 0 < term->dec[7] && max < u32swidth(dp);
-		wlen = term->sb->am ? getCharCnt(dp, max).index : u32slen(dp);
+		wlen = term->sb->am ? getIndex(dp, max) : u32slen(dp);
 		wlen = MAX(wlen, 1);
 
 		/* 書き込む */
@@ -365,7 +365,7 @@ CSI(Term *term, const char *head, const char *tail)
 	char param[tail - head + 1], *pp = param;
 	char inter[tail - head + 1];
 	char *str1, *str2;
-	Line *line;
+	Line *line = getLine(term->sb, term->cy);
 	int i, a, b, len, begin, end, index = 0;
 
 	/* パラメタバイト */
@@ -386,7 +386,7 @@ CSI(Term *term, const char *head, const char *tail)
 	/* 終端バイト */
 	switch (head[index]) {
 	case 0x40: /* ICH 文字挿入 */
-		if ((line = getLine(term->sb, term->cy))) {
+		if (line) {
 			int n = MAX(atoi(param), 1);
 			char32_t str[n];
 			int attr[n], fg[n], bg[n];
@@ -395,7 +395,7 @@ CSI(Term *term, const char *head, const char *tail)
 			INIT(fg, deffg);
 			INIT(bg, defbg);
 			InsertLine il = { str, attr, fg, bg };
-			insertU32s(line, getCharCnt(line->str, term->cx).index, &il, n);
+			insertU32s(line, getIndex(line->str, term->cx), &il, n);
 		}
 		break;
 
@@ -416,12 +416,10 @@ CSI(Term *term, const char *head, const char *tail)
 		break;
 
 	case 0x4a: /* ED ページ内消去 */
-		if (!(line = getLine(term->sb, term->cy)))
-			break;
 		switch (*param) {
 		default:
 		case '0':
-			if (0 < (len = term->sb->cols - term->cx))
+			if (line && 0 < (len = term->sb->cols - term->cx))
 				putSPCs(line, term->cx, term->bg, len);
 			begin = term->cy + 1;
 			end = sb->rows;
@@ -429,7 +427,8 @@ CSI(Term *term, const char *head, const char *tail)
 		case '1':
 			begin = 0;
 			end = term->cy;
-			putSPCs(line, 0, term->bg, term->cx + 1);
+			if (line)
+				putSPCs(line, 0, term->bg, term->cx + 1);
 			break;
 		case '2':
 			begin = 0;
@@ -442,7 +441,7 @@ CSI(Term *term, const char *head, const char *tail)
 		break;
 
 	case 0x4b: /* EL 行内消去 */
-		if (!(line = getLine(term->sb, term->cy)))
+		if (!line)
 			break;
 		switch (*param) {
 		default:
@@ -478,9 +477,8 @@ CSI(Term *term, const char *head, const char *tail)
 		break;
 
 	case 0x50: /* DHC 文字削除 */
-		if (!(line = getLine(term->sb, term->cy)))
-			break;
-		eraseInLine(line, term->cx, MAX(atoi(param), 1));
+		if (line)
+			eraseInLine(line, term->cx, MAX(atoi(param), 1));
 		break;
 
 	case 0x53: /* SU スクロール上 */
@@ -492,9 +490,8 @@ CSI(Term *term, const char *head, const char *tail)
 		break;
 
 	case 0x58: /* ECH 文字消去 */
-		if (!(line = getLine(term->sb, term->cy)))
-			break;
-		putSPCs(line, term->cx, term->bg, atoi(param));
+		if (line)
+			putSPCs(line, term->cx, term->bg, atoi(param));
 		break;
 
 	case 0x63: /* DA 装置識別 */
@@ -579,7 +576,8 @@ ctrlSeq(Term *term, const char *head, const char *tail, enum cseq_type type)
 				return ctrlSeq(term, head + 1, tail, type);
 			} else {
 				err[i] = '\0';
-				fprintf(stderr, "CtrlSeq \"%s\" was interrupted by '%#x'\n", err, head[i]);
+				fprintf(stderr, "CtrlSeq \"%s\" was interrupted by '%#x'\n",
+						err, head[i]);
 				return &head[i];
 			}
 		}
@@ -634,7 +632,7 @@ OSC(Term *term, char *payload, const char *err)
 		case 11: pc = defbg;                    break;
 		}
 		spec = mystrsep(&payload, ";");
-		if (spec == NULL) {                         /* */
+		if (spec == NULL) {
 		} else if (strncmp(spec, "#", 1) == 0) {    /* #rrggbb形式 */
 			color = strtol(&spec[1], &endptr, 16);
 			if (endptr == &spec[7] && spec[7] == '\0') {
@@ -699,12 +697,12 @@ void
 areaScroll(Term *term, int first, int last, int num)
 {
 	struct ScrBuf *sb = term->sb;
-	int area = last - first + 1;
+	const int area = last - first + 1;
 	Line *tmp[area];
 	int index;
 	int i;
 
-	if (!(0 <= first && first <= last && last < sb->rows))
+	if (first < 0 || last < first || sb->rows < last)
 		return;
 
 	for (i = 0; i < area; i++) {
@@ -801,9 +799,7 @@ decset(Term *term, unsigned int num, int flag)
 ssize_t
 writePty(Term *term, const char *buf, ssize_t n)
 {
-	ssize_t size;
-	size = write(term->master, buf, n);
-	return size;
+	return write(term->master, buf, n);
 }
 
 void
@@ -1029,8 +1025,8 @@ designateCharSet(Term *term, const char *head, const char *tail)
 Line *
 getLine(ScrBuf *sb, int row)
 {
-	int index = sb->firstline + row;
-	int oldest = MAX(sb->totallines - sb->maxlines, 0);
+	const int index = sb->firstline + row;
+	const int oldest = MAX(sb->totallines - sb->maxlines, 0);
 
 	if (index < oldest || sb->totallines <= index || sb->rows <= row)
 		return NULL;
@@ -1070,8 +1066,8 @@ getLines(ScrBuf *sb, Line **lines, int len, int scr, const Selection *sel)
 			b = sel->aline < sel->bline ? sel->bcol : sel->acol;
 		}
 
-		li = getCharCnt(lines[i]->str, a).index;
-		ri = getCharCnt(lines[i]->str, b).index;
+		li = getIndex(lines[i]->str, a);
+		ri = getIndex(lines[i]->str, b);
 		for (j = li; j < ri && j < u32slen(lines[i]->str); j++)
 			lines[i]->attr[j] ^= NEGA;
 	}
@@ -1124,10 +1120,10 @@ copySelection(Selection *sel, char **dst, bool deltrail)
 {
 	int len = 256;
 	char32_t *cp, *copy = xmalloc(len * sizeof(copy[0]));
-	int firstline = MIN(sel->aline, sel->bline);
-	int lastline  = MAX(sel->aline, sel->bline);
-	int left      = MIN(sel->acol,  sel->bcol);
-	int right     = MAX(sel->acol,  sel->bcol);
+	const int firstline = MIN(sel->aline, sel->bline);
+	const int lastline  = MAX(sel->aline, sel->bline);
+	const int left      = MIN(sel->acol,  sel->bcol);
+	const int right     = MAX(sel->acol,  sel->bcol);
 	Line *line;
 	int i, j, l, r;
 
@@ -1138,8 +1134,8 @@ copySelection(Selection *sel, char **dst, bool deltrail)
 		if (!(line = getLine(sel->sb, i - sel->sb->firstline)))
 			continue;
 
-		l = MIN(getCharCnt(line->str,  left).index, u32slen(line->str));
-		r = MIN(getCharCnt(line->str, right).index, u32slen(line->str));
+		l = MIN(getIndex(line->str,  left), u32slen(line->str));
+		r = MIN(getIndex(line->str, right), u32slen(line->str));
 		if (!sel->rect) {
 			l = (i == firstline) ? l : 0;
 			r = (i ==  lastline) ? r : u32slen(line->str) + 1;
