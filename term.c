@@ -260,7 +260,7 @@ GCs(Term *term, const char *head)
 		}
 
 		/* 行が埋まる場合は自動改行を設定して行末までを書く */
-		term->sb->am = 0 < term->dec[7] && max < u32swidth(dp);
+		term->sb->am = 0 < term->dec[7] && max <= u32swidth(dp);
 		wlen = term->sb->am ? getIndex(dp, max) : u32slen(dp);
 		wlen = MAX(wlen, 1);
 
@@ -685,6 +685,7 @@ setCursorPos(Term *term, int cx, int cy)
 {
 	term->cx = CLIP(cx, 0, term->sb->cols - 1);
 	term->cy = CLIP(cy, term->sb->scrs, term->sb->scre);
+	term->sb->am = 0;
 }
 
 void
@@ -808,7 +809,7 @@ setWinSize(Term *term, int row, int col, int xpixel, int ypixel)
 	struct winsize ws;
 
 	row = CLIP(row, 1, term->sb->maxlines);
-	col = MAX(col, 2);
+	col = MAX(col, 3);
 	ws = (struct winsize){ row, col, xpixel, ypixel };
 
 	if (term->sb->rows != row || term->sb->cols != col)

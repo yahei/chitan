@@ -263,7 +263,7 @@ drawPane(Pane *pane, nsec now, Line *peline, int pecaret)
 		pecaretpos = u32snwidth(peline->str, pecaret);
 
 		/* Preeditの画面上での描画位置を決める */
-		pepos = pane->term->cx - pecaretpos;
+		pepos = pane->term->sb->cols / 2 - pecaretpos;
 		pepos = MIN(pepos, 0);
 		pepos = MAX(pepos, pane->term->sb->cols - pewidth);
 		pepos = MIN(pepos, pane->term->cx);
@@ -362,7 +362,7 @@ drawLine(Pane *pane, Line *line, int row, int col, int width, int pos, nsec now)
 	attr = FONT_NONE;
 	attr |= line->attr[i] & BOLD   ? FONT_BOLD   : FONT_NONE;
 	attr |= line->attr[i] & ITALIC ? FONT_ITALIC : FONT_NONE;
-	drawXFontString(pane->draw, &xc, pane->xfont, attr, x, y, pane->width,
+	drawXFontString(pane->draw, &xc, pane->xfont, attr, x, y, w,
 			&line->str[i], next - i);
 
 	/* 後処理 */
@@ -379,8 +379,8 @@ drawLine(Pane *pane, Line *line, int row, int col, int width, int pos, nsec now)
 void
 drawCursor(Pane *pane, Line *line, int row, int col, int type, nsec now)
 {
-	const int index = getIndex(line->str, col);
-	char32_t *c = index < u32slen(line->str) ? &line->str[index] : (char32_t *)L" ";
+	const CharCnt cc = getCharCnt(line->str, col);
+	char32_t *c = cc.index < u32slen(line->str) ? &line->str[cc.index] : (char32_t *)L" ";
 	const int x = pane->xpad + col * pane->xfont->cw;
 	const int y = pane->ypad + row * pane->xfont->ch;
 	const int cw = pane->xfont->cw * u32snwidth(c, 1) - 1;
@@ -399,9 +399,9 @@ drawCursor(Pane *pane, Line *line, int row, int col, int type, nsec now)
 	switch (type) {
 	default: case 0: case 1: case 2: /* ブロック */
 		if (pane->focus) {
-			attr = index < u32slen(line->str) ? line->attr[index] : 0;
+			attr = cc.index < u32slen(line->str) ? line->attr[cc.index] : 0;
 			cursor = (Line){c, &attr, &defbg, &deffg};
-			drawLine(pane, &cursor, row, col, 1, 0, now);
+			drawLine(pane, &cursor, row, cc.col, 1, 0, now);
 		} else {
 			XDrawRectangle(dinfo->disp, pane->pixmap, pane->gc, x, y, cw, ch - 1);
 			XDrawPoint(dinfo->disp, pane->pixmap, pane->gc, x + cw, y + ch - 1);
@@ -418,6 +418,7 @@ drawCursor(Pane *pane, Line *line, int row, int col, int type, nsec now)
 	}
 
 	/* 次回の消去範囲を変更 */
+	pane->clear_x = pane->xpad + pane->xfont->cw * (cc.col - 0.5);
 	pane->clear_w = cw + pane->xfont->cw;
 }
 
