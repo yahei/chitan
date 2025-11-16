@@ -5,7 +5,6 @@
 #include <stdlib.h>
 #include <time.h>
 #include <unistd.h>
-#include <wchar.h>
 #include <X11/Xatom.h>
 #include <X11/Xlib.h>
 
@@ -54,7 +53,7 @@ static void fin(void);
 /* Win */
 static Win *openWindow(int ,int);
 static void closeWindow(Win *);
-static void setWindowName(Win *, char *);
+static void setWindowName(Win *, const char *);
 static int handleXEvent(Win *);
 static int keyPressEvent(Win *, XEvent, int);
 static void redraw(Win *);
@@ -280,7 +279,7 @@ closeWindow(Win *win)
 }
 
 void
-setWindowName(Win *win, char *name)
+setWindowName(Win *win, const char *name)
 {
 	XTextProperty prop = {
 		(unsigned char *)name, atoms[UTF8_STRING], 8, strlen(name)

@@ -17,7 +17,7 @@
  */
 
 #define READ_SIZE       (1 << 14)
-#define LINE(a,b)       ((a)->lines[(b) % (a)->maxlines])
+#define LINE(a, b)      ((a)->lines[(b) % (a)->maxlines])
 #define IS_GC(c)        (BETWEEN((c), 0x20, 0x7f) || (c) & 0x80)
 
 enum cseq_type { CS_DCS, CS_SOS, CS_OSC, CS_PM, CS_APC, CS_k };
@@ -132,7 +132,7 @@ FAIL:
 void
 setDefaultPalette(Term *term)
 {
-	const int vals[6] = {0x00, 0x5f, 0x87, 0xaf, 0xd7, 0xff};
+	const unsigned int vals[6] = {0x00, 0x5f, 0x87, 0xaf, 0xd7, 0xff};
 	int i;
 
 	/* Selenized Black (https://github.com/jan-warchol/selenized) */

@@ -32,7 +32,7 @@ typedef struct Pane {
 	nsec caret_time, bell_time;
 	bool timer_active[TIMER_NUM];
 	Term *term;
-	Line **lines, **lines_b;
+	Line **new_lines, **old_lines;
 	Selection sel;
 	struct ScrBuf *prevbuf;
 	int scr, prevfst;

@@ -1,12 +1,11 @@
 #include <stdint.h>
-#include <stdlib.h>
 
 extern int deffg;
 extern int defbg;
 
 typedef uint_least32_t char32_t;
 
-#define PUT_NUL(l,x)    putU32s((l), (x), (char32_t *)L"\0", 0, deffg, defbg, 1)
+#define PUT_NUL(l, x)   putU32s((l), (x), (char32_t *)L"\0", 0, deffg, defbg, 1)
 #define u32swidth(s)    u32snwidth(s, u32slen(s))
 
 enum sgr_attribute {

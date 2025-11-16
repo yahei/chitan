@@ -188,7 +188,7 @@ putU32s(Line *line, int col, const char32_t *str, int attr, int fg, int bg, size
 void
 putSPCs(Line *line, int col, int bg, size_t n)
 {
-	char32_t str[n];
+	char32_t str[n] = {};
 
 	INIT(str, L' ');
 	putU32s(line, col, str, 0, deffg, bg, n);
