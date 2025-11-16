@@ -237,7 +237,6 @@ openWindow(int width, int height)
 
 	/* 描画の準備 */
 	win->gc = XCreateGC(dinfo.disp, win->window, 0, NULL);
-	XSetGraphicsExposures(dinfo.disp, win->gc, false);
 	win->draw = XftDrawCreate(dinfo.disp, win->window, dinfo.visual, dinfo.cmap);
 
 	/* IME */
