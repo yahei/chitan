@@ -1,16 +1,15 @@
 chitan|chitan-256color|chitan terminal emulator,
-# 端末の仕様
 	acsc=``aaffggjjkkllmmnnooppqqrrssttuuvvwwxxyyzz{{||}}~~,
 	am,
-	ccc,
-	xenl,
 	bce,
-	km,
-	it#8,
+	ccc,
 	colors#0x100,
+	it#8,
+	km,
 	pairs#0x10000,
+	xenl,
 
-# 特殊キー
+# function keys
 	kbs=^?,
 	kcuu1=\eOA,
 	kcud1=\eOB,
@@ -38,7 +37,7 @@ chitan|chitan-256color|chitan terminal emulator,
 	rmkx=\E[?1l\E>,
 	kmous=\e[M,
 
-# 端末制御コード
+# command
 	bel=^G,
 	civis=\e[?25l,
 	cnorm=\e[?25h,
@@ -64,7 +63,7 @@ chitan|chitan-256color|chitan terminal emulator,
 	PS=\e[200~,
 	PE=\e[201~,
 
-# SGR
+# sgr
 	sgr0=\e[0m,
 	bold=\e[1m,
 	dim=\e[2m,
