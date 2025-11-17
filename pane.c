@@ -302,7 +302,7 @@ drawLine(Pane *pane, Line *line, int row, int col, int width, int pos, nsec now)
 		return;
 
 	/* 同じ属性の文字はまとめて処理する */
-	next = MIN(findNextSGR(line, i), width);
+	next = findNextSGR(line, i);
 	drawLine(pane, line, row, col, width, pos + u32snwidth(&line->str[i], next - i), now);
 
 	/* 座標 */
