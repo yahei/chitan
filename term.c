@@ -824,10 +824,8 @@ setScrBufSize(Term *term, int row, int col)
 	int newfst = sb->firstline;
 
 	/* 行数が減ってカーソルが画面外に出たとき */
-	if (row < sb->rows && row - 1 < term->cy) {
-		newfst = sb->firstline + (sb->rows - row);
-		newfst = MIN(sb->firstline + term->cy, newfst);
-	}
+	if (row < sb->rows && row - 1 < term->cy)
+		newfst = sb->firstline + (term->cy - row) + 1;
 	/* 行数が増えたとき */
 	if (sb->rows < row) {
 		newfst = MAX(sb->firstline - (row - sb->rows), 0);
