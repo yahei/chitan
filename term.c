@@ -1082,10 +1082,12 @@ setSelection(Selection *sel, ScrBuf *sb, int row, int col, bool start, bool rect
 	if (start) {
 		sel->sb = sb;
 		sel->acol  = MAX(col,  0);
-		sel->aline = MAX(row + sel->sb->firstline, 0);
+		sel->aline = MAX(row + sb->firstline, 0);
+	} else if (sel->sb != sb) {
+		return;
 	}
 	sel->bcol  = MAX(col,  0);
-	sel->bline = MAX(row + sel->sb->firstline, 0);
+	sel->bline = MAX(row + sb->firstline, 0);
 	sel->rect = rect;
 
 	/* 行のバージョンを記録 */
@@ -1093,7 +1095,7 @@ setSelection(Selection *sel, ScrBuf *sb, int row, int col, bool start, bool rect
 	e = MAX(sel->aline, sel->bline);
 	sel->vers = xrealloc(sel->vers, (e - s + 1) * sizeof(int));
 	for (i = 0; i <= e - s; i++)
-		if ((line = getLine(sel->sb, s - sel->sb->firstline + i)))
+		if ((line = getLine(sb, s - sb->firstline + i)))
 			sel->vers[i] = line->ver;
 }
 
