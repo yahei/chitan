@@ -44,7 +44,7 @@ createPane(DispInfo *dinfo, XFont *xfont, int width, int height, float alpha, in
 	if (!pane->term)
 		errExit("openTerm failed.\n");
 	pane->term->palette[defbg] = ((0xff & (int)(0xff * alpha)) << 24) +
-		(0x00ffffff & pane->term->palette[defbg]);
+		(0x00ffffff &pane->term->palette[defbg]);
 
 	/* 描画の準備 */
 	createPixmap(pane, width, height);

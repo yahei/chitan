@@ -44,14 +44,14 @@ static Win *win;
 static struct timespec now;
 static float alpha;
 static int loglines;
-static char *pattern, **cmd;
+static char *pattern, *geometry, **cmd;
 
 static void init(void);
 static void run(void);
 static void fin(void);
 
 /* Win */
-static Win *openWindow(int ,int);
+static Win *openWindow(int ,int, int, int);
 static void closeWindow(Win *);
 static void setWindowName(Win *, const char *);
 static int handleXEvent(Win *);
@@ -72,6 +72,7 @@ static const char version[] = "chitan 0.0.0";
 static const char help[] = "usage: chitan [-options] [[-e] command [args ...]]\n"
 "        -a alpha                background opacity (0.0-1.0)\n"
 "        -f font                 font selection pattern (ex. monospace:size=12)\n"
+"        -g geometry             size (in chars) and position (ex. 80x24+0+0)\n"
 "        -h                      show this help\n"
 "        -l number               number of log lines\n"
 "        -v                      show version\n"
@@ -83,13 +84,15 @@ main(int argc, char *argv[])
 	alpha = 1.0;
 	loglines = 1024;
 	pattern = "monospace";
+	geometry = "80x24+0+0";
 	cmd = (char *[]){ NULL };
 
 	while (1) {
-		switch (getopt(argc, argv, "+a:f:l:hve:")) {
+		switch (getopt(argc, argv, "+a:f:g:l:hve:")) {
 		case '?': printf("%s", help);                   return 0;
 		case 'a': alpha = CLIP(atof(optarg), 0, 1.0);   continue;
 		case 'f': pattern = optarg;                     continue;
+		case 'g': geometry = optarg;                    continue;
 		case 'h': printf("%s", help);                   return 0;
 		case 'l': loglines = MAX(atoi(optarg), 1);      continue;
 		case 'v': printf("%s\n", version);              return 0;
@@ -113,7 +116,8 @@ init(void)
 {
 	XVisualInfo vinfo;
 	char **names;
-	int i;
+	unsigned int row, col;
+	int x, y, i;
 
 	/* localeを設定 */
 	setlocale(LC_CTYPE, "");
@@ -144,7 +148,9 @@ init(void)
 		atoms[i] = XInternAtom(dinfo.disp, names[i], True);
 	
 	/* ウィンドウの作成 */
-	win = openWindow(800, 600);
+	x = y = col = row = 0;
+	XParseGeometry(geometry, &x, &y, &col, &row);
+	win = openWindow(col * xfont->cw + xfont->cw, row * xfont->ch + xfont->cw, x, y);
 }
 
 void
@@ -213,11 +219,11 @@ fin(void)
 }
 
 Win *
-openWindow(int width, int height)
+openWindow(int w, int h, int x, int y)
 {
 	Win *win = xmalloc(sizeof(Win));
 
-	*win = (Win){ .width = width, .height = height };
+	*win = (Win){ .width = w, .height = h};
 
 	/* ウィンドウの属性 */
 	win->attr.event_mask = KeyPressMask | KeyReleaseMask |
@@ -227,7 +233,7 @@ openWindow(int width, int height)
 
 	/* ウィンドウ作成 */
 	win->window = XCreateWindow(dinfo.disp, DefaultRootWindow(dinfo.disp),
-			0, 0, width, height, 1, 32, InputOutput, dinfo.visual,
+			x, y, w, h, 1, 32, InputOutput, dinfo.visual,
 			CWEventMask | CWColormap | CWBorderPixel, &win->attr);
 
 	/* プロパティ */
@@ -254,7 +260,7 @@ openWindow(int width, int height)
 	XFlush(dinfo.disp);
 
 	/* Pane作成 */
-	win->pane = createPane(&dinfo, xfont, width, height, alpha, loglines, cmd);
+	win->pane = createPane(&dinfo, xfont, w, h, alpha, loglines, cmd);
 
 	return win;
 }
