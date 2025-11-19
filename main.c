@@ -42,16 +42,13 @@ static XFont *xfont;
 static XIM xim;
 static Win *win;
 static struct timespec now;
-static float alpha;
-static int loglines;
-static char *pattern, *geometry, **cmd;
 
-static void init(void);
+static void init(int, char *[]);
 static void run(void);
 static void fin(void);
 
 /* Win */
-static Win *openWindow(int ,int, int, int);
+static Win *openWindow(int ,int, int, int, int, float, char *const []);
 static void closeWindow(Win *);
 static void setWindowName(Win *, const char *);
 static int handleXEvent(Win *);
@@ -81,40 +78,21 @@ static const char help[] = "usage: chitan [-options] [[-e] command [args ...]]\n
 int
 main(int argc, char *argv[])
 {
-	alpha = 1.0;
-	loglines = 1024;
-	pattern = "monospace";
-	geometry = "80x24+0+0";
-	cmd = (char *[]){ NULL };
-
-	while (1) {
-		switch (getopt(argc, argv, "+a:f:g:l:hve:")) {
-		case '?': printf("%s", help);                   return 0;
-		case 'a': alpha = CLIP(atof(optarg), 0, 1.0);   continue;
-		case 'f': pattern = optarg;                     continue;
-		case 'g': geometry = optarg;                    continue;
-		case 'h': printf("%s", help);                   return 0;
-		case 'l': loglines = MAX(atoi(optarg), 1);      continue;
-		case 'v': printf("%s\n", version);              return 0;
-		case 'e': cmd = argv + optind - 1;              break;
-		default : cmd = argv + optind;                  break;
-		}
-		break;
-	}
-
-	cmd    = cmd[0] ? cmd    : (char *[]){ getenv("SHELL"), NULL };
-	cmd[0] = cmd[0] ? cmd[0] : "/bin/sh";
-
-	init();
+	init(argc, argv);
 	run();
 	fin();
 	return 0;
 }
 
 void
-init(void)
+init(int argc, char *argv[])
 {
 	XVisualInfo vinfo;
+	float alpha = 1.0;
+	int loglines = 1024;
+	char *pattern = "monospace";
+	char *geometry = "80x24+0+0";
+	char **cmd = (char *[]){ NULL };
 	char **names;
 	unsigned int row, col;
 	int x, y, i;
@@ -133,24 +111,45 @@ init(void)
 	dinfo.visual = vinfo.visual;
 	dinfo.cmap = XCreateColormap(dinfo.disp, dinfo.root, dinfo.visual, None);
 
-	/* XIM */
-	XRegisterIMInstantiateCallback(dinfo.disp, NULL, NULL, NULL, ximOpen, NULL);
-
-	/* 文字描画の準備 */
-	FcInit();
-	xfont = openFont(dinfo.disp, pattern);
-	if (xfont == NULL)
-		fatal("XftFontOpen failed.\n");
+	/* コマンドライン引数 */
+	while (1) {
+		switch (getopt(argc, argv, "+a:f:g:l:hve:")) {
+		case '?': printf("%s", help);                   goto finish;
+		case 'a': alpha = CLIP(atof(optarg), 0, 1.0);   continue;
+		case 'f': pattern = optarg;                     continue;
+		case 'g': geometry = optarg;                    continue;
+		case 'h': printf("%s", help);                   goto finish;
+		case 'l': loglines = MAX(atoi(optarg), 1);      continue;
+		case 'v': printf("%s\n", version);              goto finish;
+		case 'e': cmd = argv + optind - 1;              break;
+		default : cmd = argv + optind;                  break;
+		}
+		break;
+finish:
+		XCloseDisplay(dinfo.disp);
+		exit(0);
+	}
 
 	/* Atomを取得 */
 	names = (char *[]){ "CLIPBOARD", "UTF8_STRING", "WM_DELETE_WINDOW" };
 	for (i = 0; i < ATOM_NUM; i++)
 		atoms[i] = XInternAtom(dinfo.disp, names[i], True);
 	
+	/* XIM */
+	XRegisterIMInstantiateCallback(dinfo.disp, NULL, NULL, NULL, ximOpen, NULL);
+
+	/* フォントを用意 */
+	FcInit();
+	xfont = openFont(dinfo.disp, pattern);
+	if (xfont == NULL)
+		fatal("XftFontOpen failed.\n");
+
 	/* ウィンドウの作成 */
 	x = y = col = row = 0;
 	XParseGeometry(geometry, &x, &y, &col, &row);
-	win = openWindow(col * xfont->cw + xfont->cw, row * xfont->ch + xfont->cw, x, y);
+	cmd    = cmd[0] ? cmd    : (char *[]){ getenv("SHELL"), NULL };
+	cmd[0] = cmd[0] ? cmd[0] : "/bin/sh";
+	win = openWindow(col * xfont->cw + xfont->cw, row * xfont->ch + xfont->cw, x, y, loglines, alpha, cmd);
 }
 
 void
@@ -219,7 +218,7 @@ fin(void)
 }
 
 Win *
-openWindow(int w, int h, int x, int y)
+openWindow(int w, int h, int x, int y, int loglines, float alpha, char *const cmd[])
 {
 	Win *win = xmalloc(sizeof(Win));
 
