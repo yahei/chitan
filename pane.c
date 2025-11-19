@@ -1,3 +1,6 @@
+#include <stdio.h>
+#include <X11/Xresource.h>
+
 #include "pane.h"
 #include "util.h"
 
@@ -29,6 +32,10 @@ static void clearPixmap(Pane *, nsec);
 Pane *
 createPane(DispInfo *dinfo, XFont *xfont, int width, int height, float alpha, int bufsize, char *const cmd[])
 {
+	char *xrm, *str_type, buf[16];
+	XrmDatabase xdb;
+	XrmValue val;
+	int i;
 	Pane *pane = xmalloc(sizeof(Pane));
 
 	*pane = (Pane){
@@ -43,6 +50,24 @@ createPane(DispInfo *dinfo, XFont *xfont, int width, int height, float alpha, in
 			(width - pane->xpad * 2) / xfont->cw, bufsize, cmd[0], cmd);
 	if (!pane->term)
 		errExit("openTerm failed.\n");
+
+	/* パレットの設定 */
+	xrm = XResourceManagerString(dinfo->disp);
+	xdb = XrmGetStringDatabase(xrm ? xrm : "");
+#define XRCOLOR(name, num) do {\
+	if (XrmGetResource(xdb, (name), "chitan", &str_type, &val) &&\
+	    strncmp(str_type, "String", 6) == 0 &&\
+	    strlen(val.addr) ==7 && val.addr[0] == '#')\
+		pane->term->palette[num] = strtol(val.addr + 1, NULL, 16) + 0xff000000;\
+} while (0)
+	XRCOLOR("chitan.foreground", deffg);
+	XRCOLOR("chitan.background", defbg);
+	for (i = 0; i < 256; i++) {
+		snprintf(buf, 16, "chitan.color%d", i);
+		XRCOLOR(buf, i);
+	}
+#undef XRCOLOR
+	XrmDestroyDatabase(xdb);
 	pane->term->palette[defbg] = ((0xff & (int)(0xff * alpha)) << 24) +
 		(0x00ffffff &pane->term->palette[defbg]);
 

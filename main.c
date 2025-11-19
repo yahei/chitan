@@ -7,6 +7,7 @@
 #include <unistd.h>
 #include <X11/Xatom.h>
 #include <X11/Xlib.h>
+#include <X11/Xresource.h>
 
 #include "pane.h"
 #include "util.h"
@@ -88,10 +89,13 @@ void
 init(int argc, char *argv[])
 {
 	XVisualInfo vinfo;
+	char *xrm, *str_type;
+	XrmDatabase xdb;
+	XrmValue val;
 	float alpha = 1.0;
 	int loglines = 1024;
-	char *pattern = "monospace";
-	char *geometry = "80x24+0+0";
+	char pattern_str[256] = "monospace", *pattern = pattern_str;
+	char geometry_str[256] = "80x24+0+0", *geometry = geometry_str;
 	char **cmd = (char *[]){ NULL };
 	char **names;
 	unsigned int row, col;
@@ -110,6 +114,19 @@ init(int argc, char *argv[])
 	XMatchVisualInfo(dinfo.disp, dinfo.screen, 32, TrueColor, &vinfo);
 	dinfo.visual = vinfo.visual;
 	dinfo.cmap = XCreateColormap(dinfo.disp, dinfo.root, dinfo.visual, None);
+
+	/* X resources */
+	XrmInitialize();
+	xrm = XResourceManagerString(dinfo.disp);
+	xdb = XrmGetStringDatabase(xrm ? xrm : "");
+#define XRES(name) (XrmGetResource(xdb, (name), "chitan", &str_type, &val) &&\
+		strncmp(str_type, "String", 6) == 0)
+	if (XRES("chitan.alpha"))       alpha    = atof(val.addr);
+	if (XRES("chitan.font"))        strcpy(pattern_str, val.addr);
+	if (XRES("chitan.geometry"))    strcpy(geometry_str, val.addr);
+	if (XRES("chitan.lines"))       loglines = atof(val.addr);
+#undef XRES
+	XrmDestroyDatabase(xdb);
 
 	/* コマンドライン引数 */
 	while (1) {
