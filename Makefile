@@ -28,6 +28,6 @@ install: release
 	tic -x chitan.info
 
 uninstall:
-	rm /usr/local/bin/chitan
+	sudo rm /usr/local/bin/chitan
 
 .PHONY: clean release install uninstall
