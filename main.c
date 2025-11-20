@@ -72,7 +72,7 @@ static const char help[] = "usage: chitan [-options] [[-e] command [args ...]]\n
 "        -f font                 font selection pattern (ex. monospace:size=12)\n"
 "        -g geometry             size (in chars) and position (ex. 80x24+0+0)\n"
 "        -h                      show this help\n"
-"        -l number               number of log lines\n"
+"        -l number               number of lines in buffer\n"
 "        -v                      show version\n"
 "        -e command [args ...]   command to execute (must be the last)\n";
 
@@ -93,13 +93,13 @@ init(int argc, char *argv[])
 	XrmDatabase xdb;
 	XrmValue val;
 	float alpha = 1.0;
-	int loglines = 1024;
+	int buflines = 1024;
 	char pattern_str[256] = "monospace", *pattern = pattern_str;
 	char geometry_str[256] = "80x24+0+0", *geometry = geometry_str;
 	char **cmd = (char *[]){ NULL };
 	char **names;
 	unsigned int row, col;
-	int x, y, i;
+	int x, y, w, h, i;
 
 	/* localeを設定 */
 	setlocale(LC_CTYPE, "");
@@ -124,7 +124,7 @@ init(int argc, char *argv[])
 	if (XRES("chitan.alpha"))       alpha    = atof(val.addr);
 	if (XRES("chitan.font"))        strcpy(pattern_str, val.addr);
 	if (XRES("chitan.geometry"))    strcpy(geometry_str, val.addr);
-	if (XRES("chitan.lines"))       loglines = atof(val.addr);
+	if (XRES("chitan.lines"))       buflines = atof(val.addr);
 #undef XRES
 	XrmDestroyDatabase(xdb);
 
@@ -136,7 +136,7 @@ init(int argc, char *argv[])
 		case 'f': pattern = optarg;                     continue;
 		case 'g': geometry = optarg;                    continue;
 		case 'h': printf("%s", help);                   goto finish;
-		case 'l': loglines = MAX(atoi(optarg), 1);      continue;
+		case 'l': buflines = MAX(atoi(optarg), 1);      continue;
 		case 'v': printf("%s\n", version);              goto finish;
 		case 'e': cmd = argv + optind - 1;              break;
 		default : cmd = argv + optind;                  break;
@@ -166,7 +166,9 @@ finish:
 	XParseGeometry(geometry, &x, &y, &col, &row);
 	cmd    = cmd[0] ? cmd    : (char *[]){ getenv("SHELL"), NULL };
 	cmd[0] = cmd[0] ? cmd[0] : "/bin/sh";
-	win = openWindow(col * xfont->cw + xfont->cw, row * xfont->ch + xfont->cw, x, y, loglines, alpha, cmd);
+	w = col * xfont->cw + xfont->cw;
+	h = row * xfont->ch + xfont->cw;
+	win = openWindow(w, h, x, y, buflines, alpha, cmd);
 }
 
 void
@@ -235,7 +237,7 @@ fin(void)
 }
 
 Win *
-openWindow(int w, int h, int x, int y, int loglines, float alpha, char *const cmd[])
+openWindow(int w, int h, int x, int y, int buflines, float alpha, char *const cmd[])
 {
 	Win *win = xmalloc(sizeof(Win));
 
@@ -276,7 +278,7 @@ openWindow(int w, int h, int x, int y, int loglines, float alpha, char *const cm
 	XFlush(dinfo.disp);
 
 	/* Pane作成 */
-	win->pane = createPane(&dinfo, xfont, w, h, alpha, loglines, cmd);
+	win->pane = createPane(&dinfo, xfont, w, h, alpha, buflines, cmd);
 
 	return win;
 }

@@ -19,12 +19,12 @@ enum mouse_event_type {
 	OTHER   = 128
 };
 
-/* ログ */
+/* バッファ */
 typedef struct ScrBuf {
-	Line **lines;   /* ログ */
-	int maxlines;   /* ログの最大行数*/
+	Line **lines;   /* バッファ */
+	int maxlines;   /* バッファの最大行数*/
 	int firstline;  /* 画面上1行目となる行 */
-	int totallines; /* ログの総行数 */
+	int totallines; /* バッファの総行数 */
 	int rows, cols; /* 画面の行数と列数 */
 	int scrs, scre; /* スクロール範囲 */
 	int am;         /* 自動改行 */
@@ -41,7 +41,7 @@ typedef struct Selection {
 /* 端末 */
 typedef struct Term {
 	int master;             /* 疑似端末のFD */
-	ScrBuf ori, alt, *sb;   /* ログ */
+	ScrBuf ori, alt, *sb;   /* バッファ */
 	int cx, cy;             /* カーソル位置 */
 	int svx, svy;           /* 保存したカーソル位置 */
 	int ctype;              /* カーソル形状 */
