@@ -76,6 +76,7 @@ drawXFontString(XftDraw *draw, XftColor *color, XFont *xfont, int attr, int x, i
 	int i;
 
 	XftDrawSetClipRectangles(draw, x, y, &rect, 1);
+	attr = BETWEEN(attr, 0, 4) ? attr : 0;
 	for (i = 0; i < num; i++) {
 		font = XftCharIndex(xfont->disp, (*xfont->fonts[0])[attr], str[i]) ?
 			xfont->fonts[0] : getFontSuiteGlyphs(xfont, str[i]);
