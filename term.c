@@ -751,6 +751,7 @@ decset(Term *term, unsigned int num, int flag)
 	case 1000: /* Mouse Tracking - normal */
 	case 1002: /* Mouse Tracking - button */
 	case 1003: /* Mouse Tracking - any */
+	case 1004: /* Focus In/Out */
 	case 1005: /* Mouse Tracking - UTF-8 (非対応) */
 	case 1006: /* Mouse Tracking - SGR */
 	case 1015: /* Mouse Tracking - urxvt (非対応) */

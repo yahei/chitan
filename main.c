@@ -406,6 +406,8 @@ handleXEvent(Win *win)
 		case FocusIn:
 		case FocusOut:          /* フォーカスの変化 */
 			pane->focus = event.type == FocusIn;
+			if (1 < pane->term->dec[1004])
+				writePty(pane->term, pane->focus ? "\e[I" : "\e[O", 3);
 			pane->redraw_flag = true;
 			break;
 

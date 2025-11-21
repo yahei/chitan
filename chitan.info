@@ -65,6 +65,10 @@ chitan|chitan-256color|chitan terminal emulator,
 	BD=\e[?2004l,
 	PS=\e[200~,
 	PE=\e[201~,
+	fd=\e[?1004l,
+	fe=\e[?1004h,
+	kxIN=\e[I,
+	kxOUT=\e[O,
 
 # sgr
 	sgr0=\e[0m,
