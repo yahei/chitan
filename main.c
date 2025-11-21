@@ -527,7 +527,10 @@ keyPressEvent(Win *win, XEvent event, int bufsize)
 	if (strlen(buf)) {
 		if (event.xkey.state & Mod1Mask)
 			writePty(win->pane->term, "\e", 1);
-		writePty(win->pane->term, buf, len);
+		if (keysym == XK_Escape && 1 < win->pane->term->dec[7727])
+			writePty(win->pane->term, "\eO[", 3);
+		else
+			writePty(win->pane->term, buf, len);
 		return 1;
 	}
 

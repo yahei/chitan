@@ -755,6 +755,7 @@ decset(Term *term, unsigned int num, int flag)
 	case 1006: /* Mouse Tracking - SGR */
 	case 1015: /* Mouse Tracking - urxvt (非対応) */
 	case 2004: /* Bracketed Paste Mode */
+	case 7727: /* Application escape key mode */
 		break;
 
 	case 7:    /* Auto-Wrap */
