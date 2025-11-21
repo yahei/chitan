@@ -255,13 +255,11 @@ drawPane(Pane *pane, nsec now, Line *peline, int pecaret)
 
 	/* Pixmapに書く */
 	for (i = -1; i < pane->term->sb->rows + 2; i++) {
-		/* 行を書く */
-		if ((line = NEW_LINE(pane, i)))
-			drawLine(pane, line, i, 0, pane->term->sb->cols + 2, 0, now);
+		line = NEW_LINE(pane, i);
 
 		/* 前回の方が長い場合の塗りつぶし */
 		width   = line ? u32swidth(line->str) : 0;
-		width_b = u32swidth(OLD_LINE(pane, i)->str);
+		width_b = u32swidth(OLD_LINE(pane, i)->str) + 1;
 		if (width < width_b) {
 			XSetForeground(pane->dinfo->disp, pane->gc,
 					BELLCOLOR(pane->term->palette[defbg]));
@@ -271,6 +269,10 @@ drawPane(Pane *pane, nsec now, Line *peline, int pecaret)
 					pane->xfont->cw * (width_b - width),
 					pane->xfont->ch);
 		}
+
+		/* 行を書く */
+		if (line)
+			drawLine(pane, line, i, 0, pane->term->sb->cols + 2, 0, now);
 	}
 
 	/* 書いた文字とPixmapの状態を記録 */
@@ -387,7 +389,7 @@ drawLine(Pane *pane, Line *line, int row, int col, int width, int pos, nsec now)
 	attr = FONT_NONE;
 	attr |= line->attr[i] & BOLD   ? FONT_BOLD   : FONT_NONE;
 	attr |= line->attr[i] & ITALIC ? FONT_ITALIC : FONT_NONE;
-	drawXFontString(pane->draw, &xc, pane->xfont, attr, x, y, w,
+	drawXFontString(pane->draw, &xc, pane->xfont, attr, x, y, w + pane->xfont->cw,
 			&line->str[i], next - i);
 
 	/* 後処理 */
