@@ -19,11 +19,18 @@ XFont *
 openFont(Display *disp, const char *pattern)
 {
 	XFont *xfont = xmalloc(sizeof(XFont));
+	const char *opt_head;
 	XGlyphInfo ginfo;
 
-	*xfont = (XFont){ disp, NULL, 1, 1, 0, NULL, NULL, 0, 0 };
-	xfont->pattern = xmalloc(strlen(pattern) + 1);
-	strcpy((char *)xfont->pattern, pattern);
+	*xfont = (XFont){ .disp = disp, .cw = 1, .ch = 1 };
+
+	/* patternを:の前と:以降に分けて持つ */
+	opt_head = strchr(pattern, ':');
+	opt_head = opt_head ? opt_head : strchr(pattern, '\0');
+	xfont->family = xmalloc(opt_head - pattern + 1);
+	xfont->option = xmalloc(strlen(opt_head) + 1);
+	snprintf((char *)xfont->family, opt_head - pattern + 1, "%s", pattern);
+	snprintf((char *)xfont->option, strlen(opt_head) + 1, "%s", opt_head);
 
 	/* メインフォントのロード */
 	getFontSuiteFonts(xfont, pattern);
@@ -53,7 +60,8 @@ closeFont(XFont *xfont)
 		free(xfont->fonts[i]);
 	}
 
-	free(xfont->pattern);
+	free(xfont->family);
+	free(xfont->option);
 	free(xfont->glyphs);
 	free(xfont->fonts);
 
@@ -81,7 +89,6 @@ XftFontSuite *
 getFontSuiteGlyphs(XFont *xfont, char32_t codepoint)
 {
 	XftFontSuite *font;
-	const char *opt = strchr((char *)xfont->pattern, ':');
 	char fontname[256], pattern[256];
 	int j;
 
@@ -91,8 +98,8 @@ getFontSuiteGlyphs(XFont *xfont, char32_t codepoint)
 			return xfont->glyphs[j].font;
 
 	/* グリフをリストに追加 */
-	getFontName(xfont->pattern, codepoint, fontname, sizeof(fontname));
-	snprintf(pattern, sizeof(pattern), "%s%s", fontname, opt ? opt : "");
+	getFontName(xfont->family, codepoint, fontname, sizeof(fontname));
+	snprintf(pattern, sizeof(pattern), "%s%s", fontname, xfont->option);
 	font = getFontSuiteFonts(xfont, pattern);
 	struct FallbackGlyph fbg = { codepoint, font };
 	PUSH_BACK(xfont->glyphs, xfont->glyphs_len, fbg);
