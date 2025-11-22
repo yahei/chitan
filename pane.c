@@ -70,6 +70,8 @@ createPane(DispInfo *dinfo, XFont *xfont, int width, int height, float alpha, in
 	XrmDestroyDatabase(xdb);
 	pane->term->palette[defbg] = ((0xff & (int)(0xff * alpha)) << 24) +
 		(0x00ffffff &pane->term->palette[defbg]);
+	for (i = 0; i < MAX(256, MAX(deffg, defbg) + 1); i++)
+		pane->term->def_palette[i] = pane->term->palette[i];
 
 	/* 描画の準備 */
 	createPixmap(pane, width, height);
@@ -209,9 +211,9 @@ drawPane(Pane *pane, nsec now, Line *peline, int pecaret)
 		pane->bell_time = now + bell_duration;
 		pane->bell_cnt = pane->term->bell_cnt;
 	}
-	if (pane->pallet_cnt != pane->term->pallet_cnt) {
+	if (pane->palette_cnt != pane->term->palette_cnt) {
 		clear_flag = true;
-		pane->pallet_cnt = pane->term->pallet_cnt;
+		pane->palette_cnt = pane->term->palette_cnt;
 	}
 
 	/* バッファの切り替えや行の追加を見てスクロール量を更新 */

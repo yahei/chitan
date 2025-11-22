@@ -22,7 +22,7 @@
 
 enum cseq_type { CS_DCS, CS_SOS, CS_OSC, CS_PM, CS_APC, CS_k };
 
-static void setDefaultPalette(Term *);
+static void setDefaultPalette(Color *);
 static void removeCharFromReadbuf(Term *, const char *);
 static const char *GCs(Term *, const char *);
 static const char *CC(Term *, const char *, const char *);
@@ -80,8 +80,10 @@ openTerm(int row, int col, int bufsize, const char *program, char *const cmd[])
 	term->appkeypad = 1;
 
 	/* カラーパレットの初期化 */
-	term->palette = xmalloc(MAX(256, MAX(deffg, defbg) + 1) * sizeof(Color));
-	setDefaultPalette(term);
+	term->palette     = xmalloc(MAX(256, MAX(deffg, defbg) + 1) * sizeof(Color));
+	term->def_palette = xmalloc(MAX(256, MAX(deffg, defbg) + 1) * sizeof(Color));
+	setDefaultPalette(term->palette);
+	setDefaultPalette(term->def_palette);
 
 	/* 疑似端末を開く */
 	errno = -1;
@@ -130,44 +132,44 @@ FAIL:
 }
 
 void
-setDefaultPalette(Term *term)
+setDefaultPalette(Color *palette)
 {
 	const unsigned int vals[6] = {0x00, 0x5f, 0x87, 0xaf, 0xd7, 0xff};
 	int i;
 
 	/* Selenized Black (https://github.com/jan-warchol/selenized) */
-	term->palette[  0] = 0xff252525;
-	term->palette[  1] = 0xffed4a46;
-	term->palette[  2] = 0xff70b433;
-	term->palette[  3] = 0xffdbb32d;
-	term->palette[  4] = 0xff368aeb;
-	term->palette[  5] = 0xffeb6eb7;
-	term->palette[  6] = 0xff3fc5b7;
-	term->palette[  7] = 0xffb9b9b9;
+	palette[  0] = 0xff252525;
+	palette[  1] = 0xffed4a46;
+	palette[  2] = 0xff70b433;
+	palette[  3] = 0xffdbb32d;
+	palette[  4] = 0xff368aeb;
+	palette[  5] = 0xffeb6eb7;
+	palette[  6] = 0xff3fc5b7;
+	palette[  7] = 0xffb9b9b9;
 
-	term->palette[  8] = 0xff3b3b3b;
-	term->palette[  9] = 0xffff5e56;
-	term->palette[ 10] = 0xff83c746;
-	term->palette[ 11] = 0xffefc541;
-	term->palette[ 12] = 0xff4f9cfe;
-	term->palette[ 13] = 0xffff81ca;
-	term->palette[ 14] = 0xff56d8c9;
-	term->palette[ 15] = 0xffdedede;
+	palette[  8] = 0xff3b3b3b;
+	palette[  9] = 0xffff5e56;
+	palette[ 10] = 0xff83c746;
+	palette[ 11] = 0xffefc541;
+	palette[ 12] = 0xff4f9cfe;
+	palette[ 13] = 0xffff81ca;
+	palette[ 14] = 0xff56d8c9;
+	palette[ 15] = 0xffdedede;
 
 	/* 216 colors */
 	for (i = 0; i < 216; i++)
-		term->palette[i + 16] = (0xff << 24) +
+		palette[i + 16] = (0xff << 24) +
 			(vals[(i / 36) % 6] << 16) +
 			(vals[(i /  6) % 6] <<  8) +
 			(vals[(i /  1) % 6] <<  0);
 
 	/* Grayscale colors */
 	for (i = 0; i < 24; i++)
-		term->palette[i + 232] = 0x0a0a0a * i + 0xff080808;
+		palette[i + 232] = 0x0a0a0a * i + 0xff080808;
 
 	/* fg bg */
-	term->palette[deffg] = 0xffb9b9b9;
-	term->palette[defbg] = 0xff181818;
+	palette[deffg] = 0xffb9b9b9;
+	palette[defbg] = 0xff181818;
 }
 
 void
@@ -190,6 +192,7 @@ closeTerm(Term *term)
 	free(term->alt.lines);
 	free(term->readbuf);
 	free(term->palette);
+	free(term->def_palette);
 	free(term);
 }
 
@@ -614,6 +617,7 @@ void
 OSC(Term *term, char *payload, const char *err)
 {
 	char *spec, *endptr, *buf, res[28];
+	char *r, *g, *b;
 	int pn, pc, color;
 
 	pn = (buf = mystrsep(&payload, ";")) ? atoi(buf) : -1;
@@ -633,14 +637,39 @@ OSC(Term *term, char *payload, const char *err)
 		}
 		spec = mystrsep(&payload, ";");
 		if (spec == NULL) {
-		} else if (strncmp(spec, "#", 1) == 0) {    /* #rrggbb形式 */
+		} else if (strncmp(spec, "#", 1) == 0) {        /* #rrggbb形式 */
 			color = strtol(&spec[1], &endptr, 16);
 			if (endptr == &spec[7] && spec[7] == '\0') {
 				term->palette[pc] &= 0xff000000;
 				term->palette[pc] |= color;
-				term->pallet_cnt++;
+				term->palette_cnt++;
 			}
-		} else if (strncmp(spec, "?", 2) == 0) {    /* 現在の値を返す */
+		} else if (strncmp(spec, "rgb:", 4) == 0) {     /* rgb:rr/gg/bb形式 */
+			r = strtok(&spec[4], "/");
+			g = strtok(NULL, "/");
+			b = strtok(NULL, "/");
+			if (r && g && b) {
+				term->palette[pc] &= 0xff000000;
+				term->palette[pc] |= (0xff & strtol(r, NULL, 16)) << 16;
+				term->palette[pc] |= (0xff & strtol(g, NULL, 16)) << 8;
+				term->palette[pc] |= (0xff & strtol(b, NULL, 16));
+				term->palette_cnt++;
+			}
+		} else if (strncmp(spec, "rgbi:", 5) == 0) {    /* rgbi:r/g/b形式 */
+			r = strtok(&spec[5], "/");
+			g = strtok(NULL, "/");
+			b = strtok(NULL, "/");
+			if (r && g && b) {
+				term->palette[pc] &= 0xff000000;
+				term->palette[pc] |= (0xff & (int)(0xff * atof(r))) << 16;
+				term->palette[pc] |= (0xff & (int)(0xff * atof(g))) << 8;
+				term->palette[pc] |= (0xff & (int)(0xff * atof(b)));
+				term->palette_cnt++;
+			}
+		} else if (strncmp(spec, "reset", 6) == 0) {    /* 元の色に戻す */
+			term->palette[pc] = term->def_palette[pc];
+			term->palette_cnt++;
+		} else if (strncmp(spec, "?", 2) == 0) {        /* 現在の値を返す */
 			if (pn == 4)
 				snprintf(res, 8, "\e]%d;%d", pn, pc);
 			else

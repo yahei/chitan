@@ -37,7 +37,7 @@ typedef struct Pane {
 	struct ScrBuf *prevbuf;
 	int scr, prevfst;
 	int clear_x, clear_y, clear_w, clear_h;
-	int bell_cnt, pallet_cnt;
+	int bell_cnt, palette_cnt;
 } Pane;
 
 Pane *createPane(DispInfo *, XFont *, int, int, float, int, char *const []);

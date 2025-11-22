@@ -52,11 +52,12 @@ typedef struct Term {
 	char appkeypad;         /* Application Keypadの状態 */
 	int attr, fg, bg;       /* 現在のSGR */
 	Color *palette;         /* カラーパレット */
+	Color *def_palette;     /* カラーパレットのデフォルト値 */
 	int oldmx, oldmy;       /* 前回のマウス座標 */
 	const char32_t *g[4];   /* 文字集合 */
 	char title[TITLE_MAX];  /* タイトル */
 	int bell_cnt;           /* ベルが鳴った回数 */
-	int pallet_cnt;         /* パレットを変更した回数 */
+	int palette_cnt;        /* パレットを変更した回数 */
 } Term;
 
 Term *openTerm(int, int, int, const char *, char *const []);
