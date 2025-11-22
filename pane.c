@@ -15,7 +15,7 @@
 		((int)(  RED(c1) * (a1) +   RED(c2) * (a2)) << 16) +\
 		((int)(GREEN(c1) * (a1) + GREEN(c2) * (a2)) <<  8) +\
 		((int)( BLUE(c1) * (a1) +  BLUE(c2) * (a2)) <<  0))
-#define BELLCOLOR(c)    (now < pane->bell_time ? BLEND_COLOR((c), 0.85, 0xffffffff, 0.15) : (c))
+#define BELLCOLOR(c)    (now < pane->bell_time ? BLEND_COLOR((c), 0.925, 0xffffffff, 0.075) : (c))
 #define SCROLLMAX(sb)   ((sb)->firstline - MAX((sb)->totallines - (sb)->maxlines, 0))
 #define NEW_LINE(p, n)  (pane->new_lines[n + 1])
 #define OLD_LINE(p, n)  (pane->old_lines[n + 1])

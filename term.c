@@ -55,10 +55,11 @@ openTerm(int row, int col, int bufsize, const char *program, char *const cmd[])
 		.title = "chitan" };
 
 	/* スクリーンバッファの初期化 */
+	row = row < bufsize ? row : bufsize;
 	term->ori = term->alt = (struct ScrBuf){
 		.firstline = 0,
 		.totallines = row,
-		.maxlines = row < bufsize ? bufsize : row,
+		.maxlines = bufsize,
 		.rows = row, .cols = col,
 		.scrs = 0, .scre = row - 1,
 	};
