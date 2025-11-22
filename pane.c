@@ -172,6 +172,7 @@ drawPane(Pane *pane, nsec now, Line *peline, int pecaret)
 	Line *line;
 	int pepos, pewidth, pecaretpos, caretrow;
 	int width, width_b;
+	bool clear_flag = false;
 	int i;
 
 	/* --- タイマーの処理 --- */
@@ -183,7 +184,7 @@ drawPane(Pane *pane, nsec now, Line *peline, int pecaret)
 
 	/* ベルの消灯時刻をまたいでいたら画面クリア */
 	if (pane->time_b < pane->bell_time && pane->bell_time <= now)
-		clearPixmap(pane, now);
+		pane->redraw_flag = clear_flag = true;
 
 	/* 点滅の切り替わり時刻をまたいでいたら再描画 */
 #define LIT(T,D) (((T) / (D)) % 2)
@@ -204,13 +205,13 @@ drawPane(Pane *pane, nsec now, Line *peline, int pecaret)
 
 	/* ベルやパレットの更新をチェック */
 	if (pane->bell_cnt != pane->term->bell_cnt) {
+		clear_flag |= pane->bell_time <= now;
 		pane->bell_time = now + bell_duration;
 		pane->bell_cnt = pane->term->bell_cnt;
-		clearPixmap(pane, now);
 	}
 	if (pane->pallet_cnt != pane->term->pallet_cnt) {
+		clear_flag = true;
 		pane->pallet_cnt = pane->term->pallet_cnt;
-		clearPixmap(pane, now);
 	}
 
 	/* バッファの切り替えや行の追加を見てスクロール量を更新 */
@@ -228,11 +229,15 @@ drawPane(Pane *pane, nsec now, Line *peline, int pecaret)
 
 	/* --- 端末の内容を描画 --- */
 
-	/* 画面をカーソル等を書く前の状態に戻す */
-	XCopyArea(pane->dinfo->disp, pane->pixbuf, pane->pixmap, pane->gc,
-			pane->clear_x, pane->clear_y,
-			pane->clear_w, pane->clear_h,
-			pane->clear_x, pane->clear_y);
+	if (clear_flag)
+		/* 画面全体を消去する */
+		clearPixmap(pane, now);
+	else
+		/* カーソルやPreeditを書く前の状態に戻す */
+		XCopyArea(pane->dinfo->disp, pane->pixbuf, pane->pixmap, pane->gc,
+				pane->clear_x, pane->clear_y,
+				pane->clear_w, pane->clear_h,
+				pane->clear_x, pane->clear_y);
 
 	/* 次回の消去範囲を設定 */
 	pane->clear_x = pane->xpad + pane->xfont->cw * (pane->term->cx - 0.5);
