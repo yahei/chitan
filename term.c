@@ -9,6 +9,7 @@
 
 #include "term.h"
 #include "util.h"
+#include "colors.h"
 
 /*
  * Term
@@ -136,27 +137,15 @@ FAIL:
 void
 setDefaultPalette(Color *palette)
 {
+	const Color colors[16] = {
+		BG_1,    RED,    GREEN,    YELLOW,    BLUE,    MAGENTA,    CYAN, FG_0,
+		BG_2, BR_RED, BR_GREEN, BR_YELLOW, BR_BLUE, BR_MAGENTA, BR_CYAN, FG_1
+	};
 	const unsigned int vals[6] = {0x00, 0x5f, 0x87, 0xaf, 0xd7, 0xff};
 	int i;
 
-	/* Selenized Black (https://github.com/jan-warchol/selenized) */
-	palette[  0] = 0xff252525;
-	palette[  1] = 0xffed4a46;
-	palette[  2] = 0xff70b433;
-	palette[  3] = 0xffdbb32d;
-	palette[  4] = 0xff368aeb;
-	palette[  5] = 0xffeb6eb7;
-	palette[  6] = 0xff3fc5b7;
-	palette[  7] = 0xffb9b9b9;
-
-	palette[  8] = 0xff3b3b3b;
-	palette[  9] = 0xffff5e56;
-	palette[ 10] = 0xff83c746;
-	palette[ 11] = 0xffefc541;
-	palette[ 12] = 0xff4f9cfe;
-	palette[ 13] = 0xffff81ca;
-	palette[ 14] = 0xff56d8c9;
-	palette[ 15] = 0xffdedede;
+	/* 16 colors */
+	memcpy(palette, colors, sizeof(colors));
 
 	/* 216 colors */
 	for (i = 0; i < 216; i++)
@@ -170,8 +159,8 @@ setDefaultPalette(Color *palette)
 		palette[i + 232] = 0x0a0a0a * i + 0xff080808;
 
 	/* fg bg */
-	palette[deffg] = 0xffb9b9b9;
-	palette[defbg] = 0xff181818;
+	palette[deffg] = FG_0;
+	palette[defbg] = BG_0;
 }
 
 void

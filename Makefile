@@ -12,7 +12,7 @@ chitan: $(OBJS)
 
 main.o: util.h line.h term.h pane.h font.h
 pane.o: util.h line.h term.h pane.h font.h
-term.o: util.h line.h term.h
+term.o: util.h line.h term.h colors.h
 line.o: util.h line.h
 font.o: util.h font.h
 util.o: util.h
