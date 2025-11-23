@@ -2,7 +2,6 @@
 
 #include "line.h"
 
-typedef uint_least32_t Color;
 #define ALPHA(c)        ((c) >> 24 & 0xff)
 #define RED(c)          ((c) >> 16 & 0xff)
 #define GREEN(c)        ((c) >>  8 & 0xff)
@@ -50,7 +49,8 @@ typedef struct Term {
 	char opt[64];           /* オプション */
 	char dec[8800];         /* 拡張オプション */
 	char appkeypad;         /* Application Keypadの状態 */
-	int attr, fg, bg;       /* 現在のSGR */
+	int attr;               /* 現在の属性 */
+	Color fg, bg;           /* 現在の色 */
 	Color *palette;         /* カラーパレット */
 	Color *def_palette;     /* カラーパレットのデフォルト値 */
 	int oldmx, oldmy;       /* 前回のマウス座標 */

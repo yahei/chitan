@@ -70,7 +70,7 @@ createPane(DispInfo *dinfo, XFont *xfont, int width, int height, float alpha, in
 	XrmDestroyDatabase(xdb);
 	pane->term->palette[defbg] = ((0xff & (int)(0xff * alpha)) << 24) +
 		(0x00ffffff &pane->term->palette[defbg]);
-	for (i = 0; i < MAX(256, MAX(deffg, defbg) + 1); i++)
+	for (i = 0; i < PALETTE_SIZE; i++)
 		pane->term->def_palette[i] = pane->term->palette[i];
 
 	/* 描画の準備 */
@@ -367,8 +367,8 @@ drawLine(Pane *pane, Line *line, int row, int col, int width, int pos, nsec now)
 	bg = line->attr[i] & NEGA ? line->fg[i] : line->bg[i];
 	if (line->attr[i] & BOLD)                               /* 太字 */
 		fg += fg < 8 ? 8 : 0;
-	fc = pane->term->palette[fg];                           /* 色を取得 */
-	bc = pane->term->palette[bg];
+	fc = fg < PALETTE_SIZE ? pane->term->palette[fg] : fg;  /* 色を取得 */
+	bc = bg < PALETTE_SIZE ? pane->term->palette[bg] : bg;
 	if (line->attr[i] & FAINT)                              /* 細字 */
 		fc = BLEND_COLOR(fc, 0.6, bc, 0.4);
 

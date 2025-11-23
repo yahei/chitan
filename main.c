@@ -659,7 +659,8 @@ void
 preeditDraw(XIM xim, Win *win, XIMPreeditDrawCallbackStruct *call)
 {
 	char32_t *str;
-	int *attr, *fg, *bg, defattr;
+	int *attr, defattr;
+	Color *fg, *bg;
 	int len, oldlen = u32slen(win->ime.peline->str);
 	XIMFeedback fb;
 	InsertLine newline;

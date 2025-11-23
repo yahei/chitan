@@ -11,8 +11,8 @@
  * バッファ1行を管理する
  */
 
-int deffg = 256;
-int defbg = 257;
+Color deffg = 256, defbg = 257;
+const Color PALETTE_SIZE = 258;
 
 Line *
 allocLine(void)
@@ -94,8 +94,8 @@ insertU32s(Line *line, int head, const InsertLine *ins, int len)
 } while (0);
 	INSERT(line->str,   ins->str,   sizeof(char32_t));
 	INSERT(line->attr,  ins->attr,  sizeof(int));
-	INSERT(line->fg,    ins->fg,    sizeof(int));
-	INSERT(line->bg,    ins->bg,    sizeof(int));
+	INSERT(line->fg,    ins->fg,    sizeof(Color));
+	INSERT(line->bg,    ins->bg,    sizeof(Color));
 #undef INSERT
 	line->ver++;
 }
@@ -105,7 +105,8 @@ deleteChars(Line *line, int head, int len)
 {
 	const int oldlen = u32slen(line->str);
 	char32_t *strbuf;
-	int *buf;
+	int *abuf;
+	Color *buf;
 	int tail = MIN(head + len, oldlen);
 
 	if (head < 0 || tail <= head)
@@ -119,9 +120,9 @@ deleteChars(Line *line, int head, int len)
 	target = buf; \
 } while (0);
 	DELETE(line->str,   strbuf,     sizeof(char32_t));
-	DELETE(line->attr,  buf,        sizeof(int));
-	DELETE(line->fg,    buf,        sizeof(int));
-	DELETE(line->bg,    buf,        sizeof(int));
+	DELETE(line->attr,  abuf,       sizeof(int));
+	DELETE(line->fg,    buf,        sizeof(Color));
+	DELETE(line->bg,    buf,        sizeof(Color));
 #undef DELETE
 	line->ver++;
 }
@@ -161,10 +162,11 @@ eraseInLine(Line *line, int col, int width)
 }
 
 int
-putU32s(Line *line, int col, const char32_t *str, int attr, int fg, int bg, size_t len)
+putU32s(Line *line, int col, const char32_t *str, int attr, Color fg, Color bg, size_t len)
 {
 	const int width = u32snwidth(str, len);
-	int attrs[len], fgs[len], bgs[len];
+	int attrs[len];
+	Color fgs[len], bgs[len];
 	int head;
 	InsertLine placed;
 	int i;
@@ -186,7 +188,7 @@ putU32s(Line *line, int col, const char32_t *str, int attr, int fg, int bg, size
 }
 
 void
-putSPCs(Line *line, int col, int bg, size_t n)
+putSPCs(Line *line, int col, Color bg, size_t n)
 {
 	char32_t str[n] = {};
 

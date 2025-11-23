@@ -1,9 +1,10 @@
 #include <stdint.h>
 
-extern int deffg;
-extern int defbg;
-
 typedef uint_least32_t char32_t;
+typedef uint_least32_t Color;
+
+extern Color deffg, defbg;
+extern const Color PALETTE_SIZE;
 
 #define PUT_NUL(l, x)   putU32s((l), (x), (char32_t *)L"\0", 0, deffg, defbg, 1)
 #define u32swidth(s)    u32snwidth(s, u32slen(s))
@@ -24,13 +25,15 @@ enum sgr_attribute {
 
 typedef struct Line {
 	char32_t *str;
-	int *attr, *fg, *bg;
+	int *attr;
+	Color *fg, *bg;
 	int ver;
 } Line;
 
 typedef struct InsertLine {
 	const char32_t *str;
-	const int *attr, *fg, *bg;
+	const int *attr;
+	const Color *fg, *bg;
 } InsertLine;
 
 typedef struct CharCnt {
@@ -46,8 +49,8 @@ int linecmp(Line *, Line *, int, int);
 void insertU32s(Line *, int, const InsertLine *, int);
 void deleteChars(Line *, int, int);
 int eraseInLine(Line *, int, int);
-int putU32s(Line *, int, const char32_t *, int, int, int, size_t);
-void putSPCs(Line *, int, int, size_t);
+int putU32s(Line *, int, const char32_t *, int, Color, Color, size_t);
+void putSPCs(Line *, int, Color, size_t);
 int findNextSGR(const Line *, int);
 
 const char *u8sToU32s(char32_t *,const char *, size_t);

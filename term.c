@@ -39,6 +39,7 @@ static void optset(Term *, unsigned int, int);
 static void decset(Term *, unsigned int, int);
 static void setScrBufSize(Term *term, int, int);
 static void setSGR(Term *, const char *);
+static void setSGRColor(Color *, char **, const char *);
 static const char *designateCharSet(Term *, const char *, const char *);
 
 Term *
@@ -81,8 +82,8 @@ openTerm(int row, int col, int bufsize, const char *program, char *const cmd[])
 	term->appkeypad = 1;
 
 	/* カラーパレットの初期化 */
-	term->palette     = xmalloc(MAX(256, MAX(deffg, defbg) + 1) * sizeof(Color));
-	term->def_palette = xmalloc(MAX(256, MAX(deffg, defbg) + 1) * sizeof(Color));
+	term->palette     = xmalloc(PALETTE_SIZE * sizeof(Color));
+	term->def_palette = xmalloc(PALETTE_SIZE * sizeof(Color));
 	setDefaultPalette(term->palette);
 	setDefaultPalette(term->def_palette);
 
@@ -393,7 +394,8 @@ CSI(Term *term, const char *head, const char *tail)
 		if (line) {
 			int n = MAX(atoi(param), 1);
 			char32_t str[n];
-			int attr[n], fg[n], bg[n];
+			int attr[n];
+			Color fg[n], bg[n];
 			INIT(str, L' ');
 			INIT(attr, NONE);
 			INIT(fg, deffg);
@@ -923,7 +925,7 @@ reportMouse(Term *term, int btn, int release, int mx, int my)
 void
 setSGR(Term *term, const char *param)
 {
-	char *buf, *buf2, tokens[strlen(param) + 1], *p = tokens;
+	char *buf, tokens[strlen(param) + 1], *p = tokens;
 	int n;
 
 	strcpy(tokens, param);
@@ -961,14 +963,8 @@ setSGR(Term *term, const char *param)
 			term->fg = n - 30;
 		if (BETWEEN(n, 90, 98))
 			term->fg = n - 82;
-		if (n == 38) {
-			buf  = mystrsep(&p, ";");
-			buf2 = mystrsep(&p, ";");
-			if (buf && buf2 && atoi(buf) == 5)
-				term->fg = atoi(buf2);
-			else
-				fprintf(stderr, "Not Supported SGR: %s\n", param);
-		}
+		if (n == 38)
+			setSGRColor(&term->fg, &p, param);
 		if (n == 39)
 			term->fg = deffg;
 
@@ -977,14 +973,8 @@ setSGR(Term *term, const char *param)
 			term->bg = n - 40;
 		if (BETWEEN(n, 100, 108))
 			term->bg = n - 92;
-		if (n == 48) {
-			buf  = mystrsep(&p, ";");
-			buf2 = mystrsep(&p, ";");
-			if (buf && buf2 && atoi(buf) == 5)
-				term->bg = atoi(buf2);
-			else
-				fprintf(stderr, "Not Supported SGR: %s\n", param);
-		}
+		if (n == 48)
+			setSGRColor(&term->bg, &p, param);
 		if (n == 49)
 			term->bg = defbg;
 
@@ -993,6 +983,33 @@ setSGR(Term *term, const char *param)
 			fprintf(stderr, "effect:%d\n", n);
 		if (n == 65)
 			fprintf(stderr, "cancel effect: %d\n", n);
+	}
+}
+
+void
+setSGRColor(Color *dst, char **p, const char *param)
+{
+	char *buf, *r, *g, *b;
+
+	buf  = mystrsep(p, ";");
+	if (buf && atoi(buf) == 5) {
+		/* 256 color */
+		buf  = mystrsep(p, ";");
+		if (buf && atoi(buf) < PALETTE_SIZE)
+			*dst = atoi(buf);
+		else
+			fprintf(stderr, "Pallet number too large: %s\n", buf);
+	} else if (buf && atoi(buf) == 2) {
+		/* true color */
+		r  = mystrsep(p, ";");
+		g  = mystrsep(p, ";");
+		b  = mystrsep(p, ";");
+		if (r && atoi(r) < 256 && g && atoi(g) < 256 && b && atoi(b) < 256)
+			*dst = (0xff << 24) + (atoi(r) << 16) + (atoi(g) << 8) + atoi(b);
+		else
+			fprintf(stderr, "Invalid Color: %s;%s;%s\n", r, g, b);
+	} else {
+		fprintf(stderr, "Not Supported SGR: %s\n", param);
 	}
 }
 
