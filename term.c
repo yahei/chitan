@@ -627,6 +627,10 @@ OSC(Term *term, char *payload, const char *err)
 		case 10: pc = deffg;                    break;
 		case 11: pc = defbg;                    break;
 		}
+		if (pn == 4 && !BETWEEN(pc, 0, 256)) {
+			fprintf(stderr, "Invalid pallet number: %d\n", pc);
+			return;
+		}
 		spec = mystrsep(&payload, ";");
 		if (spec == NULL) {
 		} else if (strncmp(spec, "#", 1) == 0) {        /* #rrggbb形式 */
@@ -987,7 +991,7 @@ setSGRColor(Color *dst, char **p, const char *param)
 		if (buf && atoi(buf) < PALETTE_SIZE)
 			*dst = atoi(buf);
 		else
-			fprintf(stderr, "Pallet number too large: %s\n", buf);
+			fprintf(stderr, "Invalid pallet number: %s\n", buf ? buf : "");
 	} else if (buf && atoi(buf) == 2) {
 		/* true color */
 		r  = mystrsep(p, ";");
@@ -996,7 +1000,8 @@ setSGRColor(Color *dst, char **p, const char *param)
 		if (r && atoi(r) < 256 && g && atoi(g) < 256 && b && atoi(b) < 256)
 			*dst = (0xff << 24) + (atoi(r) << 16) + (atoi(g) << 8) + atoi(b);
 		else
-			fprintf(stderr, "Invalid Color: %s;%s;%s\n", r, g, b);
+			fprintf(stderr, "Invalid Color: %s;%s;%s\n",
+					r ? r : "", g ? g : "", b ? b : "");
 	} else {
 		fprintf(stderr, "Not Supported SGR: %s\n", param);
 	}

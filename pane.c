@@ -51,7 +51,7 @@ createPane(DispInfo *dinfo, XFont *xfont, int width, int height, float alpha, in
 	if (!pane->term)
 		errExit("openTerm failed.\n");
 
-	/* パレットの設定 */
+	/* パレットの設定を読み込む */
 	xrm = XResourceManagerString(dinfo->disp);
 	xdb = XrmGetStringDatabase(xrm ? xrm : "");
 #define XRCOLOR(name, num) do {\
@@ -68,8 +68,12 @@ createPane(DispInfo *dinfo, XFont *xfont, int width, int height, float alpha, in
 	}
 #undef XRCOLOR
 	XrmDestroyDatabase(xdb);
+
+	/* 背景の不透明度を設定 */
 	pane->term->palette[defbg] = ((0xff & (int)(0xff * alpha)) << 24) +
 		(0x00ffffff &pane->term->palette[defbg]);
+
+	/* 現在のパレットをデフォルトとして保存 */
 	for (i = 0; i < PALETTE_SIZE; i++)
 		pane->term->def_palette[i] = pane->term->palette[i];
 
