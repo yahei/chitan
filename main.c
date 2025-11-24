@@ -54,6 +54,8 @@ static void closeWindow(Win *);
 static void setWindowName(Win *, const char *);
 static int handleXEvent(Win *);
 static int keyPressEvent(Win *, XEvent, int);
+static void sendSelection(Win *, XEvent);
+static void receiveSelection(Win *, Pane *, XEvent);
 static void redraw(Win *);
 
 /* IME */
@@ -321,14 +323,7 @@ handleXEvent(Win *win)
 	XEvent event;
 	const XConfigureEvent *ce = (XConfigureEvent *)&event;
 	const XClientMessageEvent *cme = (XClientMessageEvent *)&event;
-	XSelectionRequestEvent *sre;
-	XSelectionEvent se;
 	int mx, my, ms, mb;
-	Atom prop, type;
-	int format;
-	unsigned long ntimes, after;
-	unsigned char *props;
-	char *sel;
 
 	while (0 < XPending(dinfo.disp)) {
 		XNextEvent(dinfo.disp, &event);
@@ -415,31 +410,11 @@ handleXEvent(Win *win)
 			return cme->data.l[0] == atoms[WM_DELETE_WINDOW];
 
 		case SelectionRequest:  /* 貼り付ける文字列を送る */
-			sre = &event.xselectionrequest;
-			sel = sre->selection == XA_PRIMARY ? win->primary : win->clip;
-			if (!sel)
-				sel = "";
-			if (sre->property == None)
-				sre->property = sre->target;
-			XChangeProperty(dinfo.disp, sre->requestor, sre->property, atoms[UTF8_STRING],
-					8, PropModeReplace, (unsigned char *)sel, strlen(sel));
-			se = (XSelectionEvent){ SelectionNotify, 0, True, dinfo.disp,
-				sre->requestor, sre->selection, sre->target, sre->property, sre->time };
-			XSendEvent(dinfo.disp, event.xselectionrequest.requestor, False, 0, (XEvent *)&se);
+			sendSelection(win, event);
 			break;
 
 		case SelectionNotify:   /* 貼り付ける文字列が届いた */
-			if ((prop = event.xselection.property) != None) {
-				XGetWindowProperty(dinfo.disp, win->window, prop, 0, 2 << 14,
-						False, atoms[UTF8_STRING], &type,
-						&format, &ntimes, &after, &props);
-				if (1 < pane->term->dec[2004])
-					writePty(pane->term, "\e[200~", 6);
-				writePty(pane->term, (char *)props, ntimes);
-				if (1 < pane->term->dec[2004])
-					writePty(pane->term, "\e[201~", 6);
-				XFree(props);
-			}
+			receiveSelection(win, pane, event);
 			break;
 		}
 	}
@@ -537,6 +512,48 @@ keyPressEvent(Win *win, XEvent event, int bufsize)
 	}
 
 	return 0;
+}
+
+void
+sendSelection(Win *win, XEvent event)
+{
+	XSelectionRequestEvent *sre;
+	XSelectionEvent se;
+	char *sel;
+
+	sre = &event.xselectionrequest;
+	sel = sre->selection == XA_PRIMARY ? win->primary : win->clip;
+	if (!sel)
+		return;
+	if (sre->property == None)
+		sre->property = sre->target;
+	XChangeProperty(dinfo.disp, sre->requestor, sre->property,
+			atoms[UTF8_STRING], 8, PropModeReplace, (unsigned char *)sel,
+			MIN(strlen(sel), 4 * XMaxRequestSize(dinfo.disp)));
+	se = (XSelectionEvent){ SelectionNotify, 0, True, dinfo.disp,
+		sre->requestor, sre->selection, sre->target, sre->property, sre->time };
+	XSendEvent(dinfo.disp, event.xselectionrequest.requestor, False, 0, (XEvent *)&se);
+}
+
+void
+receiveSelection(Win *win, Pane *pane, XEvent event)
+{
+	Atom prop, type;
+	int format;
+	unsigned long ntimes, after;
+	unsigned char *props;
+
+	if ((prop = event.xselection.property) == None)
+		return;
+	if (XGetWindowProperty(dinfo.disp, win->window, prop, 0, 2 << 14, False,
+		atoms[UTF8_STRING], &type, &format, &ntimes, &after, &props) != Success)
+		return;
+	if (1 < pane->term->dec[2004])
+		writePty(pane->term, "\e[200~", 6);
+	writePty(pane->term, (char *)props, ntimes);
+	if (1 < pane->term->dec[2004])
+		writePty(pane->term, "\e[201~", 6);
+	XFree(props);
 }
 
 void
