@@ -469,6 +469,9 @@ keyPressEvent(Win *win, XEvent event, int bufsize)
 
 	/* C-S-cでコピー */
 	if (keysym == XK_C && event.xkey.state & ControlMask) {
+		if (win->pane->sel.aline == win->pane->sel.bline &&
+		    win->pane->sel.acol  == win->pane->sel.bcol)
+			return 0;
 		copySelection(&win->pane->sel, &win->clip, !win->pane->sel.rect);
 		XSetSelectionOwner(dinfo.disp, atoms[CLIPBOARD], win->window, CurrentTime);
 		return 0;
