@@ -428,8 +428,8 @@ drawCursor(Pane *pane, Line *line, int row, int col, int type, nsec now)
 	Line cursor;
 
 	/* 点滅 */
-	if (((now - pane->caret_time) / caret_duration) % 2 &&
-			pane->focus && (!type || type % 2))
+	if ((!type || type % 2) && pane->focus &&
+	    ((now - pane->caret_time) / caret_duration) % 2)
 		return;
 
 	XSetForeground(dinfo->disp, pane->gc, BELLCOLOR(pane->term->palette[deffg]));

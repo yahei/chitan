@@ -109,7 +109,7 @@ init(int argc, char *argv[])
 
 	/* Xサーバーに接続 */
 	dinfo.disp= XOpenDisplay(NULL);
-	if (dinfo.disp== NULL)
+	if (dinfo.disp == NULL)
 		fatal("XOpenDisplay failed.\n");
 	dinfo.screen = XDefaultScreen(dinfo.disp);
 	dinfo.root = DefaultRootWindow(dinfo.disp);
@@ -188,7 +188,7 @@ run(void)
 		FD_ZERO(&rfds);
 		FD_SET(xfd, &rfds);
 		FD_SET(tfd, &rfds);
-		if (pselect(nfds, &rfds, NULL, NULL, &timeout, NULL)< 0) {
+		if (pselect(nfds, &rfds, NULL, NULL, &timeout, NULL) < 0) {
 			if (errno == EINTR)
 				fprintf(stderr, "signal.\n");
 			else
@@ -542,11 +542,14 @@ receiveSelection(Win *win, Pane *pane, XEvent event)
 	int format;
 	unsigned long ntimes, after;
 	unsigned char *props;
+	int res;
 
-	if ((prop = event.xselection.property) == None)
+	prop = event.xselection.property;
+	if (prop == None)
 		return;
-	if (XGetWindowProperty(dinfo.disp, win->window, prop, 0, 2 << 14, False,
-		atoms[UTF8_STRING], &type, &format, &ntimes, &after, &props) != Success)
+	res = XGetWindowProperty(dinfo.disp, win->window, prop, 0, 2 << 14, False,
+			atoms[UTF8_STRING], &type, &format, &ntimes, &after, &props);
+	if (res != Success)
 		return;
 	if (1 < pane->term->dec[2004])
 		writePty(pane->term, "\e[200~", 6);

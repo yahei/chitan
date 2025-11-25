@@ -517,7 +517,7 @@ CSI(Term *term, const char *head, const char *tail)
 		break;
 
 	case 0x71: /* DECSCUSR カーソル形状設定 */
-		if (*inter == ' ')
+		if (*inter == ' ' && atoi(param) < 7)
 			term->ctype = atoi(param);
 		break;
 
@@ -559,8 +559,9 @@ ctrlSeq(Term *term, const char *head, const char *tail, enum cseq_type type)
 	/* 中身を読み取る */
 	for (i = 0; i <= len; i++) {
 		/* ST(ESC \)またはBELで終了 */
-		if ((i < len && strncmp(&head[i], "\e\\", 2) == 0) ||
-				(type == CS_OSC && head[i] == 0x07))
+		if (i < len && strncmp(&head[i], "\e\\", 2) == 0)
+			break;
+		if (type == CS_OSC && head[i] == 0x07)
 			break;
 		/* 使えない文字またはSOSが現れて中断 */
 		if ((type != CS_SOS && !(BETWEEN(head[i], 0x08, 0x0e) || IS_GC(head[i]))) ||
