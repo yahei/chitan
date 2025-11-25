@@ -611,7 +611,8 @@ OSC(Term *term, char *payload, const char *err)
 {
 	char *spec, *endptr, *buf, res[28];
 	char *r, *g, *b;
-	int pn, pc, color;
+	Color color = 0;
+	int pn, pc, i;
 
 	pn = (buf = mystrsep(&payload, ";")) ? atoi(buf) : -1;
 	switch (pn) {
@@ -634,38 +635,31 @@ OSC(Term *term, char *payload, const char *err)
 		}
 		spec = mystrsep(&payload, ";");
 		if (spec == NULL) {
+			return;
 		} else if (strncmp(spec, "#", 1) == 0) {        /* #rrggbb形式 */
 			color = strtol(&spec[1], &endptr, 16);
-			if (endptr == &spec[7] && spec[7] == '\0') {
-				term->palette[pc] &= 0xff000000;
-				term->palette[pc] |= color;
-				term->palette_cnt++;
-			}
+			if (endptr != &spec[7] || spec[7] != '\0')
+				return;
 		} else if (strncmp(spec, "rgb:", 4) == 0) {     /* rgb:rr/gg/bb形式 */
 			r = strtok(&spec[4], "/");
 			g = strtok(NULL, "/");
 			b = strtok(NULL, "/");
-			if (r && g && b) {
-				term->palette[pc] &= 0xff000000;
-				term->palette[pc] |= (0xff & strtol(r, NULL, 16)) << 16;
-				term->palette[pc] |= (0xff & strtol(g, NULL, 16)) << 8;
-				term->palette[pc] |= (0xff & strtol(b, NULL, 16));
-				term->palette_cnt++;
-			}
+			if (!(r && g && b))
+				return;
+			color = ((0xff & strtol(r, NULL, 16)) << 16) +
+			        ((0xff & strtol(g, NULL, 16)) << 8) +
+			        ((0xff & strtol(b, NULL, 16)));
 		} else if (strncmp(spec, "rgbi:", 5) == 0) {    /* rgbi:r/g/b形式 */
 			r = strtok(&spec[5], "/");
 			g = strtok(NULL, "/");
 			b = strtok(NULL, "/");
-			if (r && g && b) {
-				term->palette[pc] &= 0xff000000;
-				term->palette[pc] |= (0xff & (int)(0xff * atof(r))) << 16;
-				term->palette[pc] |= (0xff & (int)(0xff * atof(g))) << 8;
-				term->palette[pc] |= (0xff & (int)(0xff * atof(b)));
-				term->palette_cnt++;
-			}
+			if (!(r && g && b))
+				return;
+			color = ((0xff & (int)(0xff * atof(r))) << 16) +
+			        ((0xff & (int)(0xff * atof(g))) << 8) +
+			        ((0xff & (int)(0xff * atof(b))));
 		} else if (strncmp(spec, "reset", 6) == 0) {    /* 元の色に戻す */
-			term->palette[pc] = term->def_palette[pc];
-			term->palette_cnt++;
+			color = term->def_palette[pc];
 		} else if (strncmp(spec, "?", 2) == 0) {        /* 現在の値を返す */
 			if (pn == 4)
 				snprintf(res, 8, "\e]%d;%d", pn, pc);
@@ -676,7 +670,34 @@ OSC(Term *term, char *payload, const char *err)
 					GREEN(term->palette[pc]) * 257,
 					 BLUE(term->palette[pc]) * 257);
 			writePty(term, res, strlen(res));
+			return;
 		}
+		/* 色をパレットに書き込む */
+		term->palette[pc] &= 0xff000000;
+		term->palette[pc] |= color;
+		term->palette_cnt++;
+		return;
+
+	case 104:/* 元の色に戻す */
+		buf = mystrsep(&payload, ";");
+	case 110:/* 文字色を元の色に戻す */
+	case 111:/* 背景色を元の色に戻す */
+		switch (pn) {
+		case 104: pc = buf ? atoi(buf) : 0;      break;
+		case 110: pc = deffg;                    break;
+		case 111: pc = defbg;                    break;
+		}
+		if (pn == 104 && !BETWEEN(pc, 0, 256)) {
+			fprintf(stderr, "Invalid pallet number: %d\n", pc);
+			return;
+		}
+		/* パレット番号の指定がない場合は全部戻す */
+		if (pn == 104 && (!buf || strlen(buf) == 0))
+			for (i = 0; i < 256; i++)
+				term->palette[i] = term->def_palette[i];
+		else
+			term->palette[pc] = term->def_palette[pc];
+		term->palette_cnt++;
 		return;
 	}
 
