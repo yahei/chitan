@@ -258,7 +258,7 @@ openWindow(int w, int h, int x, int y, int buflines, float alpha, char *const cm
 
 	/* プロパティ */
 	win->hint = XAllocClassHint();
-	*win->hint = (XClassHint){ "chitan-256color", "chitan-256color" };
+	*win->hint = (XClassHint){ "chitan", "chitan" };
 	XSetClassHint(dinfo.disp, win->window, win->hint);
 
 	/* 描画の準備 */
