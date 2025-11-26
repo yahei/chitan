@@ -34,7 +34,7 @@ static void CStr(Term *, const char *, const char *, const char *);
 static void OSC(Term *, char *, const char *);
 static void linefeed(Term *);
 static void setCursorPos(Term *, int, int);
-static void moveCursorPos(Term *, int, int);
+static void moveCursorPos(Term *, int, int, int);
 static void areaScroll(Term *, int, int, int);
 static void optset(Term *, unsigned int, int);
 static void decset(Term *, unsigned int, int);
@@ -278,8 +278,8 @@ CC(Term *term, const char *head, const char *tail)
 	switch (*head) {
 	case 0x00:                                              break; /* NUL */
 	case 0x07: term->bell_cnt++;                            break; /* BEL */
-	case 0x08: moveCursorPos(term, -1, 0);                  break; /* BS  */
-	case 0x09: moveCursorPos(term, 8 - term->cx % 8, 0);    break; /* HT  */
+	case 0x08: moveCursorPos(term, -1, 0, 0);               break; /* BS  */
+	case 0x09: moveCursorPos(term, 8 - term->cx % 8, 0, 0); break; /* HT  */
 	case 0x0a: linefeed(term);                              break; /* LF  */
 	case 0x0d: setCursorPos(term, 0, term->cy);             break; /* CR  */
 	case 0x1b: return ESC(term, head + 1, tail);                   /* ESC */
@@ -395,10 +395,18 @@ CSI(Term *term, const char *head, const char *tail)
 		break;
 
 		/* カーソル移動 */
-	case 0x41: moveCursorPos(term, 0, -MAX(atoi(param), 1)); break; /* CUU */
-	case 0x42: moveCursorPos(term, 0,  MAX(atoi(param), 1)); break; /* CUD */
-	case 0x43: moveCursorPos(term,  MAX(atoi(param), 1), 0); break; /* CUF */
-	case 0x44: moveCursorPos(term, -MAX(atoi(param), 1), 0); break; /* CUB */
+	case 0x41: moveCursorPos(term, 0, -MAX(atoi(param), 1), 1); break; /* CUU */
+	case 0x42: moveCursorPos(term, 0,  MAX(atoi(param), 1), 1); break; /* CUD */
+	case 0x43: moveCursorPos(term,  MAX(atoi(param), 1), 0, 0); break; /* CUF */
+	case 0x44: moveCursorPos(term, -MAX(atoi(param), 1), 0, 0); break; /* CUB */
+
+	case 0x45: /* CNL カーソル復帰行前進 */
+		moveCursorPos(term, -term->cx, MAX(atoi(param), 1), 1);
+		break;
+
+	case 0x46: /* CPL カーソル復帰行後退 */
+		moveCursorPos(term, -term->cx, -MAX(atoi(param), 1), 1);
+		break;
 
 	case 0x47: /* CHA カーソル文字位置決め */
 		setCursorPos(term, atoi(param) - 1, term->cy);
@@ -459,16 +467,6 @@ CSI(Term *term, const char *head, const char *tail)
 
 	case 0x4d: /* DL 行削除 */
 		areaScroll(term, term->cy, sb->scre, MAX(atoi(param), 1));
-		break;
-
-	case 0x45: /* CNL カーソル復帰行前進 */
-		moveCursorPos(term, 0, MAX(atoi(param), 1));
-		setCursorPos(term, 0, term->cy);
-		break;
-
-	case 0x46: /* CPL カーソル復帰行後退 */
-		moveCursorPos(term, 0, -MAX(atoi(param), 1));
-		setCursorPos(term, 0, term->cy);
 		break;
 
 	case 0x50: /* DHC 文字削除 */
@@ -731,14 +729,18 @@ void
 setCursorPos(Term *term, int cx, int cy)
 {
 	term->cx = CLIP(cx, 0, term->sb->cols - 1);
-	term->cy = CLIP(cy, term->sb->scrs, term->sb->scre);
+	term->cy = CLIP(cy, 0, term->sb->rows - 1);
 	term->sb->am = 0;
 }
 
 void
-moveCursorPos(Term *term, int dx, int dy)
+moveCursorPos(Term *term, int dx, int dy, int checkscr)
 {
-	setCursorPos(term, term->cx + dx, term->cy + dy);
+	term->cx = CLIP(term->cx + dx, 0, term->sb->cols - 1);
+	term->cy = CLIP(term->cy + dy, 0, term->sb->rows - 1);
+	if (checkscr)
+		term->cy = CLIP(term->cy, term->sb->scrs, term->sb->scre);
+	term->sb->am = 0;
 }
 
 void
@@ -890,7 +892,7 @@ setScrBufSize(Term *term, int row, int col)
 
 	/* firstlineの変更とカーソル移動を実行 */
 	if (sb->firstline != newfst) {
-		moveCursorPos(term, 0, sb->firstline - newfst);
+		moveCursorPos(term, 0, sb->firstline - newfst, 0);
 		sb->firstline = newfst;
 	}
 }
