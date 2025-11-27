@@ -247,7 +247,6 @@ GCs(Term *term, const char *head)
 	for (dp = decoded; *dp != L'\0'; dp += MAX(0, wlen)) {
 		/* 自動改行 */
 		if (term->sb->am) {
-			term->sb->am = 0;
 			max = term->sb->cols;
 			setCursorPos(term, 0, term->cy);
 			linefeed(term);
@@ -315,13 +314,10 @@ ESC(Term *term, const char *head, const char *tail)
 		break;
 
 	case 0x4d: /* RI */
-		if (sb->scrs < term->cy)
-			term->cy--;
-		else if (MAX(sb->totallines - sb->maxlines, 0) < sb->firstline &&
-				sb->scrs == 0 && sb->scre == sb->rows - 1)
-			sb->firstline--;
-		else
+		if (term->cy == sb->scrs)
 			areaScroll(term, sb->scrs, sb->scre, -1);
+		else if (0 < term->cy)
+			term->cy--;
 		break;
 
 	case 0x50: return ctrlSeq(term, head + 1, tail, CS_DCS);    /* DCS */
@@ -528,6 +524,7 @@ CSI(Term *term, const char *head, const char *tail)
 			break;
 		sb->scrs = a - 1;
 		sb->scre = b - 1;
+		setCursorPos(term, 0, 0);
 		break;
 
 	case 0x00: /* NUL このNULを取り除いて読み直す */
@@ -708,18 +705,19 @@ void
 linefeed(Term *term)
 {
 	struct ScrBuf *sb = term->sb;
-	Line *line;
 
-	if (term->cy < sb->scre) {
-		term->cy++;
-	} else if (0 < sb->scrs || sb->scre < sb->rows - 1) {
-		areaScroll(term, sb->scrs, sb->scre, 1);
-	} else {
+	if (term->cy == sb->scre && sb->scrs == 0) {
+		/* スクロール範囲の上端が1行目 */
 		sb->firstline++;
 		if (sb->totallines < sb->firstline + sb->rows)
 			sb->totallines++;
-		if ((line = getLine(term->sb, term->cy)))
-			PUT_NUL(line, 0);
+		areaScroll(term, sb->scre, sb->rows - 1, -1);
+	} else if (term->cy == sb->scre) {
+		/* スクロール範囲の上端が2行目以降 */
+		areaScroll(term, sb->scrs, sb->scre, 1);
+	} else if (term->cy < sb->rows - 1) {
+		/* スクロールが発生しない */
+		term->cy++;
 	}
 
 	term->sb->am = 0;
