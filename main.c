@@ -68,7 +68,7 @@ static void preeditDone(XIM, Win *, XPointer);
 static void preeditDraw(XIM, Win *, XIMPreeditDrawCallbackStruct *);
 static void preeditCaret(XIM, Win *, XIMPreeditCaretCallbackStruct *);
 
-static const char version[] = "chitan 0.0.0";
+static const char version[] = "chitan 0.1.0";
 static const char help[] = "usage: chitan [-options] [[-e] command [args ...]]\n"
 "        -a alpha                background opacity (0.0-1.0)\n"
 "        -f font                 font selection pattern (ex. monospace:size=12)\n"
