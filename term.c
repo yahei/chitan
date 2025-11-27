@@ -1042,7 +1042,7 @@ designateCharSet(Term *term, const char *head, const char *tail)
 			L"0123456789:;<=>?"
 			L"@ABCDEFGHIJKLMNO"
 			L"PQRSTUVWXYZ[\\]^ "
-			L"⧫▒␉␌␍␊°±␤␋┘┐┌└┼⎺"
+			L"◆▒␉␌␍␊°±␤␋┘┐┌└┼⎺"
 			L"⎻─⎼⎽├┤┴┬│≤≥π≠£·",
 	};
 	char *size[] = {"94", "96", "94x94", "96x96"};
