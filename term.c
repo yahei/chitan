@@ -473,14 +473,7 @@ CSI(Term *term, const char *head, const char *tail)
 		break;
 
 	case 0x53: /* SU スクロール上 */
-		a = MAX(atoi(param), 1);
-		if (sb->scrs == 0) {
-			sb->firstline += a;
-			sb->totallines = MAX(sb->totallines, sb->firstline + sb->rows);
-			areaScroll(term, sb->scre + 1 - a, sb->rows - 1, -a);
-		} else {
-			areaScroll(term, sb->scrs, sb->scre, a);
-		}
+		areaScroll(term, sb->scrs, sb->scre, MAX(atoi(param), 1));
 		break;
 
 	case 0x54: /* SD スクロール下 */
@@ -715,20 +708,10 @@ linefeed(Term *term)
 {
 	struct ScrBuf *sb = term->sb;
 
-	if (term->cy == sb->scre && sb->scrs == 0) {
-		/* スクロール範囲の上端が1行目 */
-		sb->firstline++;
-		if (sb->totallines < sb->firstline + sb->rows)
-			sb->totallines++;
-		areaScroll(term, sb->scre, sb->rows - 1, -1);
-	} else if (term->cy == sb->scre) {
-		/* スクロール範囲の上端が2行目以降 */
+	if (term->cy == sb->scre)
 		areaScroll(term, sb->scrs, sb->scre, 1);
-	} else if (term->cy < sb->rows - 1) {
-		/* スクロールが発生しない */
+	else if (term->cy < sb->rows - 1)
 		term->cy++;
-	}
-
 	term->sb->am = 0;
 }
 
@@ -762,20 +745,27 @@ areaScroll(Term *term, int first, int last, int num)
 	if (first < 0 || last < first || sb->rows < last)
 		return;
 
+	/* 画面上端から行が押し出される場合 */
+	if (0 < num && first == 0) {
+		sb->firstline += num;
+		sb->totallines = MAX(sb->totallines, sb->firstline + sb->rows);
+		areaScroll(term, last + 1 - num, sb->rows - 1, -num);
+		return;
+	}
+
+	/* スクロール範囲の現在の状態を取得 */
 	for (i = 0; i < area; i++) {
 		index = sb->firstline + first + i;
 		tmp[i] = LINE(sb, index);
 	}
 
+	/* スクロール後の状態に書き換える */
 	for (i = 0; i < area; i++) {
 		index = sb->firstline + first + i;
-
 		if (i - num < 0 || area <= i - num)
 			freeLine(LINE(sb, index));
-
 		if (0 <= num + i && num + i < area)
 			LINE(sb, index) = tmp[num + i];
-
 		if (i + num < 0 || area <= i + num)
 			LINE(sb, index) = allocLine();
 	}
