@@ -458,11 +458,13 @@ CSI(Term *term, const char *head, const char *tail)
 		break;
 
 	case 0x4c: /* IL 行挿入 */
-		areaScroll(term, term->cy, sb->scre, -MAX(atoi(param), 1));
+		if (BETWEEN(term->cy, sb->scrs, sb->scre + 1))
+			areaScroll(term, term->cy, sb->scre, -MAX(atoi(param), 1));
 		break;
 
 	case 0x4d: /* DL 行削除 */
-		areaScroll(term, term->cy, sb->scre, MAX(atoi(param), 1));
+		if (BETWEEN(term->cy, sb->scrs, sb->scre + 1))
+			areaScroll(term, term->cy, sb->scre, MAX(atoi(param), 1));
 		break;
 
 	case 0x50: /* DHC 文字削除 */
@@ -471,7 +473,14 @@ CSI(Term *term, const char *head, const char *tail)
 		break;
 
 	case 0x53: /* SU スクロール上 */
-		areaScroll(term, sb->scrs, sb->scre, MAX(atoi(param), 1));
+		a = MAX(atoi(param), 1);
+		if (sb->scrs == 0) {
+			sb->firstline += a;
+			sb->totallines = MAX(sb->totallines, sb->firstline + sb->rows);
+			areaScroll(term, sb->scre + 1 - a, sb->rows - 1, -a);
+		} else {
+			areaScroll(term, sb->scrs, sb->scre, a);
+		}
 		break;
 
 	case 0x54: /* SD スクロール下 */
