@@ -353,7 +353,7 @@ CSI(Term *term, const char *head, const char *tail)
 {
 	struct ScrBuf *sb = term->sb;
 	char param[tail - head + 1], *pp = param;
-	char inter[tail - head + 1];
+	char inter[tail - head + 1], final;
 	char *str1, *str2;
 	Line *line = getLine(term->sb, term->cy);
 	int i, a, b, len, begin, end, index = 0;
@@ -374,7 +374,29 @@ CSI(Term *term, const char *head, const char *tail)
 		return NULL;
 
 	/* 終端バイト */
-	switch (head[index]) {
+	final = head[index];
+
+	/* 中間バイトがSPのもの */
+	if (strcmp(inter, " ") == 0) {
+		switch (final) {
+		case 0x71: /* DECSCUSR カーソル形状設定 */
+			if (atoi(param) < 7)
+				term->ctype = atoi(param);
+			break;
+
+		default: /* 未対応 */
+			goto UNKNOWN;
+		}
+
+		return head + index + 1;
+	}
+
+	/* その他の中間バイトを持つもの */
+	if (0 < strlen(inter))
+		goto UNKNOWN;
+
+	/* 中間バイトがないもの */
+	switch (final) {
 	case 0x40: /* ICH 文字挿入 */
 		if (line) {
 			int n = MAX(atoi(param), 1);
@@ -409,8 +431,8 @@ CSI(Term *term, const char *head, const char *tail)
 		break;
 
 	case 0x48: /* CUP カーソル位置決め */
-		str1 = pp ? mystrsep(&pp, ";:") : "1";
-		str2 = pp ? mystrsep(&pp, ";:") : "1";
+		str1 = pp ? mystrsep(&pp, ";") : "1";
+		str2 = pp ? mystrsep(&pp, ";") : "1";
 		setCursorPos(term, atoi(str2) - 1, atoi(str1) - 1);
 		break;
 
@@ -467,16 +489,20 @@ CSI(Term *term, const char *head, const char *tail)
 			areaScroll(term, term->cy, sb->scre, MAX(atoi(param), 1));
 		break;
 
-	case 0x50: /* DHC 文字削除 */
+	case 0x50: /* DCH 文字削除 */
 		if (line)
 			eraseInLine(line, term->cx, MAX(atoi(param), 1));
 		break;
 
 	case 0x53: /* SU スクロール上 */
+		if (';' < *param)
+			goto UNKNOWN;
 		areaScroll(term, sb->scrs, sb->scre, MAX(atoi(param), 1));
 		break;
 
 	case 0x54: /* SD スクロール下 */
+		if (';' < *param)
+			goto UNKNOWN;
 		areaScroll(term, sb->scrs, sb->scre, -MAX(atoi(param), 1));
 		break;
 
@@ -486,6 +512,8 @@ CSI(Term *term, const char *head, const char *tail)
 		break;
 
 	case 0x63: /* DA 装置識別 */
+		if (';' < *param)
+			goto UNKNOWN;
 		if (param[0] == '\0' || param[0] == '0')
 			writePty(term, "\e[?6c", 5);
 		break;
@@ -509,15 +537,14 @@ CSI(Term *term, const char *head, const char *tail)
 		break;
 
 	case 0x6d: /* SGR 表示様式選択 */
+		if (';' < *param)
+			goto UNKNOWN;
 		setSGR(term, strlen(param) ? param : "0");
 		break;
 
-	case 0x71: /* DECSCUSR カーソル形状設定 */
-		if (*inter == ' ' && atoi(param) < 7)
-			term->ctype = atoi(param);
-		break;
-
 	case 0x72: /* DECSTBM スクロール範囲設定 */
+		if (';' < *param)
+			goto UNKNOWN;
 		str1 = mystrsep(&pp, ";");
 		str2 = mystrsep(&pp, ";");
 		a = str1 ? CLIP(atoi(str1), 0, sb->rows) : 1;
@@ -534,15 +561,19 @@ CSI(Term *term, const char *head, const char *tail)
 		return CSI(term, head + 1, tail);
 
 	default: /* 未対応 */
-		if (!BETWEEN(head[index], 0x40, 0x7f)) {
-			fprintf(stderr, "Invalid CSI: CSI [%s][%s](%#04x)\n",
-					param, inter, head[index]);
-			return head + index;
-		}
-		fprintf(stderr, "Not Supported CSI: CSI [%s][%s]%c(%#04x)\n",
-				param, inter, head[index], head[index]);
+		goto UNKNOWN;
 	}
 
+	return head + index + 1;
+
+UNKNOWN:
+	if (!BETWEEN(final, 0x40, 0x7f)) {
+		fprintf(stderr, "Invalid CSI: CSI [%s][%s](%#04x)\n",
+				param, inter, final);
+		return head + index;
+	}
+	fprintf(stderr, "Not Supported CSI: CSI [%s][%s]%c(%#04x)\n",
+			param, inter, final, final);
 	return head + index + 1;
 }
 
