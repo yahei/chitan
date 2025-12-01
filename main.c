@@ -177,11 +177,14 @@ void
 run(void)
 {
 	Pane *pane = win->pane;
-	struct timespec timeout = { 0, 0 }, time;
+	struct timespec timeout = { 0, 0 }, lastdraw;
+	nsec rest;
 	fd_set rfds;
 	const int xfd = XConnectionNumber(dinfo.disp);
 	const int tfd = pane->term->master;
 	const int nfds = MAX(xfd, tfd) + 1;
+
+	clock_gettime(CLOCK_MONOTONIC, &lastdraw);
 
 	while (1) {
 		/* ファイルディスクリプタの監視 */
@@ -197,20 +200,30 @@ run(void)
 		clock_gettime(CLOCK_MONOTONIC, &now);
 
 		/* ウィンドウのイベント処理 */
-		if (handleXEvent(win))
-			return;
+		if (FD_ISSET(xfd, &rfds))
+			if (handleXEvent(win))
+				return;
 
 		/* 端末のread */
-		errno = 0;
-		while (0 < readPty(pane->term)) {
+		if (FD_ISSET(tfd, &rfds)) {
 			pane->redraw_flag = true;
-			clock_gettime(CLOCK_MONOTONIC, &time);
-			if (20 * 1000 * 1000 < tstons(time) - tstons(now))
-				break;
-			usleep(1);
+			errno = 0;
+			if (readPty(pane->term) < 0) {
+				if (errno == EIO)
+					return;
+				else
+					errExit("pty read error.");
+			}
 		}
-		if (errno == EIO)
-			return;
+
+		/* 再描画の頻度を制限 */
+		if (FD_ISSET(xfd, &rfds) || FD_ISSET(tfd, &rfds)) {
+			rest = 20 * 1000 * 1000 - (tstons(now) - tstons(lastdraw));
+			if (0 < rest) {
+				timeout = (struct timespec){ 0, MIN(rest, 1 * 1000 * 1000) };
+				continue;
+			}
+		}
 
 		/* IMEスポット移動 */
 		if (pane->redraw_flag && win->ime.xic) {
@@ -221,6 +234,7 @@ run(void)
 
 		/* 再描画 */
 		redraw(win);
+		lastdraw = now;
 
 		/* 次の待機時間を取得 */
 		timeout = nstots(getNextTime(pane, tstons(now)));

@@ -90,7 +90,7 @@ openTerm(int row, int col, int bufsize, const char *program, char *const cmd[])
 
 	/* 疑似端末を開く */
 	errno = -1;
-	if ((term->master = posix_openpt(O_RDWR | O_NOCTTY | O_NONBLOCK)) < 0)
+	if ((term->master = posix_openpt(O_RDWR | O_NOCTTY)) < 0)
 		goto FAIL;
 	if ((sname = ptsname(term->master)) == NULL)
 		goto FAIL;
