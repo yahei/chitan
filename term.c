@@ -359,16 +359,20 @@ CSI(Term *term, const char *head, const char *tail)
 	int i, a, b, len, begin, end, index = 0;
 
 	/* パラメタバイト */
-	for (i = 0; BETWEEN(head[index], 0x30, 0x40); param[i++] = head[index++])
-		if (head + index >= tail)
+	for (i = 0; BETWEEN(head[index + i], 0x30, 0x40); i++)
+		if (head + index + i >= tail)
 			return NULL;
+	memcpy(param, &head[index], i);
 	param[i] = '\0';
+	index += i;
 
 	/* 中間バイト */
-	for (i = 0; BETWEEN(head[index], 0x20, 0x30); inter[i++] = head[index++])
-		if (head + index >= tail)
+	for (i = 0; BETWEEN(head[index + i], 0x20, 0x30); i++)
+		if (head + index + i >= tail)
 			return NULL;
+	memcpy(inter, &head[index], i);
 	inter[i] = '\0';
+	index += i;
 
 	if (tail <= head + index)
 		return NULL;
@@ -770,11 +774,13 @@ areaScroll(Term *term, int first, int last, int num)
 	struct ScrBuf *sb = term->sb;
 	const int area = last - first + 1;
 	Line *tmp[area];
-	int index;
+	int index, index2;
 	int i;
 
 	if (first < 0 || last < first || sb->rows < last)
 		return;
+
+	num = CLIP(num, -term->sb->rows, term->sb->rows);
 
 	/* 画面上端から行が押し出される場合 */
 	if (0 < num && first == 0) {
@@ -784,7 +790,7 @@ areaScroll(Term *term, int first, int last, int num)
 		return;
 	}
 
-	/* スクロール範囲の現在の状態を取得 */
+	/* スクロール範囲にある行を取得 */
 	for (i = 0; i < area; i++) {
 		index = sb->firstline + first + i;
 		tmp[i] = LINE(sb, index);
@@ -793,12 +799,10 @@ areaScroll(Term *term, int first, int last, int num)
 	/* スクロール後の状態に書き換える */
 	for (i = 0; i < area; i++) {
 		index = sb->firstline + first + i;
-		if (i - num < 0 || area <= i - num)
-			freeLine(LINE(sb, index));
-		if (0 <= num + i && num + i < area)
-			LINE(sb, index) = tmp[num + i];
+		index2 = (i + num) % area;
+		LINE(sb, index) = tmp[index2 < 0 ? index2 + area : index2];
 		if (i + num < 0 || area <= i + num)
-			LINE(sb, index) = allocLine();
+			PUT_NUL(LINE(sb, index), 0);
 	}
 }
 
