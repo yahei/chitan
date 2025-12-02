@@ -74,7 +74,7 @@ openTerm(int row, int col, int bufsize, const char *program, char *const cmd[])
 		term->alt.lines[i] = allocLine();
 
 	/* リードバッファの初期化 */
-	term->readbuf = xmalloc(1);
+	term->readbuf = xmalloc(READ_SIZE + 1);
 	term->readbuf[0] = '\0';
 
 	/* オプションの初期化 */
@@ -193,8 +193,9 @@ readPty(Term *term)
 	const char *head, *reading, *rest, *tail;
 	ssize_t size;
 
-	term->readbuf = xrealloc(term->readbuf, term->rblen + READ_SIZE + 1);
-	size = read(term->master, term->readbuf + term->rblen, READ_SIZE);
+	/* バッファが枯渇したら全部捨てる */
+	term->rblen = term->rblen < READ_SIZE ? term->rblen : 0;
+	size = read(term->master, term->readbuf + term->rblen, READ_SIZE - term->rblen);
 	tail = term->readbuf + term->rblen + size;
 	*(char *)tail = '\0';
 
