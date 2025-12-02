@@ -39,7 +39,7 @@ static void areaScroll(Term *, int, int, int);
 static void optset(Term *, unsigned int, int);
 static void decset(Term *, unsigned int, int);
 static void setScrBufSize(Term *term, int, int);
-static void setSGR(Term *, const char *);
+static void setSGR(Term *, const char *, size_t);
 static void setSGRColor(Color *, char **, const char *);
 static const char *designateCharSet(Term *, const char *, const char *);
 
@@ -353,27 +353,25 @@ const char *
 CSI(Term *term, const char *head, const char *tail)
 {
 	struct ScrBuf *sb = term->sb;
-	char param[tail - head + 1], *pp = param;
-	char inter[tail - head + 1], final;
-	char *str1, *str2;
-	Line *line = getLine(term->sb, term->cy);
-	int i, a, b, len, begin, end, index = 0;
+	const char *param, *inter, *p;
+	int p_len, i_len;
+	char final;
+	Line *line;
+	int i, a, b, len, index = 0;
 
 	/* パラメタバイト */
-	for (i = 0; BETWEEN(head[index + i], 0x30, 0x40); i++)
-		if (head + index + i >= tail)
+	for (p_len = 0; BETWEEN(head[index + p_len], 0x30, 0x40); p_len++)
+		if (head + index + p_len >= tail)
 			return NULL;
-	memcpy(param, &head[index], i);
-	param[i] = '\0';
-	index += i;
+	param = &head[index];
+	index += p_len;
 
 	/* 中間バイト */
-	for (i = 0; BETWEEN(head[index + i], 0x20, 0x30); i++)
-		if (head + index + i >= tail)
+	for (i_len = 0; BETWEEN(head[index + i_len], 0x20, 0x30); i_len++)
+		if (head + index + i_len >= tail)
 			return NULL;
-	memcpy(inter, &head[index], i);
-	inter[i] = '\0';
-	index += i;
+	inter = &head[index];
+	index += i_len;
 
 	if (tail <= head + index)
 		return NULL;
@@ -382,7 +380,7 @@ CSI(Term *term, const char *head, const char *tail)
 	final = head[index];
 
 	/* 中間バイトがSPのもの */
-	if (strcmp(inter, " ") == 0) {
+	if (0 < i_len && memcmp(inter, " ", i_len) == 0) {
 		switch (final) {
 		case 0x71: /* DECSCUSR カーソル形状設定 */
 			if (atoi(param) < 7)
@@ -397,13 +395,13 @@ CSI(Term *term, const char *head, const char *tail)
 	}
 
 	/* その他の中間バイトを持つもの */
-	if (0 < strlen(inter))
+	if (0 < i_len)
 		goto UNKNOWN;
 
 	/* 中間バイトがないもの */
 	switch (final) {
 	case 0x40: /* ICH 文字挿入 */
-		if (line) {
+		if ((line = getLine(term->sb, term->cy))) {
 			int n = MAX(atoi(param), 1);
 			char32_t str[n];
 			int attr[n];
@@ -436,38 +434,40 @@ CSI(Term *term, const char *head, const char *tail)
 		break;
 
 	case 0x48: /* CUP カーソル位置決め */
-		str1 = pp ? mystrsep(&pp, ";") : "1";
-		str2 = pp ? mystrsep(&pp, ";") : "1";
-		setCursorPos(term, atoi(str2) - 1, atoi(str1) - 1);
+		p = strpbrk(param, ";");
+		b = atoi(param);
+		a = p && (p < param + p_len) ? atoi(p + 1) : 1;
+		setCursorPos(term, a - 1, b - 1);
 		break;
 
 	case 0x4a: /* ED ページ内消去 */
 		switch (*param) {
 		default:
 		case '0':
+			line = getLine(term->sb, term->cy);
 			if (line && 0 < (len = term->sb->cols - term->cx))
 				putSPCs(line, term->cx, term->bg, len);
-			begin = term->cy + 1;
-			end = sb->rows;
+			a = term->cy + 1;
+			b = sb->rows;
 			break;
 		case '1':
-			begin = 0;
-			end = term->cy;
-			if (line)
+			a = 0;
+			b = term->cy;
+			if ((line = getLine(term->sb, term->cy)))
 				putSPCs(line, 0, term->bg, term->cx + 1);
 			break;
 		case '2':
-			begin = 0;
-			end = sb->rows;
+			a = 0;
+			b = sb->rows;
 			break;
 		}
-		for (i = begin; i < end; i++)
+		for (i = a; i < b; i++)
 			if ((line = getLine(term->sb, i)))
 				PUT_NUL(line, 0);
 		break;
 
 	case 0x4b: /* EL 行内消去 */
-		if (!line)
+		if (!(line = getLine(term->sb, term->cy)))
 			break;
 		switch (*param) {
 		default:
@@ -495,29 +495,29 @@ CSI(Term *term, const char *head, const char *tail)
 		break;
 
 	case 0x50: /* DCH 文字削除 */
-		if (line)
+		if ((line = getLine(term->sb, term->cy)))
 			eraseInLine(line, term->cx, MAX(atoi(param), 1));
 		break;
 
 	case 0x53: /* SU スクロール上 */
-		if (';' < *param)
+		if (0 < p_len && ';' < *param)
 			goto UNKNOWN;
 		areaScroll(term, sb->scrs, sb->scre, MAX(atoi(param), 1));
 		break;
 
 	case 0x54: /* SD スクロール下 */
-		if (';' < *param)
+		if (0 < p_len && ';' < *param)
 			goto UNKNOWN;
 		areaScroll(term, sb->scrs, sb->scre, -MAX(atoi(param), 1));
 		break;
 
 	case 0x58: /* ECH 文字消去 */
-		if (line)
+		if ((line = getLine(term->sb, term->cy)))
 			putSPCs(line, term->cx, term->bg, atoi(param));
 		break;
 
 	case 0x63: /* DA 装置識別 */
-		if (';' < *param)
+		if (0 < p_len && ';' < *param)
 			goto UNKNOWN;
 		if (param[0] == '\0' || param[0] == '0')
 			writePty(term, "\e[?6c", 5);
@@ -542,22 +542,21 @@ CSI(Term *term, const char *head, const char *tail)
 		break;
 
 	case 0x6d: /* SGR 表示様式選択 */
-		if (';' < *param)
+		if (0 < p_len && ';' < *param)
 			goto UNKNOWN;
-		setSGR(term, strlen(param) ? param : "0");
+		setSGR(term, param, p_len);
 		break;
 
 	case 0x72: /* DECSTBM スクロール範囲設定 */
-		if (';' < *param)
+		if (0 < p_len && ';' < *param)
 			goto UNKNOWN;
-		str1 = mystrsep(&pp, ";");
-		str2 = mystrsep(&pp, ";");
-		a = str1 ? CLIP(atoi(str1), 0, sb->rows) : 1;
-		b = str2 ? CLIP(atoi(str2), 0, sb->rows) : sb->rows;
+		p = strpbrk(param, ";");
+		a = atoi(param);
+		b = p && (p < param + p_len) ? atoi(p + 1) : sb->rows;
 		if (b <= a)
 			break;
-		sb->scrs = a - 1;
-		sb->scre = b - 1;
+		sb->scrs = CLIP(a, 1, sb->rows) - 1;
+		sb->scre = CLIP(b, 1, sb->rows) - 1;
 		setCursorPos(term, 0, 0);
 		break;
 
@@ -573,12 +572,12 @@ CSI(Term *term, const char *head, const char *tail)
 
 UNKNOWN:
 	if (!BETWEEN(final, 0x40, 0x7f)) {
-		fprintf(stderr, "Invalid CSI: CSI [%s][%s](%#04x)\n",
-				param, inter, final);
+		fprintf(stderr, "Invalid CSI: CSI [%.*s][%.*s](%#04x)\n",
+				p_len, param, i_len, inter, final);
 		return head + index;
 	}
-	fprintf(stderr, "Not Supported CSI: CSI [%s][%s]%c(%#04x)\n",
-			param, inter, final, final);
+	fprintf(stderr, "Not Supported CSI: CSI [%.*s][%.*s]%c(%#04x)\n",
+			p_len, param, i_len, inter, final, final);
 	return head + index + 1;
 }
 
@@ -973,12 +972,13 @@ reportMouse(Term *term, int btn, int release, int mx, int my)
 }
 
 void
-setSGR(Term *term, const char *param)
+setSGR(Term *term, const char *param, size_t len)
 {
-	char *buf, tokens[strlen(param) + 1], *p = tokens;
+	char *buf, tokens[len + 1], *p = tokens;
 	int n;
 
-	strcpy(tokens, param);
+	memcpy(tokens, param, len);
+	tokens[len] = '\0';
 
 	for (buf = mystrsep(&p, ";"); buf; buf = mystrsep(&p, ";")) {
 		n = atoi(buf);
