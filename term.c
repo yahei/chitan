@@ -402,16 +402,11 @@ CSI(Term *term, const char *head, const char *tail)
 	switch (final) {
 	case 0x40: /* ICH 文字挿入 */
 		if ((line = getLine(term->sb, term->cy))) {
-			int n = MAX(atoi(param), 1);
-			char32_t str[n];
-			int attr[n];
-			Color fg[n], bg[n];
+			len = MAX(atoi(param), 1);
+			char32_t str[len];
 			INIT(str, L' ');
-			INIT(attr, NONE);
-			INIT(fg, deffg);
-			INIT(bg, defbg);
-			InsertLine il = { str, attr, fg, bg };
-			insertU32s(line, getIndex(line->str, term->cx), &il, n);
+			insertU32s(line, getIndex(line->str, term->cx),
+					str, NONE, deffg, defbg, len);
 		}
 		break;
 

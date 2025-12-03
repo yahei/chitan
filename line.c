@@ -76,26 +76,33 @@ linecmp(Line *line1, Line *line2, int pos, int len)
 }
 
 void
-insertU32s(Line *line, int head, const InsertLine *ins, int len)
+insertU32s(Line *line, int head, const char32_t *str, int attr, Color fg, Color bg, int len)
 {
 	const int oldlen = u32slen(line->str);
 	const int newlen = oldlen + len;
 	const int movelen = MAX(oldlen - head, 0);
+	int i;
 
 	if (head < 0 || len <= 0)
 		return;
 
-#define INSERT(dest, src, size) do { \
-	dest = xrealloc(dest, (newlen + 1) * size); \
-	memmove(&dest[head + len], &dest[MIN(head, oldlen)], \
-			(movelen + 1) * size); \
-	memcpy(&dest[head], src, len * size); \
+#define INSERT(d, s) do { \
+	d = xrealloc(d, (newlen + 1) * s); \
+	memmove(&d[head + len], &d[MIN(head, oldlen)], (movelen + 1) * s); \
 } while (0);
-	INSERT(line->str,   ins->str,   sizeof(char32_t));
-	INSERT(line->attr,  ins->attr,  sizeof(int));
-	INSERT(line->fg,    ins->fg,    sizeof(Color));
-	INSERT(line->bg,    ins->bg,    sizeof(Color));
+	INSERT(line->str,   sizeof(char32_t));
+	INSERT(line->attr,  sizeof(int));
+	INSERT(line->fg,    sizeof(Color));
+	INSERT(line->bg,    sizeof(Color));
 #undef INSERT
+
+	memcpy(&line->str[head], str, len * sizeof(char32_t));
+	for (i = 0; i < len; i++) {
+		line->attr[head + i] = attr;
+		line->fg[head + i] = fg;
+		line->bg[head + i] = bg;
+	}
+
 	line->ver++;
 }
 
@@ -130,12 +137,10 @@ int
 eraseInLine(Line *line, int col, int width)
 {
 	const int attr = 0;
-	const InsertLine space = {(char32_t *)L" ", &attr, &deffg, &defbg};
 	const int linelen = u32slen(line->str);
 	int head, tail;
 	int lpad, rpad;
 	CharCnt cc;
-	int i;
 
 	if (col < 0)
 		return 0;
@@ -154,8 +159,11 @@ eraseInLine(Line *line, int col, int width)
 
 	deleteChars(line, head, tail - head);
 
-	for (i = 0; i < rpad + lpad; i++)
-		insertU32s(line, head, &space, 1);
+	if (0 < rpad + lpad) {
+		char32_t str[rpad + lpad];
+		INIT(str, L' ');
+		insertU32s(line, head, str, attr, deffg, defbg, rpad + lpad);
+	}
 
 	return head + lpad;
 }
@@ -164,24 +172,13 @@ int
 putU32s(Line *line, int col, const char32_t *str, int attr, Color fg, Color bg, size_t len)
 {
 	const int width = u32snwidth(str, len);
-	int attrs[len];
-	Color fgs[len], bgs[len];
 	int head;
-	InsertLine placed;
-	int i;
 
 	if (col < 0)
 		return 0;
 
-	for (i = 0; i < len; i++) {
-		attrs[i] = attr;
-		fgs[i]   = fg;
-		bgs[i]   = bg;
-	}
-	placed = (InsertLine){ str, attrs, fgs, bgs };
-
 	head = eraseInLine(line, col, width);
-	insertU32s(line, head, &placed, len);
+	insertU32s(line, head, str, attr, fg, bg, len);
 
 	return width;
 }

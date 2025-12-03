@@ -33,12 +33,6 @@ typedef struct Line {
 	int ver;
 } Line;
 
-typedef struct InsertLine {
-	const char32_t *str;
-	const int *attr;
-	const Color *fg, *bg;
-} InsertLine;
-
 typedef struct CharCnt {
 	int index;
 	int col;
@@ -49,7 +43,7 @@ Line *allocLine(void);
 void freeLine(Line *);
 void linecpy(Line *, const Line *);
 int linecmp(Line *, Line *, int, int);
-void insertU32s(Line *, int, const InsertLine *, int);
+void insertU32s(Line *, int, const char32_t *, int, Color, Color, int);
 void deleteChars(Line *, int, int);
 int eraseInLine(Line *, int, int);
 int putU32s(Line *, int, const char32_t *, int, Color, Color, size_t);

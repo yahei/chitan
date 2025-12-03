@@ -696,11 +696,9 @@ void
 preeditDraw(XIM xim, Win *win, XIMPreeditDrawCallbackStruct *call)
 {
 	char32_t *str;
-	int *attr, defattr;
-	Color *fg, *bg;
+	int attr;
 	int len, oldlen = u32slen(win->ime.peline->str);
 	XIMFeedback fb;
-	InsertLine newline;
 	int i;
 
 	/* カーソル位置 */
@@ -712,44 +710,29 @@ preeditDraw(XIM xim, Win *win, XIMPreeditDrawCallbackStruct *call)
 	if (call->text == NULL)
 		return;
 
-	/* 挿入の処理 */
+	/* 挿入の準備 */
 	len  = call->text->length;
 	str  = xmalloc(len * sizeof(char32_t));
-	attr = xmalloc(len * sizeof(int));
-	fg   = xmalloc(len * sizeof(int));
-	bg   = xmalloc(len * sizeof(int));
-
-	/* 文字列 */
 	u8sToU32s(str, call->text->string.multi_byte, len);
-
-	/* 属性 */
-	defattr = ULINE;
+	attr = ULINE;
 	if (0 < oldlen)
-		defattr = win->ime.peline->attr[MIN(call->chg_first, oldlen - 1)];
-	for (i = 0; i < len; i++) {
-		attr[i] = defattr;
-		fg[i]   = deffg;
-		bg[i]   = defbg;
-	}
-	if (call->text->feedback) {
-		for (i = 0; i < len; i++) {
-			fb = call->text->feedback[i];
-			attr[i] = NONE;
-			attr[i] |= fb & XIMReverse   ? NEGA    : NONE;
-			attr[i] |= fb & XIMUnderline ? ULINE   : NONE;
-			attr[i] |= fb & XIMHighlight ? BOLD    : NONE;
-		}
-	}
+		attr = win->ime.peline->attr[MIN(call->chg_first, oldlen - 1)];
 
 	/* 挿入を実行 */
-	newline = (InsertLine){ str, attr, fg, bg };
-	insertU32s(win->ime.peline, call->chg_first, &newline, len);
+	for (i = 0; i < len; i++) {
+		if (call->text->feedback) {
+			fb = call->text->feedback[i];
+			attr  = NONE;
+			attr |= fb & XIMReverse   ? NEGA    : NONE;
+			attr |= fb & XIMUnderline ? ULINE   : NONE;
+			attr |= fb & XIMHighlight ? BOLD    : NONE;
+		}
+		insertU32s(win->ime.peline, call->chg_first + i,
+				str + i, attr, deffg, defbg, 1);
+	}
 
 	/* 終了 */
 	free(str);
-	free(attr);
-	free(fg);
-	free(bg);
 
 	win->pane->redraw_flag = true;
 	redraw(win);
