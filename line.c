@@ -110,26 +110,21 @@ void
 deleteChars(Line *line, int head, int len)
 {
 	const int oldlen = u32slen(line->str);
-	char32_t *strbuf;
-	int *abuf;
-	Color *buf;
-	int tail = MIN(head + len, oldlen);
+	const int tail = MIN(head + len, oldlen);
 
 	if (head < 0 || tail <= head)
 		return;
 
-#define DELETE(target, buf, size) do { \
-	buf = xmalloc((oldlen - (tail - head) + 1) * size); \
-	memcpy(buf, target, head * size); \
-	memcpy(&buf[head], &target[tail], (oldlen - tail + 1) * size); \
-	free(target); \
-	target = buf; \
+#define DELETE(target, size) do { \
+	memmove(&target[head], &target[tail], (oldlen - tail + 1) * size); \
+	target = xrealloc(target, (head + oldlen - tail + 1) * size); \
 } while (0);
-	DELETE(line->str,   strbuf,     sizeof(char32_t));
-	DELETE(line->attr,  abuf,       sizeof(int));
-	DELETE(line->fg,    buf,        sizeof(Color));
-	DELETE(line->bg,    buf,        sizeof(Color));
+	DELETE(line->str,   sizeof(char32_t));
+	DELETE(line->attr,  sizeof(int));
+	DELETE(line->fg,    sizeof(Color));
+	DELETE(line->bg,    sizeof(Color));
 #undef DELETE
+
 	line->ver++;
 }
 
