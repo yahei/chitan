@@ -232,7 +232,7 @@ GCs(Term *term, const char *head)
 	char32_t decoded[len], *dp;
 	const char *rest;
 	Line *line;
-	CharCnt cc;
+	int index;
 	int max = term->sb->cols - term->cx, wlen;
 	int i;
 
@@ -262,9 +262,9 @@ GCs(Term *term, const char *head)
 		if ((line = getLine(term->sb, term->cy))) {
 			term->cx += putU32s(line, term->cx, dp, term->attr,
 					term->fg, term->bg, wlen);
-			cc = getCharCnt(line->str, term->sb->cols);
-			if (cc.index < u32slen(line->str))
-				line->str[cc.index] = '\0';
+			index = getIndex(line->str, term->sb->cols);
+			if (index < u32slen(line->str))
+				line->str[index] = '\0';
 		}
 	}
 

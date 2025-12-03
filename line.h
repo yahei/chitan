@@ -33,12 +33,6 @@ typedef struct Line {
 	int ver;
 } Line;
 
-typedef struct CharCnt {
-	int index;
-	int col;
-	int width;
-} CharCnt;
-
 Line *allocLine(void);
 void freeLine(Line *);
 void linecpy(Line *, const Line *);
@@ -51,5 +45,5 @@ void putSPCs(Line *, int, Color, size_t);
 int findNextSGR(const Line *, int);
 
 const char *u8sToU32s(char32_t *,const char *, size_t);
-CharCnt getCharCnt(const char32_t *, int);
+void getCharCnt(const char32_t *, int, int *, int *, int *);
 int getIndex(const char32_t *, int);

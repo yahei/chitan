@@ -63,13 +63,16 @@ linecpy(Line *dst, const Line *src)
 int
 linecmp(Line *line1, Line *line2, int pos, int len)
 {
-	CharCnt cc1 = getCharCnt(line1->str, pos);
-	CharCnt cc2 = getCharCnt(line2->str, pos);
+	int index1, col1, width1;
+	int index2, col2, width2;
 
-#define CMP(A,T) !memcmp(&line1->A[cc1.index], &line2->A[cc2.index], len * sizeof(T))
-	if (cc2.index + len <= u32slen(line2->str) && cc1.col == cc2.col &&
+	getCharCnt(line1->str, pos, &index1, &col1, &width1);
+	getCharCnt(line2->str, pos, &index2, &col2, &width2);
+
+#define CMP(A,T) !memcmp(&line1->A[index1], &line2->A[index2], len * sizeof(T))
+	if (index2 + len <= u32slen(line2->str) && col1 == col2 &&
 	    CMP(str, char32_t) && CMP(attr, int) && CMP(fg, int) && CMP(bg, int) &&
-	    (cc2.index < 1 || !(line2->attr[cc2.index - 1] & ITALIC)))
+	    (index2 < 1 || !(line2->attr[index2 - 1] & ITALIC)))
 			return 1;
 	return 0;
 #undef CMP
@@ -135,18 +138,18 @@ eraseInLine(Line *line, int col, int width)
 	const int linelen = u32slen(line->str);
 	int head, tail;
 	int lpad, rpad;
-	CharCnt cc;
+	int index, c, w;
 
 	if (col < 0)
 		return 0;
 
-	cc = getCharCnt(line->str, col);
-	head = MIN(cc.index, linelen);
-	lpad = col - MIN(cc.col, u32snwidth(line->str, linelen));
+	getCharCnt(line->str, col, &index, &c, &w);
+	head = MIN(index, linelen);
+	lpad = col - MIN(c, u32snwidth(line->str, linelen));
 
-	cc = getCharCnt(line->str, col + width - 1);
-	tail = MIN(cc.index, linelen) + 1;
-	rpad = (cc.col + cc.width) - (col + width);
+	getCharCnt(line->str, col + width - 1, &index, &c, &w);
+	tail = MIN(index, linelen) + 1;
+	rpad = (c + w) - (col + width);
 
 	for (; tail < linelen; tail++)
 		if(0 < u32snwidth(&line->str[tail], 1))
@@ -235,29 +238,42 @@ u8sToU32s(char32_t *dst, const char *src, size_t n)
 	return rest;
 }
 
-CharCnt
-getCharCnt(const char32_t *str, int col)
+void
+getCharCnt(const char32_t *str, int col, int *index, int *total, int *width)
 {
-	const int len = u32slen(str);
-	int width, total;
-	int i;
-
-	if (col < 0)
-		return (CharCnt){ col, col, 1 };
-
-	for (i = 0, total = 0; i < len; i++) {
-		width = wcwidth(str[i]);
-		width = width < 0 ? 2 : width;
-		if (col < total + width)
-			return (CharCnt){ i, total, width };
-		total += width;
+	if (col < 0) {
+		*index = *total = col;
+		*width = 1;
+		return;
 	}
 
-	return (CharCnt){ len + (col - total), col, 1 };
+	for (*index = 0, *total = 0; str[*index] != L'\0'; (*index)++) {
+		*width = wcwidth(str[*index]);
+		if (col < *total + *width)
+			return;
+		*total += *width;
+	}
+
+	*index = *index + col - *total;
+	*total = col;
+	*width = 1;
+	return;
 }
 
 int
 getIndex(const char32_t *str, int col)
 {
-	return getCharCnt(str, col).index;
+	int total;
+	int i;
+
+	if (col < 0)
+		return col;
+
+	for (i = 0, total = 0; str[i] != L'\0'; i++) {
+		total += wcwidth(str[i]);
+		if (col < total)
+			return i;
+	}
+
+	return i + col - total;
 }
