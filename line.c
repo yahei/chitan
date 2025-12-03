@@ -1,6 +1,5 @@
 #include <stdlib.h>
 #include <string.h>
-#include <wchar.h>
 
 #include "line.h"
 #include "util.h"
@@ -242,26 +241,6 @@ u8sToU32s(char32_t *dst, const char *src, size_t n)
 
 	*dst = L'\0';
 	return rest;
-}
-
-size_t
-u32slen(const char32_t *str)
-{
-	return wcslen((const wchar_t *)str);
-}
-
-int
-u32snwidth(const char32_t *str, int len)
-{
-	int width, total;
-	int i;
-
-	for (i = total = 0; i < len && str[i] != L'\0'; i++) {
-		width = wcwidth(str[i]);
-		total += width < 0 ? 2 : width;
-	}
-
-	return total;
 }
 
 CharCnt

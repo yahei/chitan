@@ -1,4 +1,5 @@
 #include <stdint.h>
+#include <wchar.h>
 
 typedef uint_least32_t char32_t;
 typedef uint_least32_t Color;
@@ -8,6 +9,8 @@ extern const Color PALETTE_SIZE;
 
 #define PUT_NUL(l, x)   putU32s((l), (x), (char32_t *)L"\0", 0, deffg, defbg, 1)
 #define u32swidth(s)    u32snwidth(s, u32slen(s))
+#define u32slen(s)      wcslen((const wchar_t *)s)
+#define u32snwidth(s, l)wcswidth((const wchar_t *)s, l)
 
 enum sgr_attribute {
 	NONE    = 0,
@@ -54,7 +57,5 @@ void putSPCs(Line *, int, Color, size_t);
 int findNextSGR(const Line *, int);
 
 const char *u8sToU32s(char32_t *,const char *, size_t);
-size_t u32slen(const char32_t *);
-int u32snwidth(const char32_t *, int);
 CharCnt getCharCnt(const char32_t *, int);
 int getIndex(const char32_t *, int);
