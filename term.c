@@ -292,7 +292,7 @@ CC(Term *term, const char *head, const char *tail)
 const char *
 ESC(Term *term, const char *head, const char *tail)
 {
-	struct ScrBuf *sb = term->sb;
+	const struct ScrBuf *sb = term->sb;
 
 	if (tail <= head)
 		return NULL;
@@ -352,7 +352,7 @@ ESC(Term *term, const char *head, const char *tail)
 const char *
 CSI(Term *term, const char *head, const char *tail)
 {
-	struct ScrBuf *sb = term->sb;
+	const struct ScrBuf *sb = term->sb;
 	const char *param, *inter, *p;
 	int p_len, i_len;
 	char final;
@@ -360,17 +360,13 @@ CSI(Term *term, const char *head, const char *tail)
 	int i, a, b, len, index = 0;
 
 	/* パラメタバイト */
-	for (p_len = 0; BETWEEN(head[index + p_len], 0x30, 0x40); p_len++)
-		if (head + index + p_len >= tail)
-			return NULL;
-	param = &head[index];
+	for (p_len = 0; BETWEEN(head[p_len], 0x30, 0x40); p_len++);
+	param = head + index;
 	index += p_len;
 
 	/* 中間バイト */
-	for (i_len = 0; BETWEEN(head[index + i_len], 0x20, 0x30); i_len++)
-		if (head + index + i_len >= tail)
-			return NULL;
-	inter = &head[index];
+	for (i_len = 0; BETWEEN(head[index + i_len], 0x20, 0x30); i_len++);
+	inter = head + index;
 	index += i_len;
 
 	if (tail <= head + index)
@@ -401,7 +397,7 @@ CSI(Term *term, const char *head, const char *tail)
 	/* 中間バイトがないもの */
 	switch (final) {
 	case 0x40: /* ICH 文字挿入 */
-		if ((line = getLine(term->sb, term->cy))) {
+		if ((line = getLine(sb, term->cy))) {
 			len = MAX(atoi(param), 1);
 			char32_t str[len];
 			INIT(str, L' ');
@@ -439,8 +435,8 @@ CSI(Term *term, const char *head, const char *tail)
 		switch (*param) {
 		default:
 		case '0':
-			line = getLine(term->sb, term->cy);
-			if (line && 0 < (len = term->sb->cols - term->cx))
+			line = getLine(sb, term->cy);
+			if (line && 0 < (len = sb->cols - term->cx))
 				putSPCs(line, term->cx, term->bg, len);
 			a = term->cy + 1;
 			b = sb->rows;
@@ -448,7 +444,7 @@ CSI(Term *term, const char *head, const char *tail)
 		case '1':
 			a = 0;
 			b = term->cy;
-			if ((line = getLine(term->sb, term->cy)))
+			if ((line = getLine(sb, term->cy)))
 				putSPCs(line, 0, term->bg, term->cx + 1);
 			break;
 		case '2':
@@ -457,24 +453,24 @@ CSI(Term *term, const char *head, const char *tail)
 			break;
 		}
 		for (i = a; i < b; i++)
-			if ((line = getLine(term->sb, i)))
+			if ((line = getLine(sb, i)))
 				PUT_NUL(line, 0);
 		break;
 
 	case 0x4b: /* EL 行内消去 */
-		if (!(line = getLine(term->sb, term->cy)))
+		if (!(line = getLine(sb, term->cy)))
 			break;
 		switch (*param) {
 		default:
 		case '0':
-			if (0 < (len = term->sb->cols - term->cx))
+			if (0 < (len = sb->cols - term->cx))
 				putSPCs(line, term->cx, term->bg, len);
 			break;
 		case '1':
 			putSPCs(line, 0, term->bg, term->cx + 1);
 			break;
 		case '2':
-			putSPCs(line, 0, term->bg, term->sb->cols);
+			putSPCs(line, 0, term->bg, sb->cols);
 			break;
 		}
 		break;
@@ -490,7 +486,7 @@ CSI(Term *term, const char *head, const char *tail)
 		break;
 
 	case 0x50: /* DCH 文字削除 */
-		if ((line = getLine(term->sb, term->cy)))
+		if ((line = getLine(sb, term->cy)))
 			eraseInLine(line, term->cx, MAX(atoi(param), 1));
 		break;
 
@@ -507,7 +503,7 @@ CSI(Term *term, const char *head, const char *tail)
 		break;
 
 	case 0x58: /* ECH 文字消去 */
-		if ((line = getLine(term->sb, term->cy)))
+		if ((line = getLine(sb, term->cy)))
 			putSPCs(line, term->cx, term->bg, atoi(param));
 		break;
 
@@ -550,8 +546,8 @@ CSI(Term *term, const char *head, const char *tail)
 		b = p && (p < param + p_len) ? atoi(p + 1) : sb->rows;
 		if (b <= a)
 			break;
-		sb->scrs = CLIP(a, 1, sb->rows) - 1;
-		sb->scre = CLIP(b, 1, sb->rows) - 1;
+		term->sb->scrs = CLIP(a, 1, sb->rows) - 1;
+		term->sb->scre = CLIP(b, 1, sb->rows) - 1;
 		setCursorPos(term, 0, 0);
 		break;
 
@@ -775,14 +771,13 @@ areaScroll(Term *term, int first, int last, int num)
 	if (first < 0 || last < first || sb->rows < last)
 		return;
 
-	num = CLIP(num, -term->sb->rows, term->sb->rows);
+	num = CLIP(num, -sb->rows, sb->rows);
 
 	/* 画面上端から行が押し出される場合 */
 	if (0 < num && first == 0) {
 		sb->firstline += num;
 		sb->totallines = MAX(sb->totallines, sb->firstline + sb->rows);
-		areaScroll(term, last + 1 - num, sb->rows - 1, -num);
-		return;
+		return areaScroll(term, last + 1 - num, sb->rows - 1, -num);
 	}
 
 	/* スクロール範囲にある行を取得 */
@@ -1117,7 +1112,7 @@ designateCharSet(Term *term, const char *head, const char *tail)
 }
 
 Line *
-getLine(ScrBuf *sb, int row)
+getLine(const ScrBuf *sb, int row)
 {
 	const int index = sb->firstline + row;
 	const int oldest = MAX(sb->totallines - sb->maxlines, 0);
@@ -1129,7 +1124,7 @@ getLine(ScrBuf *sb, int row)
 }
 
 void
-getLines(ScrBuf *sb, Line **lines, int len, int scr, const Selection *sel)
+getLines(const ScrBuf *sb, Line **lines, int len, int scr, const Selection *sel)
 {
 	Line *line;
 	int i, j, s, e, a, b, li, ri;

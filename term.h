@@ -67,8 +67,8 @@ ssize_t writePty(Term *, const char *, ssize_t);
 void setWinSize(Term *, int, int, int, int);
 void reportMouse(Term *, int, int, int, int);
 
-Line *getLine(ScrBuf *, int);
-void getLines(ScrBuf *, Line **, int, int, const Selection *);
+Line *getLine(const ScrBuf *, int);
+void getLines(const ScrBuf *, Line **, int, int, const Selection *);
 
 void setSelection(Selection *, ScrBuf *sb, int, int, bool, bool);
 bool checkSelection(Selection *);
