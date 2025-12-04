@@ -40,15 +40,3 @@ xrealloc(void *p, size_t size)
 		errExit("realloc failed.\n");
 	return p2;
 }
-
-char *
-mystrsep(char **str, const char *delim)
-{
-	char *res = *str;
-
-	if (*str && (*str = strpbrk(*str, delim))) {
-		**str = '\0';
-		(*str)++;
-	}
-	return res;
-}

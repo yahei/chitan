@@ -39,7 +39,7 @@ static void areaScroll(Term *, int, int, int);
 static void optset(Term *, unsigned int, int);
 static void decset(Term *, unsigned int, int);
 static void setScrBufSize(Term *term, int, int);
-static void setSGR(Term *, const char *, size_t);
+static void setSGR(Term *, char *, size_t);
 static void setSGRColor(Color *, char **, const char *);
 static const char *designateCharSet(Term *, const char *, const char *);
 
@@ -535,7 +535,7 @@ CSI(Term *term, const char *head, const char *tail)
 	case 0x6d: /* SGR 表示様式選択 */
 		if (0 < p_len && ';' < *param)
 			goto UNKNOWN;
-		setSGR(term, param, p_len);
+		setSGR(term, (char *)param, p_len);
 		break;
 
 	case 0x72: /* DECSTBM スクロール範囲設定 */
@@ -632,31 +632,37 @@ CStr(Term *term, const char *payload, const char *err, const char *type)
 void
 OSC(Term *term, char *payload, const char *err)
 {
-	char *spec, *endptr, *buf, res[28];
+	char *spec, *endptr, res[28];
 	char *r, *g, *b;
 	Color color = 0;
 	int pn, pc, i;
 
-	pn = (buf = mystrsep(&payload, ";")) ? atoi(buf) : -1;
+	pn = *payload != '\0' ? strtol(payload, &payload, 10) : -1;
+	payload += *payload == ';';
 	switch (pn) {
 	case 0:  /* タイトル */
 		strncpy(term->title, payload, TITLE_MAX - 1);
 		return;
 
 	case 4:  /* 色設定 */
-		buf = mystrsep(&payload, ";");
+		pc = strtol(payload, &payload, 10);
+		payload += *payload == ';';
 	case 10: /* 文字色設定 */
 	case 11: /* 背景色設定 */
 		switch (pn) {
-		case 4:  pc = buf ? atoi(buf) : 0;      break;
-		case 10: pc = deffg;                    break;
-		case 11: pc = defbg;                    break;
+		case 10: pc = deffg;    break;
+		case 11: pc = defbg;    break;
 		}
 		if (pn == 4 && !BETWEEN(pc, 0, 256)) {
 			fprintf(stderr, "Invalid pallet number: %d\n", pc);
 			return;
 		}
-		spec = mystrsep(&payload, ";");
+		spec = payload;
+		while (BETWEEN(*payload, 0x20, 0x3a) ||
+		       BETWEEN(*payload, 0x3c, 0x7f) ||
+		       BETWEEN(*payload, 0x08, 0x0e))
+			payload++;
+		payload += *payload == ';';
 		if (spec == NULL) {
 			return;
 		} else if (strncmp(spec, "#", 1) == 0) {        /* #rrggbb形式 */
@@ -702,20 +708,20 @@ OSC(Term *term, char *payload, const char *err)
 		return;
 
 	case 104:/* 元の色に戻す */
-		buf = mystrsep(&payload, ";");
+		pc = *payload != '\0' ? strtol(payload, &payload, 10) : -1;
+		payload += *payload == ';';
 	case 110:/* 文字色を元の色に戻す */
 	case 111:/* 背景色を元の色に戻す */
 		switch (pn) {
-		case 104: pc = buf ? atoi(buf) : 0;      break;
 		case 110: pc = deffg;                    break;
 		case 111: pc = defbg;                    break;
 		}
-		if (pn == 104 && !BETWEEN(pc, 0, 256)) {
+		if (pn == 104 && 255 < pc) {
 			fprintf(stderr, "Invalid pallet number: %d\n", pc);
 			return;
 		}
 		/* パレット番号の指定がない場合は全部戻す */
-		if (pn == 104 && (!buf || strlen(buf) == 0))
+		if (pn == 104 && pc < 0)
 			for (i = 0; i < 256; i++)
 				term->palette[i] = term->def_palette[i];
 		else
@@ -962,16 +968,14 @@ reportMouse(Term *term, int btn, int release, int mx, int my)
 }
 
 void
-setSGR(Term *term, const char *param, size_t len)
+setSGR(Term *term, char *param, size_t len)
 {
-	char *buf, tokens[len + 1], *p = tokens;
+	char *p = param;
 	int n;
 
-	memcpy(tokens, param, len);
-	tokens[len] = '\0';
-
-	for (buf = mystrsep(&p, ";"); buf; buf = mystrsep(&p, ";")) {
-		n = atoi(buf);
+	do {
+		n = strtol(p, &p, 10);
+		p += *p == ';';
 
 		/* すべての効果を取り消す */
 		if (n == 0) {
@@ -1023,32 +1027,34 @@ setSGR(Term *term, const char *param, size_t len)
 			fprintf(stderr, "effect:%d\n", n);
 		if (n == 65)
 			fprintf(stderr, "cancel effect: %d\n", n);
-	}
+	} while ('0' <= *p && *p <= '9');
 }
 
 void
 setSGRColor(Color *dst, char **p, const char *param)
 {
-	char *buf, *r, *g, *b;
+	int n, r, g, b;
 
-	buf  = mystrsep(p, ";");
-	if (buf && atoi(buf) == 5) {
+	n = strtol(*p, p, 10);
+	*p += **p == ';';
+
+	if (n == 5) {
 		/* 256 color */
-		buf  = mystrsep(p, ";");
-		if (buf && atoi(buf) < PALETTE_SIZE)
-			*dst = atoi(buf);
+		n = strtol(*p, p, 10);
+		*p += **p == ';';
+		if (n < PALETTE_SIZE)
+			*dst = n;
 		else
-			fprintf(stderr, "Invalid pallet number: %s\n", buf ? buf : "");
-	} else if (buf && atoi(buf) == 2) {
+			fprintf(stderr, "Invalid pallet number: %d\n", n);
+	} else if (n == 2) {
 		/* true color */
-		r  = mystrsep(p, ";");
-		g  = mystrsep(p, ";");
-		b  = mystrsep(p, ";");
-		if (r && atoi(r) < 256 && g && atoi(g) < 256 && b && atoi(b) < 256)
-			*dst = (0xff << 24) + (atoi(r) << 16) + (atoi(g) << 8) + atoi(b);
+		r = strtol(*p, p, 10); *p += **p == ';';
+		g = strtol(*p, p, 10); *p += **p == ';';
+		b = strtol(*p, p, 10); *p += **p == ';';
+		if (r < 256 && g < 256 && b < 256)
+			*dst = (0xff << 24) + (r << 16) + (g << 8) + b;
 		else
-			fprintf(stderr, "Invalid Color: %s;%s;%s\n",
-					r ? r : "", g ? g : "", b ? b : "");
+			fprintf(stderr, "Invalid Color: %d;%d;%d\n", r, g, b);
 	} else {
 		fprintf(stderr, "Not Supported SGR: %s\n", param);
 	}

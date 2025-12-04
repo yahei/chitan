@@ -18,6 +18,5 @@ void errExit(const char *);
 void fatal(const char *);
 void *xmalloc(size_t);
 void *xrealloc(void *, size_t);
-char *mystrsep(char **, const char *);
 
 #endif
