@@ -70,9 +70,8 @@ linecmp(Line *line1, Line *line2, int pos, int len)
 	getCharCnt(line2->str, pos, &index2, &col2, &width2);
 
 #define CMP(A,T) !memcmp(&line1->A[index1], &line2->A[index2], len * sizeof(T))
-	if (index2 + len <= u32slen(line2->str) && col1 == col2 &&
-	    CMP(str, char32_t) && CMP(attr, int) && CMP(fg, int) && CMP(bg, int) &&
-	    (index2 < 1 || !(line2->attr[index2 - 1] & ITALIC)))
+	if (col1 == col2 && index2 + len <= u32slen(line2->str) &&
+	    CMP(str, char32_t) && CMP(attr, int) && CMP(fg, int) && CMP(bg, int))
 			return 1;
 	return 0;
 #undef CMP
