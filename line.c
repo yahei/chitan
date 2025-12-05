@@ -13,22 +13,33 @@
 Color deffg = 256, defbg = 257;
 const Color PALETTE_SIZE = 258;
 
+static void reallocLine(Line *, size_t);
+
 Line *
 allocLine(void)
 {
 	Line *line = xmalloc(sizeof(Line));
 
-	line->str  = xmalloc(sizeof(char32_t));
-	line->attr = xmalloc(sizeof(int));
-	line->fg   = xmalloc(sizeof(int));
-	line->bg   = xmalloc(sizeof(int));
+	*line = (Line){};
 
-	line->str[0]  = L'\0';
+	reallocLine(line, 80);
+
+	line->str [0] = L'\0';
 	line->attr[0] = NONE;
-	line->fg[0]   = deffg;
-	line->bg[0]   = defbg;
+	line->fg  [0] = deffg;
+	line->bg  [0] = defbg;
 
 	return line;
+}
+
+void
+reallocLine(Line *line, size_t len)
+{
+	line->len  = len;
+	line->str  = xrealloc(line->str,  len * sizeof(char32_t));
+	line->attr = xrealloc(line->attr, len * sizeof(int));
+	line->fg   = xrealloc(line->fg,   len * sizeof(Color));
+	line->bg   = xrealloc(line->bg,   len * sizeof(Color));
 }
 
 void
@@ -49,10 +60,8 @@ linecpy(Line *dst, const Line *src)
 {
 	size_t len = u32slen(src->str) + 1;
 
-	dst->str  = xrealloc(dst->str,  len * sizeof(char32_t));
-	dst->attr = xrealloc(dst->attr, len * sizeof(int));
-	dst->fg   = xrealloc(dst->fg,   len * sizeof(int));
-	dst->bg   = xrealloc(dst->bg,   len * sizeof(int));
+	if (dst->len < len)
+		reallocLine(dst, len);
 
 	memcpy(dst->str,  src->str,  len * sizeof(char32_t));
 	memcpy(dst->attr, src->attr, len * sizeof(int));
@@ -81,23 +90,24 @@ void
 insertU32s(Line *line, int head, const char32_t *str, int attr, Color fg, Color bg, int len)
 {
 	const int oldlen = u32slen(line->str);
-	const int newlen = oldlen + len;
 	const int movelen = MAX(oldlen - head, 0);
+	const int dst = head + len, src = MIN(head, oldlen);
 	int i;
 
 	if (head < 0 || len <= 0)
 		return;
 
-#define INSERT(d, s) do { \
-	d = xrealloc(d, (newlen + 1) * s); \
-	memmove(&d[head + len], &d[MIN(head, oldlen)], (movelen + 1) * s); \
-} while (0);
-	INSERT(line->str,   sizeof(char32_t));
-	INSERT(line->attr,  sizeof(int));
-	INSERT(line->fg,    sizeof(Color));
-	INSERT(line->bg,    sizeof(Color));
-#undef INSERT
+	/* 足りなくなったら伸ばす */
+	while (line->len < oldlen + len + 1)
+		reallocLine(line, line->len * 2);
 
+	/* 挿入位置以降をずらす */
+	memmove(&line->str [dst], &line->str [src], (movelen + 1) * sizeof(char32_t));
+	memmove(&line->attr[dst], &line->attr[src], (movelen + 1) * sizeof(int));
+	memmove(&line->fg  [dst], &line->fg  [src], (movelen + 1) * sizeof(Color));
+	memmove(&line->bg  [dst], &line->bg  [src], (movelen + 1) * sizeof(Color));
+
+	/* 書き込む */
 	memcpy(&line->str[head], str, len * sizeof(char32_t));
 	for (i = 0; i < len; i++) {
 		line->attr[head + i] = attr;
@@ -113,19 +123,15 @@ deleteChars(Line *line, int head, int len)
 {
 	const int oldlen = u32slen(line->str);
 	const int tail = MIN(head + len, oldlen);
+	const int movelen = oldlen - tail + 1;
 
 	if (head < 0 || tail <= head)
 		return;
 
-#define DELETE(target, size) do { \
-	memmove(&target[head], &target[tail], (oldlen - tail + 1) * size); \
-	target = xrealloc(target, (head + oldlen - tail + 1) * size); \
-} while (0);
-	DELETE(line->str,   sizeof(char32_t));
-	DELETE(line->attr,  sizeof(int));
-	DELETE(line->fg,    sizeof(Color));
-	DELETE(line->bg,    sizeof(Color));
-#undef DELETE
+	memmove(&line->str [head], &line->str [tail], movelen * sizeof(char32_t));
+	memmove(&line->attr[head], &line->attr[tail], movelen * sizeof(int));
+	memmove(&line->fg  [head], &line->fg  [tail], movelen * sizeof(Color));
+	memmove(&line->bg  [head], &line->bg  [tail], movelen * sizeof(Color));
 
 	line->ver++;
 }

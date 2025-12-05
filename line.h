@@ -30,6 +30,7 @@ typedef struct Line {
 	char32_t *str;
 	int *attr;
 	Color *fg, *bg;
+	size_t len;
 	int ver;
 } Line;
 
