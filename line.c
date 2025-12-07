@@ -65,8 +65,8 @@ linecpy(Line *dst, const Line *src)
 
 	memcpy(dst->str,  src->str,  len * sizeof(char32_t));
 	memcpy(dst->attr, src->attr, len * sizeof(int));
-	memcpy(dst->fg,   src->fg,   len * sizeof(int));
-	memcpy(dst->bg,   src->bg,   len * sizeof(int));
+	memcpy(dst->fg,   src->fg,   len * sizeof(Color));
+	memcpy(dst->bg,   src->bg,   len * sizeof(Color));
 }
 
 int
@@ -80,7 +80,7 @@ linecmp(Line *line1, Line *line2, int pos, int len)
 
 #define CMP(A,T) !memcmp(&line1->A[index1], &line2->A[index2], len * sizeof(T))
 	if (col1 == col2 && index2 + len <= u32slen(line2->str) &&
-	    CMP(str, char32_t) && CMP(attr, int) && CMP(fg, int) && CMP(bg, int))
+	    CMP(str, char32_t) && CMP(attr, int) && CMP(fg, Color) && CMP(bg, Color))
 			return 1;
 	return 0;
 #undef CMP
@@ -253,7 +253,7 @@ getCharCnt(const char32_t *str, int col, int *index, int *total, int *width)
 	}
 
 	for (*index = 0, *total = 0; str[*index] != L'\0'; (*index)++) {
-		*width = wcwidth(str[*index]);
+		*width = str[*index] < 128 ? 1 : wcwidth(str[*index]);
 		if (col < *total + *width)
 			return;
 		*total += *width;
@@ -275,7 +275,7 @@ getIndex(const char32_t *str, int col)
 		return col;
 
 	for (i = 0, total = 0; str[i] != L'\0'; i++) {
-		total += wcwidth(str[i]);
+		total += str[i] < 128 ? 1 : wcwidth(str[i]);
 		if (col < total)
 			return i;
 	}
