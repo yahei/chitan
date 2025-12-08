@@ -218,7 +218,7 @@ run(void)
 
 		/* 再描画の頻度を制限 */
 		if (FD_ISSET(xfd, &rfds) || FD_ISSET(tfd, &rfds)) {
-			rest = 20 * 1000 * 1000 - (tstons(now) - tstons(lastdraw));
+			rest = 50 * 1000 * 1000 - (tstons(now) - tstons(lastdraw));
 			if (0 < rest) {
 				timeout = (struct timespec){ 0, MIN(rest, 1 * 1000 * 1000) };
 				continue;
