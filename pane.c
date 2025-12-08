@@ -417,12 +417,12 @@ drawLine(Pane *pane, Line *line, int row, int col, int width, int pos, nsec now)
 void
 drawCursor(Pane *pane, Line *line, int row, int col, int type, nsec now)
 {
-	int index, cccol, ccwidth;
-	getCharCnt(line->str, col, &index, &cccol, &ccwidth);
+	int index, col2, width;
+	getCharCnt(line->str, col, &index, &col2, &width);
 	char32_t *c = index < u32slen(line->str) ? &line->str[index] : (char32_t *)L" ";
 	const int x = pane->xpad + col * pane->xfont->cw;
 	const int y = pane->ypad + row * pane->xfont->ch;
-	const int cw = pane->xfont->cw * u32snwidth(c, 1) - 1;
+	const int cw = pane->xfont->cw * width - 1;
 	const int ch = pane->xfont->ch;
 	const DispInfo *dinfo = pane->dinfo;
 	int attr;
@@ -440,7 +440,7 @@ drawCursor(Pane *pane, Line *line, int row, int col, int type, nsec now)
 		if (pane->focus) {
 			attr = index < u32slen(line->str) ? line->attr[index] : 0;
 			cursor = (Line){c, &attr, &defbg, &deffg};
-			drawLine(pane, &cursor, row, cccol, 1, 0, now);
+			drawLine(pane, &cursor, row, col2, 1, 0, now);
 		} else {
 			XDrawRectangle(dinfo->disp, pane->pixmap, pane->gc, x, y, cw, ch - 1);
 			XDrawPoint(dinfo->disp, pane->pixmap, pane->gc, x + cw, y + ch - 1);
@@ -457,7 +457,7 @@ drawCursor(Pane *pane, Line *line, int row, int col, int type, nsec now)
 	}
 
 	/* 次回の消去範囲を変更 */
-	pane->clear_x = pane->xpad + pane->xfont->cw * (cccol - 0.5);
+	pane->clear_x = pane->xpad + pane->xfont->cw * (col2 - 0.5);
 	pane->clear_w = cw + pane->xfont->cw;
 }
 
