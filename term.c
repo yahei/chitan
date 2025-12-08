@@ -581,6 +581,9 @@ ctrlSeq(Term *term, const char *head, const char *tail, enum cseq_type type)
 
 	/* 中身を読み取る */
 	for (i = 0; i <= len; i++) {
+		/* 末尾に到達して中断 */
+		if (len <= i)
+			return NULL;
 		/* ST(ESC \)またはBELで終了 */
 		if (i < len && strncmp(&head[i], "\e\\", 2) == 0)
 			break;
@@ -600,9 +603,6 @@ ctrlSeq(Term *term, const char *head, const char *tail, enum cseq_type type)
 				return &head[i];
 			}
 		}
-		/* 末尾に到達して中断 */
-		if (len <= i)
-			return NULL;
 		/* 内容を記録 */
 		err[i] = IS_GC(head[i]) ? head[i] : '?';
 	}
