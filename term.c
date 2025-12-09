@@ -426,9 +426,11 @@ CSI(Term *term, const char *head, const char *tail)
 
 	case 0x48: /* CUP カーソル位置決め */
 		p = strpbrk(param, ";");
-		b = atoi(param);
-		a = p && (p < param + p_len) ? atoi(p + 1) : 1;
-		setCursorPos(term, a - 1, b - 1);
+		b = atoi(param) - 1;
+		a = p && (p < param + p_len) ? atoi(p + 1) - 1 : 0;
+		if (1 < term->dec[6])
+			b = MIN(b + term->sb->scrs, term->sb->scre);
+		setCursorPos(term, a, b);
 		break;
 
 	case 0x4a: /* ED ページ内消去 */
@@ -515,7 +517,10 @@ CSI(Term *term, const char *head, const char *tail)
 		break;
 
 	case 0x64: /* VPA 行位置決め */
-		setCursorPos(term, term->cx, atoi(param) - 1);
+		a = atoi(param) - 1;
+		if (1 < term->dec[6])
+			a = MIN(a + term->sb->scrs, term->sb->scre);
+		setCursorPos(term, term->cx, a);
 		break;
 
 	case 0x68: /* SM DECSET オプション設定 */
@@ -548,7 +553,7 @@ CSI(Term *term, const char *head, const char *tail)
 			break;
 		term->sb->scrs = CLIP(a, 1, sb->rows) - 1;
 		term->sb->scre = CLIP(b, 1, sb->rows) - 1;
-		setCursorPos(term, 0, 0);
+		setCursorPos(term, 0, term->dec[6] < 2 ? 0 : term->sb->scrs);
 		break;
 
 	case 0x00: /* NUL このNULを取り除いて読み直す */
@@ -823,6 +828,7 @@ decset(Term *term, unsigned int num, int flag)
 
 	switch (num) {
 	case 1:    /* Application Cursor Keys */
+	case 6:    /* Origin Mode */
 	case 25:   /* Show cursor */
 	case 9:    /* Mouse Tracking - X10 */
 	case 1000: /* Mouse Tracking - normal */
