@@ -264,7 +264,7 @@ GCs(Term *term, const char *head)
 					term->fg, term->bg, wlen);
 			index = getIndex(line->str, term->sb->cols);
 			if (index < u32slen(line->str))
-				line->str[index] = '\0';
+				line->str[index] = L'\0';
 		}
 	}
 
