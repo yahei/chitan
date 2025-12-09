@@ -196,12 +196,12 @@ readPty(Term *term)
 	/* バッファが枯渇したら全部捨てる */
 	term->rblen = term->rblen < READ_SIZE ? term->rblen : 0;
 	size = read(term->master, term->readbuf + term->rblen, READ_SIZE - term->rblen);
-	tail = term->readbuf + term->rblen + size;
-	*(char *)tail = '\0';
 
-	/* プロセスが終了してる場合など */
 	if (size < 0)
 		return size;
+
+	tail = term->readbuf + term->rblen + size;
+	*(char *)tail = '\0';
 
 	for (head = reading = term->readbuf; reading < tail;) {
 		rest = IS_GC(*reading) ? GCs(term, reading) : CC(term, reading, tail);

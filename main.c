@@ -465,7 +465,7 @@ keyPressEvent(Win *win, XEvent event, int bufsize)
 		{ XK_F12,       "\e[24~",       "\e[24~",       "\e[24;%d~",    "\e[24;%d~",    },
 		{ XK_VoidSymbol }
 	}, *key;
-	char buf[MAX(bufsize, 16)], *str;
+	char buf[MAX(bufsize, 16)] = {}, *str;
 	int len, mod;
 	KeySym keysym;
 	Status status = XLookupChars;
