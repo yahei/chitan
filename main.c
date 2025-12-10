@@ -481,8 +481,9 @@ keyPressEvent(Win *win, XEvent event, int bufsize)
 	if (1 < strlen(buf))
 		PUT_NUL(win->ime.peline, 0);
 
-	/* C-S-cでコピー */
-	if (keysym == XK_C && event.xkey.state & ControlMask) {
+	/* C-S-cまたはC-Insertでコピー */
+	if ((keysym == XK_C && event.xkey.state & ControlMask) ||
+	    (keysym == XK_Insert && event.xkey.state == ControlMask)) {
 		if (win->pane->sel.aline == win->pane->sel.bline &&
 		    win->pane->sel.acol  == win->pane->sel.bcol)
 			return 0;
@@ -491,8 +492,9 @@ keyPressEvent(Win *win, XEvent event, int bufsize)
 		return 0;
 	}
 
-	/* C-S-vで貼り付け */
-	if (keysym == XK_V && event.xkey.state & ControlMask) {
+	/* C-S-vまたはS-Insertで貼り付け */
+	if ((keysym == XK_V && event.xkey.state & ControlMask) ||
+	    (keysym == XK_Insert && event.xkey.state == ShiftMask)) {
 		XConvertSelection(dinfo.disp, atoms[CLIPBOARD], atoms[UTF8_STRING],
 				atoms[CLIPBOARD], win->window, CurrentTime);
 		return 1;
