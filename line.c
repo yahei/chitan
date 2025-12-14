@@ -176,12 +176,25 @@ putU32s(Line *line, int col, const char32_t *str, int attr, Color fg, Color bg, 
 {
 	const int width = u32snwidth(str, len);
 	int head;
+	int i;
 
 	if (col < 0)
 		return 0;
 
-	head = eraseInLine(line, col, width);
-	insertU32s(line, head, str, attr, fg, bg, len);
+	head = getIndex(line->str, col);
+
+	if (u32slen(line->str) < col + len ||
+	    u32snwidth(line->str + head, len) != u32snwidth(str, len)) {
+		head = eraseInLine(line, col, width);
+		insertU32s(line, head, str, attr, fg, bg, len);
+	} else {
+		memcpy(line->str + head, str, len * sizeof(char32_t));
+		for (i = head; i < head + len; i++) {
+			line->attr[i] = attr;
+			line->fg  [i] = fg;
+			line->bg  [i] = bg;
+		}
+	}
 
 	return width;
 }
@@ -227,6 +240,13 @@ u8sToU32s(char32_t *dst, const char *src, size_t n)
 
 		if ((0 <= *src && *src < 32) || *src == 127)
 			break;
+
+		if (BETWEEN(*src, 32, 127)) {
+			n--;
+			*dst++ = *src++;
+			rest = src;
+			continue;
+		}
 
 		bytes = mbtowc((wchar_t *)dst, src, 4);
 
