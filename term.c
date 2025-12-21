@@ -980,7 +980,7 @@ setSGR(Term *term, char *param, size_t len)
 	int n;
 
 	do {
-		n = strtol(p, &p, 10);
+		n = (*p == ';' || *p == '\0') ? 0 : strtol(p, &p, 10);
 		p += *p == ';';
 
 		/* すべての効果を取り消す */
@@ -1033,7 +1033,7 @@ setSGR(Term *term, char *param, size_t len)
 			fprintf(stderr, "effect:%d\n", n);
 		if (n == 65)
 			fprintf(stderr, "cancel effect: %d\n", n);
-	} while ('0' <= *p && *p <= '9');
+	} while (('0' <= *p && *p <= '9') || *p == ';');
 }
 
 void
