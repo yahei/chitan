@@ -14,6 +14,7 @@ Color deffg = 256, defbg = 257;
 const Color PALETTE_SIZE = 258;
 
 static void reallocLine(Line *, size_t);
+static size_t u8decode(char32_t *, const unsigned char *, size_t);
 
 Line *
 allocLine(void)
@@ -228,6 +229,42 @@ findNextSGR(const Line *line, int index)
 	return len;
 }
 
+size_t
+u8decode(char32_t *dst, const unsigned char *src, size_t n)
+{
+	char32_t res, min;
+	unsigned char mask;
+	int bytes, i;
+
+	/* 第1バイト */
+	     if (src[0] < 0b10000000) { *dst = *src; return 1; }
+	else if (src[0] < 0b11000000) { return -1; }
+	else if (src[0] < 0b11100000) { bytes = 2; mask = 0b00011111; min = 1 <<  7; }
+	else if (src[0] < 0b11110000) { bytes = 3; mask = 0b00001111; min = 1 << 11; }
+	else if (src[0] < 0b11111000) { bytes = 4; mask = 0b00000111; min = 1 << 16; }
+	else                          { return -1; }
+
+	if (n < bytes)
+		return -1;
+
+	/* 2バイト以上の文字をデコード */
+	res = src[0] & mask;
+	for (i = 1; i < bytes; i++)
+		res = (res << 6) + (src[i] & 0b00111111);
+
+	/* 第2バイト以降が0b10で始まってなければ不正 */
+	for (i = 1; i < bytes; i++)
+		if (src[i] >> 6 != 2)
+			return -1;
+
+	/* 最小のバイト数で表現していなければ不正 */
+	if (res < min)
+		return -1;
+
+	*dst = res;
+	return bytes;
+}
+
 const char *
 u8sToU32s(char32_t *dst, const char *src, size_t n)
 {
@@ -241,14 +278,7 @@ u8sToU32s(char32_t *dst, const char *src, size_t n)
 		if ((0 <= *src && *src < 32) || *src == 127)
 			break;
 
-		if (BETWEEN(*src, 32, 127)) {
-			n--;
-			*dst++ = *src++;
-			rest = src;
-			continue;
-		}
-
-		bytes = mbtowc((wchar_t *)dst, src, 4);
+		bytes = u8decode(dst, (const unsigned char *)src, 4);
 
 		if (bytes < 0)
 			break;
