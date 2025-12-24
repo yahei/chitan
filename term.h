@@ -55,6 +55,7 @@ typedef struct Term {
 	Color *def_palette;     /* カラーパレットのデフォルト値 */
 	int oldmx, oldmy;       /* 前回のマウス座標 */
 	const char32_t *g[4];   /* 文字集合 */
+	const char32_t **gl;    /* 呼び出されている文字集合 */
 	char title[TITLE_MAX];  /* タイトル */
 	int bell_cnt;           /* ベルが鳴った回数 */
 	int palette_cnt;        /* パレットを変更した回数 */

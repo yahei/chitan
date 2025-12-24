@@ -55,6 +55,7 @@ openTerm(int row, int col, int bufsize, const char *program, char *const cmd[])
 	term = xmalloc(sizeof(Term));
 	*term = (Term){ .master = -1, .ctype = 2, .fg = deffg, .bg = defbg,
 		.title = "chitan" };
+	term->gl = &term->g[0];
 
 	/* スクリーンバッファの初期化 */
 	row = row < bufsize ? row : bufsize;
@@ -240,10 +241,10 @@ GCs(Term *term, const char *head)
 	rest = u8sToU32s(decoded, head, len);
 
 	/* 図形文字集合が切り替えられていたら文字を置き換える */
-	if (term->g[0])
+	if (*term->gl)
 		for (i = 0; i < len; i++)
 			if (BETWEEN(decoded[i], 0x21, 0x7f))
-				decoded[i] = term->g[0][decoded[i] - 0x21];
+				decoded[i] = (*term->gl)[decoded[i] - 0x21];
 
 	for (dp = decoded; *dp != L'\0'; dp += MAX(0, wlen)) {
 		/* 自動改行 */
@@ -277,12 +278,20 @@ CC(Term *term, const char *head, const char *tail)
 	/* C0 基本集合 */
 	switch (*head) {
 	case 0x00:                                              break; /* NUL */
+	case 0x05: writePty(term, "", 0);                       break; /* ENQ */
 	case 0x07: term->bell_cnt++;                            break; /* BEL */
 	case 0x08: moveCursorPos(term, -1, 0, 0);               break; /* BS  */
 	case 0x09: moveCursorPos(term, 8 - term->cx % 8, 0, 0); break; /* HT  */
 	case 0x0a: linefeed(term);                              break; /* LF  */
+	case 0x0b: linefeed(term);                              break; /* VT  */
+	case 0x0c: linefeed(term);                              break; /* FF  */
 	case 0x0d: setCursorPos(term, 0, term->cy);             break; /* CR  */
+	case 0x0e: term->gl = &term->g[1];                      break; /* SO  */
+	case 0x0f: term->gl = &term->g[0];                      break; /* SI  */
+	case 0x18:                                              break; /* CAN */
+	case 0x1a:                                              break; /* SUB */
 	case 0x1b: return ESC(term, head + 1, tail);                   /* ESC */
+	case 0x7f:                                              break; /* DEL */
 	default: fprintf(stderr, "Not Supported C0: (%#x)\n", *head);  /* etc */
 	}
 
@@ -331,6 +340,14 @@ ESC(Term *term, const char *head, const char *tail)
 	case 0x00: return     ESC(term, head + 1, tail);            /* NUL */
 
 	default:
+		/* 中断 */
+		if (*head == 0x18 || *head == 0x1a)
+			return head + 1;
+		/* 無効 */
+		if (!BETWEEN(*head, 0x20, 0x7f)) {
+			fprintf(stderr, "Invalid ESC Seq: ESC (%#04x)\n", *head);
+			return head;
+		}
 		/*
 		 * 未対応
 		 *
@@ -339,10 +356,6 @@ ESC(Term *term, const char *head, const char *tail)
 		 * 0x40-0x5f   Fe型     C1 補助集合
 		 * 0x60-0x7e   Fs型     標準単独制御機能
 		 */
-		if (!BETWEEN(*head, 0x20, 0x7f)) {
-			fprintf(stderr, "Invalid ESC Seq: ESC (%#04x)\n", *head);
-			return head;
-		}
 		fprintf(stderr, "Not Supported ESC Seq: ESC %c(%#04x)\n", *head, *head);
 	}
 
@@ -567,11 +580,16 @@ CSI(Term *term, const char *head, const char *tail)
 	return head + index + 1;
 
 UNKNOWN:
+	/* 中断 */
+	if (final == 0x18 || final == 0x1a)
+		return head + index + 1;
+	/* 無効 */
 	if (!BETWEEN(final, 0x40, 0x7f)) {
 		fprintf(stderr, "Invalid CSI: CSI [%.*s][%.*s](%#04x)\n",
 				p_len, param, i_len, inter, final);
 		return head + index;
 	}
+	/* 未対応 */
 	fprintf(stderr, "Not Supported CSI: CSI [%.*s][%.*s]%c(%#04x)\n",
 			p_len, param, i_len, inter, final, final);
 	return head + index + 1;
@@ -601,7 +619,11 @@ ctrlSeq(Term *term, const char *head, const char *tail, enum cseq_type type)
 				/* NULが原因なら取り除いて読み直す */
 				removeCharFromReadbuf(term, head + i);
 				return ctrlSeq(term, head + 1, tail, type);
+			} else if (head[i] == 0x18 || head[i] == 0x1a) {
+				/* CAN/SUBで中断 */
+				return &head[i] + 1;
 			} else {
+				/* エラー */
 				err[i] = '\0';
 				fprintf(stderr, "CtrlSeq \"%s\" was interrupted by '%#x'\n",
 						err, head[i]);
