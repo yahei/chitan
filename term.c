@@ -306,6 +306,13 @@ ESC(Term *term, const char *head, const char *tail)
 	if (tail <= head)
 		return NULL;
 
+	/* ESC以外の制御文字が挟まっていたら、それを処理してからやり直す */
+	if (*head < 0x20 && *head != 0x1b) {
+		CC(term, head, tail);
+		removeCharFromReadbuf(term, head);
+		return ESC(term, head + 1, tail);
+	}
+
 	switch (*head) {
 	case 0x24: /* DESIGGNAE MULTIBYTE */
 	case 0x28: /* G0-DESIGGNAE 94-SET */
@@ -387,6 +394,13 @@ CSI(Term *term, const char *head, const char *tail)
 
 	/* 終端バイト */
 	final = head[index];
+
+	/* ESC以外の制御文字が挟まっていたら、それを処理してからやり直す */
+	if (final < 0x20 && final != 0x1b) {
+		CC(term, head + index, tail);
+		removeCharFromReadbuf(term, head + index);
+		return CSI(term, head + 1, tail);
+	}
 
 	/* 中間バイトがSPのもの */
 	if (0 < i_len && memcmp(inter, " ", i_len) == 0) {
@@ -568,10 +582,6 @@ CSI(Term *term, const char *head, const char *tail)
 		term->sb->scre = CLIP(b, 1, sb->rows) - 1;
 		setCursorPos(term, 0, term->dec[6] < 2 ? 0 : term->sb->scrs);
 		break;
-
-	case 0x00: /* NUL このNULを取り除いて読み直す */
-		removeCharFromReadbuf(term, head + index);
-		return CSI(term, head + 1, tail);
 
 	default: /* 未対応 */
 		goto UNKNOWN;
