@@ -452,6 +452,7 @@ CSI(Term *term, const char *head, const char *tail)
 		break;
 
 	case 0x48: /* CUP カーソル位置決め */
+	case 0x66: /* HVP 文字位置行位置決め */
 		p = strpbrk(param, ";");
 		b = atoi(param) - 1;
 		a = p && (p < param + p_len) ? atoi(p + 1) - 1 : 0;
