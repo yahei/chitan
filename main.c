@@ -450,7 +450,6 @@ keyPressEvent(Win *win, XEvent event, int bufsize)
 		{ XK_Page_Down, "\e[6~",        "\e[6~",        "\e[6;%d~",     "\e[6;%d~",     },
 		{ XK_Insert,    "\e[2~",        "\e[2~",        "\e[2;%d~",     "\e[2;%d~",     },
 		{ XK_Delete,    "\e[3~",        "\e[3~",        "\e[3;%d~",     "\e[3;%d~",     },
-		{ XK_BackSpace, "\x7f",         "\x7f",         "\x7f",         "\x7f",         },
 		{ XK_F1,        "\eOP",         "\eOP",         "\e[1;%dP",     "\e[1;%dP",     },
 		{ XK_F2,        "\eOQ",         "\eOQ",         "\e[1;%dQ",     "\e[1;%dQ",     },
 		{ XK_F3,        "\eOR",         "\eOR",         "\e[1;%dR",     "\e[1;%dR",     },
@@ -480,6 +479,10 @@ keyPressEvent(Win *win, XEvent event, int bufsize)
 	/* IMEの確定っぽい場合(コールバックがすぐ来ない場合があるため) */
 	if (1 < strlen(buf))
 		PUT_NUL(win->ime.peline, 0);
+
+	/* BackSpace */
+	if (keysym == XK_BackSpace && !(event.xkey.state & ControlMask))
+		snprintf(buf, 2, "\x7f");
 
 	/* C-S-cまたはC-Insertでコピー */
 	if ((keysym == XK_C && event.xkey.state & ControlMask) ||
