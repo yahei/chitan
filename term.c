@@ -119,9 +119,8 @@ openTerm(int row, int col, int bufsize, const char *program, char *const cmd[])
 			fatal("setsid failed.\n");
 		if (ioctl(0, TIOCSCTTY) < 0)
 			fprintf(stderr, "TIOCSCTTY failed.\n");
-		if (execvp(program, cmd) < 0)
-			fatal("exec failed.\n");
-		return NULL;
+		execvp(program, cmd);
+		fatal("exec failed.\n");
 
 	default: /* master側 */
 		close(slave);
