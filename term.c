@@ -84,8 +84,6 @@ openTerm(int row, int col, int bufsize, const char *program, char *const cmd[])
 	term->appkeypad = 1;
 
 	/* カラーパレットの初期化 */
-	term->palette     = xmalloc(PALETTE_SIZE * sizeof(Color));
-	term->def_palette = xmalloc(PALETTE_SIZE * sizeof(Color));
 	setDefaultPalette(term->palette);
 	setDefaultPalette(term->def_palette);
 
@@ -182,8 +180,6 @@ closeTerm(Term *term)
 	free(term->ori.lines);
 	free(term->alt.lines);
 	free(term->readbuf);
-	free(term->palette);
-	free(term->def_palette);
 	free(term);
 }
 

@@ -11,7 +11,6 @@
  */
 
 Color deffg = 256, defbg = 257;
-const Color PALETTE_SIZE = 258;
 
 static void reallocLine(Line *, size_t);
 static size_t u8decode(char32_t *, const unsigned char *, size_t);

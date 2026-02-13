@@ -51,8 +51,8 @@ typedef struct Term {
 	char appkeypad;         /* Application Keypadの状態 */
 	int attr;               /* 現在の属性 */
 	Color fg, bg;           /* 現在の色 */
-	Color *palette;         /* カラーパレット */
-	Color *def_palette;     /* カラーパレットのデフォルト値 */
+	Color palette[PALETTE_SIZE];        /* カラーパレット */
+	Color def_palette[PALETTE_SIZE];    /* カラーパレットのデフォルト値 */
 	int oldmx, oldmy;       /* 前回のマウス座標 */
 	const char32_t *g[4];   /* 文字集合 */
 	const char32_t **gl;    /* 呼び出されている文字集合 */

@@ -5,7 +5,7 @@ typedef uint_least32_t char32_t;
 typedef uint_least32_t Color;
 
 extern Color deffg, defbg;
-extern const Color PALETTE_SIZE;
+#define PALETTE_SIZE    (258)
 
 #define PUT_NUL(l, x)   putU32s((l), (x), (char32_t *)L"\0", 0, deffg, defbg, 1)
 #define u32swidth(s)    u32snwidth(s, u32slen(s))
