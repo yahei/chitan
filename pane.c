@@ -139,12 +139,15 @@ void
 scrollPane(Pane *pane, int n)
 {
 	pane->redraw_flag = true;
-	pane->scr = CLIP(pane->scr + n, 0, SCROLLMAX(pane->term->sb));
+	pane->scr += n;
 }
 
 void
 selectPane(Pane *pane, int row, int col, bool start, bool rect)
 {
+	/* スクロールの境界チェック */
+	pane->scr = CLIP(pane->scr, 0, SCROLLMAX(pane->term->sb));
+
 	pane->redraw_flag = true;
 	setSelection(&pane->sel, pane->term->sb, row - pane->scr, col, start, rect);
 }
@@ -180,6 +183,9 @@ drawPane(Pane *pane, nsec now, Line *peline, int pecaret)
 	int width, width_b;
 	bool clear_flag = false;
 	int i;
+
+	/* スクロールの境界チェック */
+	pane->scr = CLIP(pane->scr, 0, SCROLLMAX(pane->term->sb));
 
 	/* --- タイマーの処理 --- */
 
