@@ -30,55 +30,19 @@ static void createPixmap(Pane *, int, int);
 static void clearPixmap(Pane *, nsec);
 
 Pane *
-createPane(DispInfo *dinfo, XFont *xfont, int width, int height, float alpha, int bufsize, char *const cmd[])
+createPane(DispInfo *dinfo, XFont *xfont, int w, int h, int xpad, int ypad, Term *term)
 {
-	char *xrm, *str_type, buf[16];
-	XrmDatabase xdb;
-	XrmValue val;
-	int i;
 	Pane *pane = xmalloc(sizeof(Pane));
 
 	*pane = (Pane){
 		.dinfo = dinfo, .xfont = xfont, .depth = 32,
-		.width = width, .height = height,
-		.xpad = xfont->cw / 2, .ypad = xfont->cw / 2,
+		.width = w, .height = h, .xpad = xpad, .ypad = ypad,
+		.term = term,
 	};
 	memset(&pane->timer_active, 0, TIMER_NUM);
 
-	/* 端末をオープン */
-	pane->term = openTerm((height - pane->ypad * 2) / xfont->ch,
-			(width - pane->xpad * 2) / xfont->cw, bufsize, cmd[0], cmd);
-	if (!pane->term)
-		errExit("openTerm failed.\n");
-
-	/* パレットの設定を読み込む */
-	xrm = XResourceManagerString(dinfo->disp);
-	xdb = XrmGetStringDatabase(xrm ? xrm : "");
-#define XRCOLOR(name, num) do {\
-	if (XrmGetResource(xdb, (name), "chitan", &str_type, &val) &&\
-	    strncmp(str_type, "String", 6) == 0 &&\
-	    strlen(val.addr) ==7 && val.addr[0] == '#')\
-		pane->term->palette[num] = strtol(val.addr + 1, NULL, 16) + 0xff000000;\
-} while (0)
-	XRCOLOR("chitan.foreground", deffg);
-	XRCOLOR("chitan.background", defbg);
-	for (i = 0; i < 256; i++) {
-		snprintf(buf, 16, "chitan.color%d", i);
-		XRCOLOR(buf, i);
-	}
-#undef XRCOLOR
-	XrmDestroyDatabase(xdb);
-
-	/* 背景の不透明度を設定 */
-	pane->term->palette[defbg] = ((0xff & (int)(0xff * alpha)) << 24) +
-		(0x00ffffff &pane->term->palette[defbg]);
-
-	/* 現在のパレットをデフォルトとして保存 */
-	for (i = 0; i < PALETTE_SIZE; i++)
-		pane->term->def_palette[i] = pane->term->palette[i];
-
 	/* 描画の準備 */
-	createPixmap(pane, width, height);
+	createPixmap(pane, w, h);
 	clearPixmap(pane, pane->time_b);
 
 	return pane;

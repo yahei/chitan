@@ -45,6 +45,7 @@ static Win *win;
 static struct timespec now;
 
 static void init(int, char *[]);
+static void initPalette(Term *, float);
 static void run(void);
 static void fin(void);
 
@@ -256,6 +257,10 @@ Win *
 openWindow(int w, int h, int x, int y, int buflines, float alpha, char *const cmd[])
 {
 	Win *win = xmalloc(sizeof(Win));
+	Term *term;
+	const int pad = xfont->cw / 2;
+	const int row = (h - pad * 2) / xfont->ch;
+	const int col = (w - pad * 2) / xfont->cw;
 
 	*win = (Win){ .width = w, .height = h};
 
@@ -293,10 +298,51 @@ openWindow(int w, int h, int x, int y, int buflines, float alpha, char *const cm
 	XMapWindow(dinfo.disp, win->window);
 	XFlush(dinfo.disp);
 
+	/* Term作成 */
+	term = openTerm(row, col, buflines, cmd[0], cmd);
+	if (!term)
+		errExit("openTerm failed.\n");
+	initPalette(term, alpha);
+
 	/* Pane作成 */
-	win->pane = createPane(&dinfo, xfont, w, h, alpha, buflines, cmd);
+	win->pane = createPane(&dinfo, xfont, w, h, pad, pad, term);
 
 	return win;
+}
+
+void
+initPalette(Term *term, float alpha)
+{
+	char *xrm, *str_type, buf[16];
+	XrmDatabase xdb;
+	XrmValue val;
+	int i;
+
+	/* パレットの設定を読み込む */
+	xrm = XResourceManagerString(dinfo.disp);
+	xdb = XrmGetStringDatabase(xrm ? xrm : "");
+#define XRCOLOR(name, num) do {\
+	if (XrmGetResource(xdb, (name), "chitan", &str_type, &val) &&\
+	    strncmp(str_type, "String", 6) == 0 &&\
+	    strlen(val.addr) ==7 && val.addr[0] == '#')\
+		term->palette[num] = strtol(val.addr + 1, NULL, 16) + 0xff000000;\
+} while (0)
+	XRCOLOR("chitan.foreground", deffg);
+	XRCOLOR("chitan.background", defbg);
+	for (i = 0; i < 256; i++) {
+		snprintf(buf, 16, "chitan.color%d", i);
+		XRCOLOR(buf, i);
+	}
+#undef XRCOLOR
+	XrmDestroyDatabase(xdb);
+
+	/* 背景の不透明度を設定 */
+	term->palette[defbg] = ((0xff & (int)(0xff * alpha)) << 24) +
+		(0x00ffffff &term->palette[defbg]);
+
+	/* 現在のパレットをデフォルトとして保存 */
+	for (i = 0; i < PALETTE_SIZE; i++)
+		term->def_palette[i] = term->palette[i];
 }
 
 void

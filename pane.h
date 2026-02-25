@@ -40,7 +40,7 @@ typedef struct Pane {
 	int bell_cnt, palette_cnt;
 } Pane;
 
-Pane *createPane(DispInfo *, XFont *, int, int, float, int, char *const []);
+Pane *createPane(DispInfo *, XFont *, int, int, int, int, Term *);
 void destroyPane(Pane *);
 void setPaneSize(Pane *, int, int);
 void mouseEvent(Pane *, XEvent *);
