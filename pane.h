@@ -48,7 +48,7 @@ typedef struct Pane {
 
 Pane *createPane(DispInfo *, XFont *, int, int, int, int, Term *);
 void destroyPane(Pane *);
-void setPaneSize(Pane *, int, int);
+void setPaneSize(Drawing *, int, int);
 void mouseEvent(Pane *, XEvent *);
 void scrollPane(Drawing *, int);
 void selectPane(Pane *, int, int, bool, bool);

@@ -69,16 +69,15 @@ destroyPane(Pane *pane)
 }
 
 void
-setPaneSize(Pane *pane, int width, int height)
+setPaneSize(Drawing *d, int width, int height)
 {
-	pane->d.width = width;
-	pane->d.height = height;
-	pane->d.rows = (height - pane->d.ypad * 2) / pane->d.xfont->ch;
-	pane->d.cols = (width  - pane->d.xpad * 2) / pane->d.xfont->cw;
-	setWinSize(pane->term, pane->d.rows, pane->d.cols, width, height);
-	freePixmap(&pane->d);
-	createPixmap(&pane->d, width, height);
-	clearPixmap(&pane->d, pane->d.time_b);
+	d->width = width;
+	d->height = height;
+	d->rows = (height - d->ypad * 2) / d->xfont->ch;
+	d->cols = (width  - d->xpad * 2) / d->xfont->cw;
+	freePixmap(d);
+	createPixmap(d, width, height);
+	clearPixmap(d, d->time_b);
 }
 
 void

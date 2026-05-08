@@ -454,7 +454,9 @@ handleXEvent(Win *win)
 			if (win->width != ce->width || win->height != ce->height) {
 				win->width  = ce->width;
 				win->height = ce->height;
-				setPaneSize(pane, ce->width, ce->height);
+				setPaneSize(&pane->d, ce->width, ce->height);
+				setWinSize(pane->term, pane->d.rows, pane->d.cols,
+						ce->width, ce->height);
 			}
 			break;
 
