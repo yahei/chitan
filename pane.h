@@ -27,6 +27,7 @@ typedef struct Drawing {
 	GC gc;
 	XftDraw *draw;
 	int width, height, xpad, ypad;
+	int rows, cols;
 	bool focus, redraw_flag;
 	nsec time_b;
 	nsec caret_time, bell_time;

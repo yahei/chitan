@@ -39,6 +39,7 @@ createPane(DispInfo *dinfo, XFont *xfont, int w, int h, int xpad, int ypad, Term
 		.d = {
 			.dinfo = dinfo, .xfont = xfont, .depth = 32,
 			.width = w, .height = h, .xpad = xpad, .ypad = ypad,
+			.rows = term->sb->rows, .cols = term->sb->cols,
 		},
 	};
 	memset(&pane->d.timer_active, 0, TIMER_NUM);
@@ -72,8 +73,9 @@ setPaneSize(Pane *pane, int width, int height)
 {
 	pane->d.width = width;
 	pane->d.height = height;
-	setWinSize(pane->term, (height - pane->d.ypad * 2) / pane->d.xfont->ch,
-			(width - pane->d.xpad * 2) / pane->d.xfont->cw, width, height);
+	pane->d.rows = (height - pane->d.ypad * 2) / pane->d.xfont->ch;
+	pane->d.cols = (width  - pane->d.xpad * 2) / pane->d.xfont->cw;
+	setWinSize(pane->term, pane->d.rows, pane->d.cols, width, height);
 	freePixmap(pane);
 	createPixmap(pane, width, height);
 	clearPixmap(pane, pane->d.time_b);
@@ -158,7 +160,7 @@ drawPane(Pane *pane, nsec now, Line *peline, int pecaret)
 
 	/* 点滅させる必要がないときはキャレットのタイマーを止める */
 	pane->d.timer_active[CARET_TIMER] = pane->d.focus &&
-		(pane->term->cy + pane->d.scr <= pane->term->sb->rows) &&
+		(pane->term->cy + pane->d.scr <= pane->d.rows) &&
 		(!pane->term->ctype || pane->term->ctype % 2);
 
 	/* ベルの消灯時刻をまたいでいたら画面クリア */
@@ -226,7 +228,7 @@ drawPane(Pane *pane, nsec now, Line *peline, int pecaret)
 	pane->d.clear_h = pane->d.xfont->ch;
 
 	/* 端末の内容を取得 */
-	getLines(pane->term->sb, pane->d.new_lines, pane->term->sb->rows + 3,
+	getLines(pane->term->sb, pane->d.new_lines, pane->d.rows + 3,
 			pane->d.scr + 1, &pane->sel);
 
 	/* -1行目は画面端をまたいで選択してる場合だけ書く */
@@ -239,7 +241,7 @@ drawPane(Pane *pane, nsec now, Line *peline, int pecaret)
 	pane->d.timer_active[BLINK_TIMER] = pane->d.timer_active[RAPID_TIMER] = false;
 
 	/* Pixmapに書く */
-	for (i = -1; i < pane->term->sb->rows + 2; i++) {
+	for (i = -1; i < pane->d.rows + 2; i++) {
 		line = NEW_LINE(pane, i);
 
 		/* 前回の方が長い場合の塗りつぶし */
@@ -257,11 +259,11 @@ drawPane(Pane *pane, nsec now, Line *peline, int pecaret)
 
 		/* 行を書く */
 		if (line)
-			drawLine(pane, line, i, 0, pane->term->sb->cols + 2, 0, now);
+			drawLine(pane, line, i, 0, pane->d.cols + 2, 0, now);
 	}
 
 	/* 書いた文字とPixmapの状態を記録 */
-	for (i = -1; i < pane->term->sb->rows + 2; i++)
+	for (i = -1; i < pane->d.rows + 2; i++)
 		linecpy(OLD_LINE(pane, i), NEW_LINE(pane, i));
 	XCopyArea(pane->d.dinfo->disp, pane->d.pixmap, pane->d.pixbuf, pane->d.gc,
 			0, 0, pane->d.width, pane->d.height, 0, 0);
@@ -275,9 +277,9 @@ drawPane(Pane *pane, nsec now, Line *peline, int pecaret)
 		pecaretpos = u32snwidth(peline->str, pecaret);
 
 		/* Preeditの画面上での描画位置を決める */
-		pepos = pane->term->sb->cols / 2 - pecaretpos;
+		pepos = pane->d.cols / 2 - pecaretpos;
 		pepos = MIN(pepos, 0);
-		pepos = MAX(pepos, pane->term->sb->cols - pewidth);
+		pepos = MAX(pepos, pane->d.cols - pewidth);
 		pepos = MIN(pepos, pane->term->cx);
 
 		/* Preeditとカーソルの描画 */
@@ -287,11 +289,11 @@ drawPane(Pane *pane, nsec now, Line *peline, int pecaret)
 		/* 次回の消去範囲を変更 */
 		pane->d.clear_x = pane->d.xpad + pane->d.xfont->cw * (pepos - 0.5);
 		pane->d.clear_w = pane->d.xfont->cw * (pewidth + 1);
-	} else if (1 <= pane->term->dec[25] && pane->term->cx < pane->term->sb->cols + 2) {
+	} else if (1 <= pane->term->dec[25] && pane->term->cx < pane->d.cols + 2) {
 		/* カーソルの描画 */
 		caretrow = pane->term->cy + pane->d.scr;
 		line = NEW_LINE(pane, caretrow);
-		if (caretrow <= pane->term->sb->rows)
+		if (caretrow <= pane->d.rows)
 			drawCursor(pane, line, caretrow, pane->term->cx, pane->term->ctype, now);
 	}
 
@@ -325,14 +327,14 @@ drawLine(Pane *pane, Line *line, int row, int col, int width, int pos, nsec now)
 	/* 変化無し・コピー・書き直しの分岐 */
 #define LINE_CMP(R) linecmp(line, OLD_LINE(pane, R), pos, next - i)
 	if (line->attr[i] & (ITALIC | BLINK | RAPID))
-		sl = pane->term->sb->rows;
-	else if (BETWEEN(row, -1, pane->term->sb->rows + 2) && LINE_CMP(row))
+		sl = pane->d.rows;
+	else if (BETWEEN(row, -1, pane->d.rows + 2) && LINE_CMP(row))
 		return;
 	else
-		for (sl = 0; sl < pane->term->sb->rows; sl++)
+		for (sl = 0; sl < pane->d.rows; sl++)
 			if (LINE_CMP(sl))
 				break;
-	if (sl < pane->term->sb->rows) {
+	if (sl < pane->d.rows) {
 		XCopyArea(pane->d.dinfo->disp, pane->d.pixbuf, pane->d.pixmap, pane->d.gc,
 				x, pane->d.ypad + (sl) * pane->d.xfont->ch,
 				w, pane->d.xfont->ch, x, y);
@@ -475,11 +477,11 @@ clearPixmap(Pane *pane, nsec now)
 	if (pane->d.old_lines)
 		for (plines = pane->d.old_lines; *plines; plines++)
 			freeLine(*plines);
-	pane->d.new_lines = xrealloc(pane->d.new_lines, (pane->term->sb->rows + 4) * sizeof(Line *));
-	pane->d.new_lines[pane->term->sb->rows + 3] = NULL;
-	pane->d.old_lines = xrealloc(pane->d.old_lines, (pane->term->sb->rows + 4) * sizeof(Line *));
-	pane->d.old_lines[pane->term->sb->rows + 3] = NULL;
-	for (i = 0; i < pane->term->sb->rows + 3; i++) {
+	pane->d.new_lines = xrealloc(pane->d.new_lines, (pane->d.rows + 4) * sizeof(Line *));
+	pane->d.new_lines[pane->d.rows + 3] = NULL;
+	pane->d.old_lines = xrealloc(pane->d.old_lines, (pane->d.rows + 4) * sizeof(Line *));
+	pane->d.old_lines[pane->d.rows + 3] = NULL;
+	for (i = 0; i < pane->d.rows + 3; i++) {
 		pane->d.new_lines[i] = allocLine();
 		pane->d.old_lines[i] = allocLine();
 	}
