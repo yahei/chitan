@@ -238,7 +238,7 @@ run(void)
 		lastdraw = now;
 
 		/* 次の待機時間を取得 */
-		timeout = nstots(getNextTime(pane, tstons(now)));
+		timeout = nstots(getNextTime(&pane->d, tstons(now)));
 	}
 }
 
@@ -410,7 +410,7 @@ handleXEvent(Win *win)
 
 		case ButtonPress:       /* マウス Press */
 			if ((mb == 4 || mb == 5) && pane->term->sb == &pane->term->ori) {
-				scrollPane(pane, (mb == 4 ? 1 : -1) * 3);
+				scrollPane(&pane->d, (mb == 4 ? 1 : -1) * 3);
 			} else if (!BETWEEN(mb, 1, 4) || (ms & ~(ShiftMask | Mod1Mask | Mod2Mask)) ||
 					(pane->term->sb == &pane->term->alt && !(ms & ShiftMask))) {
 				mouseEvent(pane, &event);

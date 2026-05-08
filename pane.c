@@ -15,19 +15,19 @@
 		((int)(  RED(c1) * (a1) +   RED(c2) * (a2)) << 16) +\
 		((int)(GREEN(c1) * (a1) + GREEN(c2) * (a2)) <<  8) +\
 		((int)( BLUE(c1) * (a1) +  BLUE(c2) * (a2)) <<  0))
-#define BELLCOLOR(c)    (now < pane->d.bell_time ? BLEND_COLOR((c), 0.925, 0xffffffff, 0.075) : (c))
+#define BELLCOLOR(c)    (now < d->bell_time ? BLEND_COLOR((c), 0.925, 0xffffffff, 0.075) : (c))
 #define SCROLLMAX(sb)   ((sb)->firstline - MAX((sb)->totallines - (sb)->maxlines, 0))
-#define NEW_LINE(p, n)  (pane->d.new_lines[n + 1])
-#define OLD_LINE(p, n)  (pane->d.old_lines[n + 1])
+#define NEW_LINE(d, n)  (d->new_lines[n + 1])
+#define OLD_LINE(d, n)  (d->old_lines[n + 1])
 const long long blink_duration = 800 * 1000 * 1000;
 const long long rapid_duration = 200 * 1000 * 1000;
 const long long caret_duration = 500 * 1000 * 1000;
 
-static void drawLine(Pane *, Line *, int, int, int, int, nsec);
-static void drawCursor(Pane *, Line *, int, int, int, nsec);
-static void freePixmap(Pane *);
-static void createPixmap(Pane *, int, int);
-static void clearPixmap(Pane *, nsec);
+static void drawLine(Drawing *, Line *, int, int, int, int, nsec);
+static void drawCursor(Drawing *, Line *, int, int, int, nsec);
+static void freePixmap(Drawing *);
+static void createPixmap(Drawing *, int, int);
+static void clearPixmap(Drawing *, nsec);
 
 Pane *
 createPane(DispInfo *dinfo, XFont *xfont, int w, int h, int xpad, int ypad, Term *term)
@@ -46,8 +46,8 @@ createPane(DispInfo *dinfo, XFont *xfont, int w, int h, int xpad, int ypad, Term
 	memcpy(pane->d.palette, term->palette, PALETTE_SIZE * sizeof(Color));
 
 	/* 描画の準備 */
-	createPixmap(pane, w, h);
-	clearPixmap(pane, pane->d.time_b);
+	createPixmap(&pane->d, w, h);
+	clearPixmap(&pane->d, pane->d.time_b);
 
 	return pane;
 }
@@ -58,7 +58,7 @@ destroyPane(Pane *pane)
 	Line **plines;
 
 	closeTerm(pane->term);
-	freePixmap(pane);
+	freePixmap(&pane->d);
 	for (plines = pane->d.new_lines; *plines; plines++)
 		freeLine(*plines);
 	free(pane->d.new_lines);
@@ -76,9 +76,9 @@ setPaneSize(Pane *pane, int width, int height)
 	pane->d.rows = (height - pane->d.ypad * 2) / pane->d.xfont->ch;
 	pane->d.cols = (width  - pane->d.xpad * 2) / pane->d.xfont->cw;
 	setWinSize(pane->term, pane->d.rows, pane->d.cols, width, height);
-	freePixmap(pane);
-	createPixmap(pane, width, height);
-	clearPixmap(pane, pane->d.time_b);
+	freePixmap(&pane->d);
+	createPixmap(&pane->d, width, height);
+	clearPixmap(&pane->d, pane->d.time_b);
 }
 
 void
@@ -105,10 +105,10 @@ mouseEvent(Pane *pane, XEvent *event)
 }
 
 void
-scrollPane(Pane *pane, int n)
+scrollPane(Drawing *d, int n)
 {
-	pane->d.redraw_flag = true;
-	pane->d.scr += n;
+	d->redraw_flag = true;
+	d->scr += n;
 }
 
 void
@@ -122,22 +122,22 @@ selectPane(Pane *pane, int row, int col, bool start, bool rect)
 }
 
 nsec
-getNextTime(Pane *pane, nsec now)
+getNextTime(Drawing *d, nsec now)
 {
 	nsec time = (nsec)2 << 32;
 
 	/* ベルの時間 */
-	if (now < pane->d.bell_time)
-		time = pane->d.bell_time - now;
+	if (now < d->bell_time)
+		time = d->bell_time - now;
 
 #define wait(t, d)      ((d) - (now - (t)) % (d))
 	/* 点滅の時刻 */
-	if (pane->d.timer_active[BLINK_TIMER])
+	if (d->timer_active[BLINK_TIMER])
 		time = MIN(wait(0, blink_duration), time);
-	if (pane->d.timer_active[RAPID_TIMER])
+	if (d->timer_active[RAPID_TIMER])
 		time = MIN(wait(0, rapid_duration), time);
-	if (pane->d.timer_active[CARET_TIMER])
-		time = MIN(wait(pane->d.caret_time, caret_duration), time);
+	if (d->timer_active[CARET_TIMER])
+		time = MIN(wait(d->caret_time, caret_duration), time);
 #undef wait
 
 	return time;
@@ -152,6 +152,7 @@ drawPane(Pane *pane, nsec now, Line *peline, int pecaret)
 	int width, width_b;
 	bool clear_flag = false;
 	int i;
+	Drawing *d = &pane->d;
 
 	/* スクロールの境界チェック */
 	pane->d.scr = CLIP(pane->d.scr, 0, SCROLLMAX(pane->term->sb));
@@ -213,7 +214,7 @@ drawPane(Pane *pane, nsec now, Line *peline, int pecaret)
 
 	if (clear_flag)
 		/* 画面全体を消去する */
-		clearPixmap(pane, now);
+		clearPixmap(&pane->d, now);
 	else
 		/* カーソルやPreeditを書く前の状態に戻す */
 		XCopyArea(pane->d.dinfo->disp, pane->d.pixbuf, pane->d.pixmap, pane->d.gc,
@@ -235,18 +236,18 @@ drawPane(Pane *pane, nsec now, Line *peline, int pecaret)
 	if ((pane->sel.aline < pane->term->sb->firstline - pane->d.scr) ==
 	    (pane->sel.bline < pane->term->sb->firstline - pane->d.scr) ||
 	     pane->term->sb != pane->sel.sb)
-		PUT_NUL(NEW_LINE(pane, -1), 0);
+		PUT_NUL(NEW_LINE(d, -1), 0);
 
 	/* 点滅中フラグを一旦クリア */
 	pane->d.timer_active[BLINK_TIMER] = pane->d.timer_active[RAPID_TIMER] = false;
 
 	/* Pixmapに書く */
 	for (i = -1; i < pane->d.rows + 2; i++) {
-		line = NEW_LINE(pane, i);
+		line = NEW_LINE(d, i);
 
 		/* 前回の方が長い場合の塗りつぶし */
 		width   = line ? u32swidth(line->str) : 0;
-		width_b = u32swidth(OLD_LINE(pane, i)->str) + 1;
+		width_b = u32swidth(OLD_LINE(d, i)->str) + 1;
 		if (width < width_b) {
 			XSetForeground(pane->d.dinfo->disp, pane->d.gc,
 					BELLCOLOR(pane->d.palette[defbg]));
@@ -259,12 +260,12 @@ drawPane(Pane *pane, nsec now, Line *peline, int pecaret)
 
 		/* 行を書く */
 		if (line)
-			drawLine(pane, line, i, 0, pane->d.cols + 2, 0, now);
+			drawLine(d, line, i, 0, pane->d.cols + 2, 0, now);
 	}
 
 	/* 書いた文字とPixmapの状態を記録 */
 	for (i = -1; i < pane->d.rows + 2; i++)
-		linecpy(OLD_LINE(pane, i), NEW_LINE(pane, i));
+		linecpy(OLD_LINE(d, i), NEW_LINE(d, i));
 	XCopyArea(pane->d.dinfo->disp, pane->d.pixmap, pane->d.pixbuf, pane->d.gc,
 			0, 0, pane->d.width, pane->d.height, 0, 0);
 
@@ -283,8 +284,8 @@ drawPane(Pane *pane, nsec now, Line *peline, int pecaret)
 		pepos = MIN(pepos, pane->term->cx);
 
 		/* Preeditとカーソルの描画 */
-		drawLine(pane, peline, pane->term->cy, pepos, pewidth, 0, now);
-		drawCursor(pane, peline, pane->term->cy, pepos + pecaretpos, 6, now);
+		drawLine(d, peline, pane->term->cy, pepos, pewidth, 0, now);
+		drawCursor(&pane->d, peline, pane->term->cy, pepos + pecaretpos, 6, now);
 
 		/* 次回の消去範囲を変更 */
 		pane->d.clear_x = pane->d.xpad + pane->d.xfont->cw * (pepos - 0.5);
@@ -292,9 +293,9 @@ drawPane(Pane *pane, nsec now, Line *peline, int pecaret)
 	} else if (1 <= pane->term->dec[25] && pane->term->cx < pane->d.cols + 2) {
 		/* カーソルの描画 */
 		caretrow = pane->term->cy + pane->d.scr;
-		line = NEW_LINE(pane, caretrow);
+		line = NEW_LINE(d, caretrow);
 		if (caretrow <= pane->d.rows)
-			drawCursor(pane, line, caretrow, pane->term->cx, pane->term->ctype, now);
+			drawCursor(&pane->d, line, caretrow, pane->term->cx, pane->term->ctype, now);
 	}
 
 	pane->d.redraw_flag = false;
@@ -303,7 +304,7 @@ drawPane(Pane *pane, nsec now, Line *peline, int pecaret)
 }
 
 void
-drawLine(Pane *pane, Line *line, int row, int col, int width, int pos, nsec now)
+drawLine(Drawing *d, Line *line, int row, int col, int width, int pos, nsec now)
 {
 	int next, i = getIndex(line->str, pos);
 	int x, y, w;
@@ -317,27 +318,27 @@ drawLine(Pane *pane, Line *line, int row, int col, int width, int pos, nsec now)
 
 	/* 同じ属性の文字はまとめて処理する */
 	next = findNextSGR(line, i);
-	drawLine(pane, line, row, col, width, pos + u32snwidth(&line->str[i], next - i), now);
+	drawLine(d, line, row, col, width, pos + u32snwidth(&line->str[i], next - i), now);
 
 	/* 座標 */
-	x = pane->d.xpad + (col + pos) * pane->d.xfont->cw;
-	y = pane->d.ypad + row * pane->d.xfont->ch;
-	w = pane->d.xfont->cw * u32snwidth(&line->str[i], next - i);
+	x = d->xpad + (col + pos) * d->xfont->cw;
+	y = d->ypad + row * d->xfont->ch;
+	w = d->xfont->cw * u32snwidth(&line->str[i], next - i);
 
 	/* 変化無し・コピー・書き直しの分岐 */
-#define LINE_CMP(R) linecmp(line, OLD_LINE(pane, R), pos, next - i)
+#define LINE_CMP(R) linecmp(line, OLD_LINE(d, R), pos, next - i)
 	if (line->attr[i] & (ITALIC | BLINK | RAPID))
-		sl = pane->d.rows;
-	else if (BETWEEN(row, -1, pane->d.rows + 2) && LINE_CMP(row))
+		sl = d->rows;
+	else if (BETWEEN(row, -1, d->rows + 2) && LINE_CMP(row))
 		return;
 	else
-		for (sl = 0; sl < pane->d.rows; sl++)
+		for (sl = 0; sl < d->rows; sl++)
 			if (LINE_CMP(sl))
 				break;
-	if (sl < pane->d.rows) {
-		XCopyArea(pane->d.dinfo->disp, pane->d.pixbuf, pane->d.pixmap, pane->d.gc,
-				x, pane->d.ypad + (sl) * pane->d.xfont->ch,
-				w, pane->d.xfont->ch, x, y);
+	if (sl < d->rows) {
+		XCopyArea(d->dinfo->disp, d->pixbuf, d->pixmap, d->gc,
+				x, d->ypad + (sl) * d->xfont->ch,
+				w, d->xfont->ch, x, y);
 		return;
 	}
 #undef LINE_CMP
@@ -347,24 +348,24 @@ drawLine(Pane *pane, Line *line, int row, int col, int width, int pos, nsec now)
 	bg = line->attr[i] & NEGA ? line->fg[i] : line->bg[i];
 	if (line->attr[i] & BOLD)                               /* 太字 */
 		fg += fg < 8 ? 8 : 0;
-	fc = fg < PALETTE_SIZE ? pane->d.palette[fg] : fg;  /* 色を取得 */
-	bc = bg < PALETTE_SIZE ? pane->d.palette[bg] : bg;
+	fc = fg < PALETTE_SIZE ? d->palette[fg] : fg;  /* 色を取得 */
+	bc = bg < PALETTE_SIZE ? d->palette[bg] : bg;
 	if (line->attr[i] & FAINT)                              /* 細字 */
 		fc = BLEND_COLOR(fc, 0.6, bc, 0.4);
 
 	/* 背景を塗る */
-	XSetForeground(pane->d.dinfo->disp, pane->d.gc, BELLCOLOR(bc));
-	XFillRectangle(pane->d.dinfo->disp, pane->d.pixmap, pane->d.gc, x, y, w, pane->d.xfont->ch);
+	XSetForeground(d->dinfo->disp, d->gc, BELLCOLOR(bc));
+	XFillRectangle(d->dinfo->disp, d->pixmap, d->gc, x, y, w, d->xfont->ch);
 
 	/* 非表示・点滅 */
-	pane->d.timer_active[BLINK_TIMER] |= line->attr[i] & BLINK;
-	pane->d.timer_active[RAPID_TIMER] |= line->attr[i] & RAPID;
+	d->timer_active[BLINK_TIMER] |= line->attr[i] & BLINK;
+	d->timer_active[RAPID_TIMER] |= line->attr[i] & RAPID;
 	blink = line->attr[i] & BLINK ? ((now / blink_duration) % 2) ? 2 : 0 : 1;
 	rapid = line->attr[i] & RAPID ? ((now / rapid_duration) % 2) ? 2 : 0 : 1;
 	if (line->attr[i] & CONCEAL || blink + rapid < 2)
 		return;
 
-	y += pane->d.xfont->ascent;
+	y += d->xfont->ascent;
 
 	/* 色をXftColorに変換 */
 	xc.color.red   =   RED(fc) << 8;
@@ -376,115 +377,115 @@ drawLine(Pane *pane, Line *line, int row, int col, int width, int pos, nsec now)
 	attr = FONT_NONE;
 	attr |= line->attr[i] & BOLD   ? FONT_BOLD   : FONT_NONE;
 	attr |= line->attr[i] & ITALIC ? FONT_ITALIC : FONT_NONE;
-	drawXFontString(pane->d.draw, &xc, pane->d.xfont, attr, x, y, w + pane->d.xfont->cw,
+	drawXFontString(d->draw, &xc, d->xfont, attr, x, y, w + d->xfont->cw,
 			&line->str[i], next - i);
 
 	/* 後処理 */
-	XSetForeground(pane->d.dinfo->disp, pane->d.gc, fc);
+	XSetForeground(d->dinfo->disp, d->gc, fc);
 	if (line->attr[i] & (ULINE | DULINE))   /* 下線 */
-		XDrawLine(pane->d.dinfo->disp, pane->d.pixmap, pane->d.gc, x, y + 1, x + w - 1, y + 1);
+		XDrawLine(d->dinfo->disp, d->pixmap, d->gc, x, y + 1, x + w - 1, y + 1);
 	if (line->attr[i] & DULINE)             /* 二重下線 */
-		XDrawLine(pane->d.dinfo->disp, pane->d.pixmap, pane->d.gc, x, y + 3, x + w - 1, y + 3);
-	y -= pane->d.xfont->ascent * 0.4;         /* 取消 */
+		XDrawLine(d->dinfo->disp, d->pixmap, d->gc, x, y + 3, x + w - 1, y + 3);
+	y -= d->xfont->ascent * 0.4;         /* 取消 */
 	if (line->attr[i] & STRIKE)
-		XDrawLine(pane->d.dinfo->disp, pane->d.pixmap, pane->d.gc, x, y + 1, x + w - 1, y + 1);
+		XDrawLine(d->dinfo->disp, d->pixmap, d->gc, x, y + 1, x + w - 1, y + 1);
 }
 
 void
-drawCursor(Pane *pane, Line *line, int row, int col, int type, nsec now)
+drawCursor(Drawing *d, Line *line, int row, int col, int type, nsec now)
 {
 	int index, col2, width;
 	getCharCnt(line->str, col, &index, &col2, &width);
 	char32_t *c = index < u32slen(line->str) ? &line->str[index] : (char32_t *)L" ";
-	const int x = pane->d.xpad + col * pane->d.xfont->cw;
-	const int y = pane->d.ypad + row * pane->d.xfont->ch;
-	const int cw = pane->d.xfont->cw * width - 1;
-	const int ch = pane->d.xfont->ch;
-	const DispInfo *dinfo = pane->d.dinfo;
+	const int x = d->xpad + col * d->xfont->cw;
+	const int y = d->ypad + row * d->xfont->ch;
+	const int cw = d->xfont->cw * width - 1;
+	const int ch = d->xfont->ch;
+	const DispInfo *dinfo = d->dinfo;
 	int attr;
 	Line cursor;
 
 	/* 点滅 */
-	if ((!type || type % 2) && pane->d.focus &&
-	    ((now - pane->d.caret_time) / caret_duration) % 2)
+	if ((!type || type % 2) && d->focus &&
+	    ((now - d->caret_time) / caret_duration) % 2)
 		return;
 
-	XSetForeground(dinfo->disp, pane->d.gc, BELLCOLOR(pane->d.palette[deffg]));
+	XSetForeground(dinfo->disp, d->gc, BELLCOLOR(d->palette[deffg]));
 
 	switch (type) {
 	default: case 0: case 1: case 2: /* ブロック */
-		if (pane->d.focus) {
+		if (d->focus) {
 			attr = index < u32slen(line->str) ? line->attr[index] : 0;
 			cursor = (Line){c, &attr, &defbg, &deffg};
-			drawLine(pane, &cursor, row, col2, 1, 0, now);
+			drawLine(d, &cursor, row, col2, 1, 0, now);
 		} else {
-			XDrawRectangle(dinfo->disp, pane->d.pixmap, pane->d.gc, x, y, cw, ch - 1);
-			XDrawPoint(dinfo->disp, pane->d.pixmap, pane->d.gc, x + cw, y + ch - 1);
+			XDrawRectangle(dinfo->disp, d->pixmap, d->gc, x, y, cw, ch - 1);
+			XDrawPoint(dinfo->disp, d->pixmap, d->gc, x + cw, y + ch - 1);
 		}
 		break;
 	case 3: case 4: /* 下線 */
-		XFillRectangle(dinfo->disp, pane->d.pixmap, pane->d.gc,
-				x, y + 1 + pane->d.xfont->ascent, cw, ch * 0.1);
+		XFillRectangle(dinfo->disp, d->pixmap, d->gc,
+				x, y + 1 + d->xfont->ascent, cw, ch * 0.1);
 		break;
 	case 5: case 6: /* 縦線 */
-		XFillRectangle(dinfo->disp, pane->d.pixmap, pane->d.gc,
+		XFillRectangle(dinfo->disp, d->pixmap, d->gc,
 				x - 1, y, ch * 0.1, ch);
 		break;
 	}
 
 	/* 次回の消去範囲を変更 */
-	pane->d.clear_x = pane->d.xpad + pane->d.xfont->cw * (col2 - 0.5);
-	pane->d.clear_w = cw + pane->d.xfont->cw;
+	d->clear_x = d->xpad + d->xfont->cw * (col2 - 0.5);
+	d->clear_w = cw + d->xfont->cw;
 }
 
 void
-freePixmap(Pane *pane)
+freePixmap(Drawing *d)
 {
-	XftDrawDestroy(pane->d.draw);
-	XFreeGC(pane->d.dinfo->disp, pane->d.gc);
-	XFreePixmap(pane->d.dinfo->disp, pane->d.pixmap);
-	XFreePixmap(pane->d.dinfo->disp, pane->d.pixbuf);
+	XftDrawDestroy(d->draw);
+	XFreeGC(d->dinfo->disp, d->gc);
+	XFreePixmap(d->dinfo->disp, d->pixmap);
+	XFreePixmap(d->dinfo->disp, d->pixbuf);
 }
 
 void
-createPixmap(Pane *pane, int w, int h)
+createPixmap(Drawing *d, int w, int h)
 {
-	const DispInfo *i = pane->d.dinfo;
+	const DispInfo *i = d->dinfo;
 
-	pane->d.pixmap = XCreatePixmap(i->disp, i->root, w, h, pane->d.depth);
-	pane->d.pixbuf = XCreatePixmap(i->disp, i->root, w, h, pane->d.depth);
-	pane->d.gc = XCreateGC(i->disp, pane->d.pixmap, 0, NULL);
-	XSetGraphicsExposures(i->disp, pane->d.gc, false);
-	pane->d.draw = XftDrawCreate(i->disp, pane->d.pixmap, i->visual, i->cmap);
+	d->pixmap = XCreatePixmap(i->disp, i->root, w, h, d->depth);
+	d->pixbuf = XCreatePixmap(i->disp, i->root, w, h, d->depth);
+	d->gc = XCreateGC(i->disp, d->pixmap, 0, NULL);
+	XSetGraphicsExposures(i->disp, d->gc, false);
+	d->draw = XftDrawCreate(i->disp, d->pixmap, i->visual, i->cmap);
 }
 
 void
-clearPixmap(Pane *pane, nsec now)
+clearPixmap(Drawing *d, nsec now)
 {
 	Line **plines;
 	int i;
 
 	/* Pixmapを背景色でクリア */
-	XSetForeground(pane->d.dinfo->disp, pane->d.gc, BELLCOLOR(pane->d.palette[defbg]));
-	XFillRectangle(pane->d.dinfo->disp, pane->d.pixmap, pane->d.gc, 0, 0, pane->d.width, pane->d.height);
-	XSetForeground(pane->d.dinfo->disp, pane->d.gc, BELLCOLOR(pane->d.palette[defbg]));
-	XFillRectangle(pane->d.dinfo->disp, pane->d.pixbuf, pane->d.gc, 0, 0, pane->d.width, pane->d.height);
+	XSetForeground(d->dinfo->disp, d->gc, BELLCOLOR(d->palette[defbg]));
+	XFillRectangle(d->dinfo->disp, d->pixmap, d->gc, 0, 0, d->width, d->height);
+	XSetForeground(d->dinfo->disp, d->gc, BELLCOLOR(d->palette[defbg]));
+	XFillRectangle(d->dinfo->disp, d->pixbuf, d->gc, 0, 0, d->width, d->height);
 
 	/* Lineバッファをクリア */
-	if (pane->d.new_lines)
-		for (plines = pane->d.new_lines; *plines; plines++)
+	if (d->new_lines)
+		for (plines = d->new_lines; *plines; plines++)
 			freeLine(*plines);
-	if (pane->d.old_lines)
-		for (plines = pane->d.old_lines; *plines; plines++)
+	if (d->old_lines)
+		for (plines = d->old_lines; *plines; plines++)
 			freeLine(*plines);
-	pane->d.new_lines = xrealloc(pane->d.new_lines, (pane->d.rows + 4) * sizeof(Line *));
-	pane->d.new_lines[pane->d.rows + 3] = NULL;
-	pane->d.old_lines = xrealloc(pane->d.old_lines, (pane->d.rows + 4) * sizeof(Line *));
-	pane->d.old_lines[pane->d.rows + 3] = NULL;
-	for (i = 0; i < pane->d.rows + 3; i++) {
-		pane->d.new_lines[i] = allocLine();
-		pane->d.old_lines[i] = allocLine();
+	d->new_lines = xrealloc(d->new_lines, (d->rows + 4) * sizeof(Line *));
+	d->new_lines[d->rows + 3] = NULL;
+	d->old_lines = xrealloc(d->old_lines, (d->rows + 4) * sizeof(Line *));
+	d->old_lines[d->rows + 3] = NULL;
+	for (i = 0; i < d->rows + 3; i++) {
+		d->new_lines[i] = allocLine();
+		d->old_lines[i] = allocLine();
 	}
 
-	pane->d.redraw_flag = true;
+	d->redraw_flag = true;
 }
