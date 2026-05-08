@@ -9,6 +9,8 @@ typedef long long int   nsec;
 #define tstons(t)       ((long long)(t).tv_sec * GIGA + (t).tv_nsec)
 #define nstots(t)       (struct timespec){ (t) / GIGA, (t) % GIGA }
 
+enum timer_names { BLINK_TIMER, RAPID_TIMER, CARET_TIMER, TIMER_NUM };
+
 typedef struct DispInfo {
 	Display *disp;
 	int screen;
@@ -17,9 +19,7 @@ typedef struct DispInfo {
 	Colormap cmap;
 } DispInfo;
 
-enum timer_names { BLINK_TIMER, RAPID_TIMER, CARET_TIMER, TIMER_NUM };
-
-typedef struct Pane {
+typedef struct Drawing {
 	DispInfo *dinfo;
 	XFont *xfont;
 	Pixmap pixmap, pixbuf;
@@ -31,13 +31,17 @@ typedef struct Pane {
 	nsec time_b;
 	nsec caret_time, bell_time;
 	bool timer_active[TIMER_NUM];
-	Term *term;
 	Line **new_lines, **old_lines;
-	Selection sel;
-	struct ScrBuf *prevbuf;
 	int scr, prevfst;
 	int clear_x, clear_y, clear_w, clear_h;
 	int bell_cnt, palette_cnt;
+} Drawing;
+
+typedef struct Pane {
+	Term *term;
+	Selection sel;
+	struct ScrBuf *prevbuf;
+	Drawing d;
 } Pane;
 
 Pane *createPane(DispInfo *, XFont *, int, int, int, int, Term *);

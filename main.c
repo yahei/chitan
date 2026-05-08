@@ -207,7 +207,7 @@ run(void)
 
 		/* 端末のread */
 		if (FD_ISSET(tfd, &rfds)) {
-			pane->redraw_flag = true;
+			pane->d.redraw_flag = true;
 			errno = 0;
 			if (readPty(pane->term) < 0) {
 				if (errno == EIO)
@@ -227,9 +227,9 @@ run(void)
 		}
 
 		/* IMEスポット移動 */
-		if (pane->redraw_flag && win->ime.xic) {
-			win->ime.spot.x = pane->xpad + pane->term->cx * xfont->cw;
-			win->ime.spot.y = pane->ypad + pane->term->cy * xfont->ch + xfont->ascent;
+		if (pane->d.redraw_flag && win->ime.xic) {
+			win->ime.spot.x = pane->d.xpad + pane->term->cx * xfont->cw;
+			win->ime.spot.y = pane->d.ypad + pane->term->cy * xfont->ch + xfont->ascent;
 			XSetICValues(win->ime.xic, XNPreeditAttributes, win->ime.spotlist, NULL);
 		}
 
@@ -395,16 +395,16 @@ handleXEvent(Win *win)
 			continue;
 
 		/* マウス関連 */
-		mx = (event.xbutton.x - pane->xpad + xfont->cw / 2) / xfont->cw;
-		my = (event.xbutton.y - pane->ypad) / xfont->ch;
+		mx = (event.xbutton.x - pane->d.xpad + xfont->cw / 2) / xfont->cw;
+		my = (event.xbutton.y - pane->d.ypad) / xfont->ch;
 		mb = event.xbutton.button;
 		ms = event.xbutton.state;
 
 		switch (event.type) {
 		case KeyPress:          /* キーボード入力 */
 			if (keyPressEvent(win, event, 64)) {
-				pane->caret_time = tstons(now);
-				pane->scr = 0;
+				pane->d.caret_time = tstons(now);
+				pane->d.scr = 0;
 			}
 			break;
 
@@ -417,7 +417,7 @@ handleXEvent(Win *win)
 			} else if (mb == 2) {
 				XConvertSelection(dinfo.disp, XA_PRIMARY, atoms[UTF8_STRING],
 						XA_PRIMARY, win->window, CurrentTime);
-				pane->scr = 0;
+				pane->d.scr = 0;
 			} else {
 				win->dragging = pane;
 				selectPane(pane, my, mx, mb == 1, 0 < (ms & Mod1Mask));
@@ -447,7 +447,7 @@ handleXEvent(Win *win)
 			break;
 
 		case Expose:            /* 再描画 */
-			pane->redraw_flag = true;
+			pane->d.redraw_flag = true;
 			break;
 
 		case ConfigureNotify:   /* ウィンドウサイズ変更 */
@@ -460,10 +460,10 @@ handleXEvent(Win *win)
 
 		case FocusIn:
 		case FocusOut:          /* フォーカスの変化 */
-			pane->focus = event.type == FocusIn;
+			pane->d.focus = event.type == FocusIn;
 			if (1 < pane->term->dec[1004])
-				writePty(pane->term, pane->focus ? "\e[I" : "\e[O", 3);
-			pane->redraw_flag = true;
+				writePty(pane->term, pane->d.focus ? "\e[I" : "\e[O", 3);
+			pane->d.redraw_flag = true;
 			break;
 
 		case ClientMessage:     /* ウィンドウが閉じられた */
@@ -632,8 +632,8 @@ redraw(Win *win)
 {
 	setWindowName(win, win->pane->term->title);
 	if (drawPane(win->pane, tstons(now), win->ime.peline, win->ime.caret)) {
-		XCopyArea(dinfo.disp, win->pane->pixmap, win->window, win->gc,
-				0, 0, win->pane->width, win->pane->height, 0, 0);
+		XCopyArea(dinfo.disp, win->pane->d.pixmap, win->window, win->gc,
+				0, 0, win->pane->d.width, win->pane->d.height, 0, 0);
 		XFlush(dinfo.disp);
 	}
 }
@@ -739,7 +739,7 @@ void
 preeditDone(XIM xim, Win *win, XPointer call)
 {
 	PUT_NUL(win->ime.peline, 0);
-	win->pane->redraw_flag = true;
+	win->pane->d.redraw_flag = true;
 	redraw(win);
 }
 
@@ -785,7 +785,7 @@ preeditDraw(XIM xim, Win *win, XIMPreeditDrawCallbackStruct *call)
 	/* 終了 */
 	free(str);
 
-	win->pane->redraw_flag = true;
+	win->pane->d.redraw_flag = true;
 	redraw(win);
 }
 
@@ -793,6 +793,6 @@ void
 preeditCaret(XIM xim, Win *win, XIMPreeditCaretCallbackStruct *call)
 {
 	win->ime.caret = call->position;
-	win->pane->redraw_flag = true;
+	win->pane->d.redraw_flag = true;
 	redraw(win);
 }
