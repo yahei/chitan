@@ -32,6 +32,7 @@ typedef struct Drawing {
 	nsec caret_time, bell_time;
 	bool timer_active[TIMER_NUM];
 	Line **new_lines, **old_lines;
+	Color palette[PALETTE_SIZE];
 	int scr, prevfst;
 	int clear_x, clear_y, clear_w, clear_h;
 	int bell_cnt, palette_cnt;

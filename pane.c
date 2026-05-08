@@ -42,6 +42,7 @@ createPane(DispInfo *dinfo, XFont *xfont, int w, int h, int xpad, int ypad, Term
 		},
 	};
 	memset(&pane->d.timer_active, 0, TIMER_NUM);
+	memcpy(pane->d.palette, term->palette, PALETTE_SIZE * sizeof(Color));
 
 	/* 描画の準備 */
 	createPixmap(pane, w, h);
@@ -189,6 +190,7 @@ drawPane(Pane *pane, nsec now, Line *peline, int pecaret)
 	}
 	if (pane->d.palette_cnt != pane->term->palette_cnt) {
 		clear_flag = true;
+		memcpy(pane->d.palette, pane->term->palette, PALETTE_SIZE * sizeof(Color));
 		pane->d.palette_cnt = pane->term->palette_cnt;
 	}
 
@@ -245,7 +247,7 @@ drawPane(Pane *pane, nsec now, Line *peline, int pecaret)
 		width_b = u32swidth(OLD_LINE(pane, i)->str) + 1;
 		if (width < width_b) {
 			XSetForeground(pane->d.dinfo->disp, pane->d.gc,
-					BELLCOLOR(pane->term->palette[defbg]));
+					BELLCOLOR(pane->d.palette[defbg]));
 			XFillRectangle(pane->d.dinfo->disp, pane->d.pixmap, pane->d.gc,
 					pane->d.xpad + pane->d.xfont->cw * width,
 					pane->d.ypad + pane->d.xfont->ch * i,
@@ -266,7 +268,7 @@ drawPane(Pane *pane, nsec now, Line *peline, int pecaret)
 
 	/* --- カーソル/Preeditの描画 --- */
 
-	XSetForeground(pane->d.dinfo->disp, pane->d.gc, pane->term->palette[deffg]);
+	XSetForeground(pane->d.dinfo->disp, pane->d.gc, pane->d.palette[deffg]);
 	if (u32slen(peline->str)) {
 		/* Preeditの幅とキャレットのPreedit内での位置を取得 */
 		pewidth = u32swidth(peline->str);
@@ -343,8 +345,8 @@ drawLine(Pane *pane, Line *line, int row, int col, int width, int pos, nsec now)
 	bg = line->attr[i] & NEGA ? line->fg[i] : line->bg[i];
 	if (line->attr[i] & BOLD)                               /* 太字 */
 		fg += fg < 8 ? 8 : 0;
-	fc = fg < PALETTE_SIZE ? pane->term->palette[fg] : fg;  /* 色を取得 */
-	bc = bg < PALETTE_SIZE ? pane->term->palette[bg] : bg;
+	fc = fg < PALETTE_SIZE ? pane->d.palette[fg] : fg;  /* 色を取得 */
+	bc = bg < PALETTE_SIZE ? pane->d.palette[bg] : bg;
 	if (line->attr[i] & FAINT)                              /* 細字 */
 		fc = BLEND_COLOR(fc, 0.6, bc, 0.4);
 
@@ -405,7 +407,7 @@ drawCursor(Pane *pane, Line *line, int row, int col, int type, nsec now)
 	    ((now - pane->d.caret_time) / caret_duration) % 2)
 		return;
 
-	XSetForeground(dinfo->disp, pane->d.gc, BELLCOLOR(pane->term->palette[deffg]));
+	XSetForeground(dinfo->disp, pane->d.gc, BELLCOLOR(pane->d.palette[deffg]));
 
 	switch (type) {
 	default: case 0: case 1: case 2: /* ブロック */
@@ -461,9 +463,9 @@ clearPixmap(Pane *pane, nsec now)
 	int i;
 
 	/* Pixmapを背景色でクリア */
-	XSetForeground(pane->d.dinfo->disp, pane->d.gc, BELLCOLOR(pane->term->palette[defbg]));
+	XSetForeground(pane->d.dinfo->disp, pane->d.gc, BELLCOLOR(pane->d.palette[defbg]));
 	XFillRectangle(pane->d.dinfo->disp, pane->d.pixmap, pane->d.gc, 0, 0, pane->d.width, pane->d.height);
-	XSetForeground(pane->d.dinfo->disp, pane->d.gc, BELLCOLOR(pane->term->palette[defbg]));
+	XSetForeground(pane->d.dinfo->disp, pane->d.gc, BELLCOLOR(pane->d.palette[defbg]));
 	XFillRectangle(pane->d.dinfo->disp, pane->d.pixbuf, pane->d.gc, 0, 0, pane->d.width, pane->d.height);
 
 	/* Lineバッファをクリア */
