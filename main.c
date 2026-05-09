@@ -633,7 +633,8 @@ void
 redraw(Win *win)
 {
 	setWindowName(win, win->pane->term->title);
-	if (drawPane(win->pane, tstons(now), win->ime.peline, win->ime.caret)) {
+	snapshot(win->pane, tstons(now));
+	if (drawPane(&win->pane->d, tstons(now), win->ime.peline, win->ime.caret)) {
 		XCopyArea(dinfo.disp, win->pane->d.pixmap, win->window, win->gc,
 				0, 0, win->pane->d.width, win->pane->d.height, 0, 0);
 		XFlush(dinfo.disp);

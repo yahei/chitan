@@ -17,8 +17,8 @@
 		((int)( BLUE(c1) * (a1) +  BLUE(c2) * (a2)) <<  0))
 #define BELLCOLOR(c)    (now < d->bell_time ? BLEND_COLOR((c), 0.925, 0xffffffff, 0.075) : (c))
 #define SCROLLMAX(sb)   ((sb)->firstline - MAX((sb)->totallines - (sb)->maxlines, 0))
-#define NEW_LINE(d, n)  (d->new_lines[n + 1])
-#define OLD_LINE(d, n)  (d->old_lines[n + 1])
+#define NEW_LINE(d, n)  ((d)->new_lines[(n) + 1])
+#define OLD_LINE(d, n)  ((d)->old_lines[(n) + 1])
 const long long blink_duration = 800 * 1000 * 1000;
 const long long rapid_duration = 200 * 1000 * 1000;
 const long long caret_duration = 500 * 1000 * 1000;
@@ -28,6 +28,7 @@ static void drawCursor(Drawing *, Line *, int, int, int, nsec);
 static void freePixmap(Drawing *);
 static void createPixmap(Drawing *, int, int);
 static void clearPixmap(Drawing *, nsec);
+static void resizeLinebuf(Drawing *);
 
 Pane *
 createPane(DispInfo *dinfo, XFont *xfont, int w, int h, int xpad, int ypad, Term *term)
@@ -47,6 +48,7 @@ createPane(DispInfo *dinfo, XFont *xfont, int w, int h, int xpad, int ypad, Term
 
 	/* 描画の準備 */
 	createPixmap(&pane->d, w, h);
+	resizeLinebuf(&pane->d);
 	clearPixmap(&pane->d, pane->d.time_b);
 
 	return pane;
@@ -77,6 +79,7 @@ setPaneSize(Drawing *d, int width, int height)
 	d->cols = (width  - d->xpad * 2) / d->xfont->cw;
 	freePixmap(d);
 	createPixmap(d, width, height);
+	resizeLinebuf(d);
 	clearPixmap(d, d->time_b);
 }
 
@@ -142,56 +145,28 @@ getNextTime(Drawing *d, nsec now)
 	return time;
 }
 
-int
-drawPane(Pane *pane, nsec now, Line *peline, int pecaret)
+void
+snapshot(Pane *pane, nsec now)
 {
 	const nsec bell_duration = 150 * 1000 * 1000;
-	Line *line;
-	int pepos, pewidth, pecaretpos, caretrow;
-	int width, width_b;
-	bool clear_flag = false;
-	int i;
-	Drawing *d = &pane->d;
+
+	/* カーソルの情報を取得 */
+	pane->d.cx = pane->term->cx;
+	pane->d.cy = pane->term->cy;
+	pane->d.ctype = pane->term->ctype;
+	pane->d.DECTCEM = pane->term->dec[25];
 
 	/* スクロールの境界チェック */
 	pane->d.scr = CLIP(pane->d.scr, 0, SCROLLMAX(pane->term->sb));
 
-	/* --- タイマーの処理 --- */
-
-	/* 点滅させる必要がないときはキャレットのタイマーを止める */
-	pane->d.timer_active[CARET_TIMER] = pane->d.focus &&
-		(pane->term->cy + pane->d.scr <= pane->d.rows) &&
-		(!pane->term->ctype || pane->term->ctype % 2);
-
-	/* ベルの消灯時刻をまたいでいたら画面クリア */
-	if (pane->d.time_b < pane->d.bell_time && pane->d.bell_time <= now)
-		pane->d.redraw_flag = clear_flag = true;
-
-	/* 点滅の切り替わり時刻をまたいでいたら再描画 */
-#define LIT(T,D) (((T) / (D)) % 2)
-#define CHECK(T,D,B) (pane->d.timer_active[T] && LIT(pane->d.time_b - (B), D) != LIT( now - (B), D))
-	if (CHECK(BLINK_TIMER, blink_duration, 0) ||
-	    CHECK(RAPID_TIMER, rapid_duration, 0) ||
-	    CHECK(CARET_TIMER, caret_duration, pane->d.caret_time))
-		pane->d.redraw_flag = true;
-#undef CHECK
-#undef LIT
-
-	pane->d.time_b = now;
-
-	if (!pane->d.redraw_flag)
-		return 0;
-
-	/* --- 描画前の処理 --- */
-
 	/* ベルやパレットの更新をチェック */
 	if (pane->d.bell_cnt != pane->term->bell_cnt) {
-		clear_flag |= pane->d.bell_time <= now;
+		pane->d.clear_flag |= pane->d.bell_time <= now;
 		pane->d.bell_time = now + bell_duration;
 		pane->d.bell_cnt = pane->term->bell_cnt;
 	}
 	if (pane->d.palette_cnt != pane->term->palette_cnt) {
-		clear_flag = true;
+		pane->d.clear_flag = true;
 		memcpy(pane->d.palette, pane->term->palette, PALETTE_SIZE * sizeof(Color));
 		pane->d.palette_cnt = pane->term->palette_cnt;
 	}
@@ -209,24 +184,6 @@ drawPane(Pane *pane, nsec now, Line *peline, int pecaret)
 		pane->sel.acol  = pane->sel.bcol;
 	}
 
-	/* --- 端末の内容を描画 --- */
-
-	if (clear_flag)
-		/* 画面全体を消去する */
-		clearPixmap(&pane->d, now);
-	else
-		/* カーソルやPreeditを書く前の状態に戻す */
-		XCopyArea(pane->d.dinfo->disp, pane->d.pixbuf, pane->d.pixmap, pane->d.gc,
-				pane->d.clear_x, pane->d.clear_y,
-				pane->d.clear_w, pane->d.clear_h,
-				pane->d.clear_x, pane->d.clear_y);
-
-	/* 次回の消去範囲を設定 */
-	pane->d.clear_x = pane->d.xpad + pane->d.xfont->cw * (pane->term->cx - 0.5);
-	pane->d.clear_y = pane->d.ypad + pane->d.xfont->ch * (pane->term->cy + pane->d.scr);
-	pane->d.clear_w = pane->d.xfont->cw * 2;
-	pane->d.clear_h = pane->d.xfont->ch;
-
 	/* 端末の内容を取得 */
 	getLines(pane->term->sb, pane->d.new_lines, pane->d.rows + 3,
 			pane->d.scr + 1, &pane->sel);
@@ -235,69 +192,123 @@ drawPane(Pane *pane, nsec now, Line *peline, int pecaret)
 	if ((pane->sel.aline < pane->term->sb->firstline - pane->d.scr) ==
 	    (pane->sel.bline < pane->term->sb->firstline - pane->d.scr) ||
 	     pane->term->sb != pane->sel.sb)
-		PUT_NUL(NEW_LINE(d, -1), 0);
+		PUT_NUL(NEW_LINE(&pane->d, -1), 0);
+}
+
+int
+drawPane(Drawing *d, nsec now, Line *peline, int pecaret)
+{
+	Line *line;
+	int pepos, pewidth, pecaretpos, caretrow;
+	int width, width_b;
+	int i;
+
+	/* --- タイマーの処理 --- */
+
+	/* 点滅させる必要がないときはキャレットのタイマーを止める */
+	d->timer_active[CARET_TIMER] = d->focus &&
+		(d->cy + d->scr <= d->rows) &&
+		(!d->ctype || d->ctype % 2);
+
+	/* ベルの消灯時刻をまたいでいたら画面クリア */
+	if (d->time_b < d->bell_time && d->bell_time <= now)
+		d->redraw_flag = d->clear_flag = true;
+
+	/* 点滅の切り替わり時刻をまたいでいたら再描画 */
+#define LIT(T,D) (((T) / (D)) % 2)
+#define CHECK(T,D,B) (d->timer_active[T] && LIT(d->time_b - (B), D) != LIT( now - (B), D))
+	if (CHECK(BLINK_TIMER, blink_duration, 0) ||
+	    CHECK(RAPID_TIMER, rapid_duration, 0) ||
+	    CHECK(CARET_TIMER, caret_duration, d->caret_time))
+		d->redraw_flag = true;
+#undef CHECK
+#undef LIT
+
+	d->time_b = now;
+
+	if (!d->redraw_flag)
+		return 0;
+
+	/* --- 端末の内容を描画 --- */
+
+	if (d->clear_flag)
+		/* 画面全体を消去する */
+		clearPixmap(d, now);
+	else
+		/* カーソルやPreeditを書く前の状態に戻す */
+		XCopyArea(d->dinfo->disp, d->pixbuf, d->pixmap, d->gc,
+				d->clear_x, d->clear_y,
+				d->clear_w, d->clear_h,
+				d->clear_x, d->clear_y);
+
+	/* 次回の消去範囲を設定 */
+	d->clear_x = d->xpad + d->xfont->cw * (d->cx - 0.5);
+	d->clear_y = d->ypad + d->xfont->ch * (d->cy + d->scr);
+	d->clear_w = d->xfont->cw * 2;
+	d->clear_h = d->xfont->ch;
+	d->clear_flag = false;
 
 	/* 点滅中フラグを一旦クリア */
-	pane->d.timer_active[BLINK_TIMER] = pane->d.timer_active[RAPID_TIMER] = false;
+	d->timer_active[BLINK_TIMER] = d->timer_active[RAPID_TIMER] = false;
 
 	/* Pixmapに書く */
-	for (i = -1; i < pane->d.rows + 2; i++) {
+	for (i = -1; i < d->rows + 2; i++) {
 		line = NEW_LINE(d, i);
 
 		/* 前回の方が長い場合の塗りつぶし */
 		width   = line ? u32swidth(line->str) : 0;
 		width_b = u32swidth(OLD_LINE(d, i)->str) + 1;
 		if (width < width_b) {
-			XSetForeground(pane->d.dinfo->disp, pane->d.gc,
-					BELLCOLOR(pane->d.palette[defbg]));
-			XFillRectangle(pane->d.dinfo->disp, pane->d.pixmap, pane->d.gc,
-					pane->d.xpad + pane->d.xfont->cw * width,
-					pane->d.ypad + pane->d.xfont->ch * i,
-					pane->d.xfont->cw * (width_b - width),
-					pane->d.xfont->ch);
+			XSetForeground(d->dinfo->disp, d->gc,
+					BELLCOLOR(d->palette[defbg]));
+			XFillRectangle(d->dinfo->disp, d->pixmap, d->gc,
+					d->xpad + d->xfont->cw * width,
+					d->ypad + d->xfont->ch * i,
+					d->xfont->cw * (width_b - width),
+					d->xfont->ch);
 		}
 
 		/* 行を書く */
 		if (line)
-			drawLine(d, line, i, 0, pane->d.cols + 2, 0, now);
+			drawLine(d, line, i, 0, d->cols + 2, 0, now);
 	}
 
 	/* 書いた文字とPixmapの状態を記録 */
-	for (i = -1; i < pane->d.rows + 2; i++)
+	for (i = -1; i < d->rows + 2; i++)
 		linecpy(OLD_LINE(d, i), NEW_LINE(d, i));
-	XCopyArea(pane->d.dinfo->disp, pane->d.pixmap, pane->d.pixbuf, pane->d.gc,
-			0, 0, pane->d.width, pane->d.height, 0, 0);
+	XCopyArea(d->dinfo->disp, d->pixmap, d->pixbuf, d->gc,
+			0, 0, d->width, d->height, 0, 0);
 
 	/* --- カーソル/Preeditの描画 --- */
 
-	XSetForeground(pane->d.dinfo->disp, pane->d.gc, pane->d.palette[deffg]);
+	XSetForeground(d->dinfo->disp, d->gc, d->palette[deffg]);
 	if (u32slen(peline->str)) {
 		/* Preeditの幅とキャレットのPreedit内での位置を取得 */
 		pewidth = u32swidth(peline->str);
 		pecaretpos = u32snwidth(peline->str, pecaret);
 
 		/* Preeditの画面上での描画位置を決める */
-		pepos = pane->d.cols / 2 - pecaretpos;
+		pepos = d->cols / 2 - pecaretpos;
 		pepos = MIN(pepos, 0);
-		pepos = MAX(pepos, pane->d.cols - pewidth);
-		pepos = MIN(pepos, pane->term->cx);
+		pepos = MAX(pepos, d->cols - pewidth);
+		pepos = MIN(pepos, d->cx);
 
 		/* Preeditとカーソルの描画 */
-		drawLine(d, peline, pane->term->cy, pepos, pewidth, 0, now);
-		drawCursor(&pane->d, peline, pane->term->cy, pepos + pecaretpos, 6, now);
+		drawLine(d, peline, d->cy, pepos, pewidth, 0, now);
+		drawCursor(d, peline, d->cy, pepos + pecaretpos, 6, now);
 
 		/* 次回の消去範囲を変更 */
-		pane->d.clear_x = pane->d.xpad + pane->d.xfont->cw * (pepos - 0.5);
-		pane->d.clear_w = pane->d.xfont->cw * (pewidth + 1);
-	} else if (1 <= pane->term->dec[25] && pane->term->cx < pane->d.cols + 2) {
+		d->clear_x = d->xpad + d->xfont->cw * (pepos - 0.5);
+		d->clear_w = d->xfont->cw * (pewidth + 1);
+	} else if (1 <= d->DECTCEM && d->cx < d->cols + 2) {
 		/* カーソルの描画 */
-		caretrow = pane->term->cy + pane->d.scr;
+		caretrow = d->cy + d->scr;
 		line = NEW_LINE(d, caretrow);
-		if (caretrow <= pane->d.rows)
-			drawCursor(&pane->d, line, caretrow, pane->term->cx, pane->term->ctype, now);
+		if (caretrow <= d->rows)
+			drawCursor(d, line, caretrow, d->cx, d->ctype, now);
 	}
 
-	pane->d.redraw_flag = false;
+	d->redraw_flag = false;
 
 	return 1;
 }
@@ -461,16 +472,23 @@ createPixmap(Drawing *d, int w, int h)
 void
 clearPixmap(Drawing *d, nsec now)
 {
-	Line **plines;
 	int i;
 
-	/* Pixmapを背景色でクリア */
 	XSetForeground(d->dinfo->disp, d->gc, BELLCOLOR(d->palette[defbg]));
 	XFillRectangle(d->dinfo->disp, d->pixmap, d->gc, 0, 0, d->width, d->height);
 	XSetForeground(d->dinfo->disp, d->gc, BELLCOLOR(d->palette[defbg]));
 	XFillRectangle(d->dinfo->disp, d->pixbuf, d->gc, 0, 0, d->width, d->height);
 
-	/* Lineバッファをクリア */
+	for (i = 0; i < d->rows + 3; i++)
+		PUT_NUL(d->old_lines[i], 0);
+}
+
+void
+resizeLinebuf(Drawing *d)
+{
+	Line **plines;
+	int i;
+
 	if (d->new_lines)
 		for (plines = d->new_lines; *plines; plines++)
 			freeLine(*plines);
