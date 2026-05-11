@@ -28,7 +28,7 @@ typedef struct Drawing {
 	XftDraw *draw;
 	int width, height, xpad, ypad;
 	int rows, cols;
-	bool focus, redraw_flag, clear_flag;
+	bool focus, clear_flag;
 	nsec time_b;
 	nsec caret_time, bell_time;
 	bool timer_active[TIMER_NUM];

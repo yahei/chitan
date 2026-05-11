@@ -43,6 +43,7 @@ static XFont *xfont;
 static XIM xim;
 static Win *win;
 static struct timespec now;
+static int redraw_pipe[2];
 
 static void init(int, char *[]);
 static void initPalette(Term *, float);
@@ -103,6 +104,10 @@ init(int argc, char *argv[])
 	char **names;
 	unsigned int row, col;
 	int x, y, w, h, i;
+
+	/* 再描画の指示を通知するパイプ */
+	if (pipe(redraw_pipe))
+		fatal("pipe failed.\n");
 
 	/* localeを設定 */
 	setlocale(LC_CTYPE, "");
@@ -183,7 +188,9 @@ run(void)
 	fd_set rfds;
 	const int xfd = XConnectionNumber(dinfo.disp);
 	const int tfd = pane->term->master;
-	const int nfds = MAX(xfd, tfd) + 1;
+	const int rfd = redraw_pipe[0];
+	const int nfds = MAX(MAX(xfd, tfd), rfd) + 1;
+	char rfd_buf[16];
 
 	clock_gettime(CLOCK_MONOTONIC, &lastdraw);
 
@@ -192,6 +199,7 @@ run(void)
 		FD_ZERO(&rfds);
 		FD_SET(xfd, &rfds);
 		FD_SET(tfd, &rfds);
+		FD_SET(rfd, &rfds);
 		if (pselect(nfds, &rfds, NULL, NULL, &timeout, NULL) < 0) {
 			if (errno == EINTR)
 				fprintf(stderr, "signal.\n");
@@ -201,13 +209,14 @@ run(void)
 		clock_gettime(CLOCK_MONOTONIC, &now);
 
 		/* ウィンドウのイベント処理 */
-		if (FD_ISSET(xfd, &rfds))
+		if (FD_ISSET(xfd, &rfds)) {
 			if (handleXEvent(win))
 				return;
+			continue;
+		}
 
 		/* 端末のread */
 		if (FD_ISSET(tfd, &rfds)) {
-			pane->d.redraw_flag = true;
 			errno = 0;
 			if (readPty(pane->term) < 0) {
 				if (errno == EIO)
@@ -215,7 +224,12 @@ run(void)
 				else
 					errExit("pty read error.");
 			}
+			write(redraw_pipe[1], "a", 1);
 		}
+
+		/* 再描画通知 */
+		if (FD_ISSET(rfd, &rfds))
+			read(redraw_pipe[0], rfd_buf, 16);
 
 		/* 再描画の頻度を制限 */
 		if (FD_ISSET(xfd, &rfds) || FD_ISSET(tfd, &rfds)) {
@@ -227,7 +241,7 @@ run(void)
 		}
 
 		/* IMEスポット移動 */
-		if (pane->d.redraw_flag && win->ime.xic) {
+		if (win->ime.xic) {
 			win->ime.spot.x = pane->d.xpad + pane->term->cx * xfont->cw;
 			win->ime.spot.y = pane->d.ypad + pane->term->cy * xfont->ch + xfont->ascent;
 			XSetICValues(win->ime.xic, XNPreeditAttributes, win->ime.spotlist, NULL);
@@ -411,6 +425,7 @@ handleXEvent(Win *win)
 		case ButtonPress:       /* マウス Press */
 			if ((mb == 4 || mb == 5) && pane->term->sb == &pane->term->ori) {
 				scrollPane(&pane->d, (mb == 4 ? 1 : -1) * 3);
+				write(redraw_pipe[1], "a", 1);
 			} else if (!BETWEEN(mb, 1, 4) || (ms & ~(ShiftMask | Mod1Mask | Mod2Mask)) ||
 					(pane->term->sb == &pane->term->alt && !(ms & ShiftMask))) {
 				mouseEvent(pane, &event);
@@ -421,14 +436,17 @@ handleXEvent(Win *win)
 			} else {
 				win->dragging = pane;
 				selectPane(pane, my, mx, mb == 1, 0 < (ms & Mod1Mask));
+				write(redraw_pipe[1], "a", 1);
 			}
 			break;
 
 		case MotionNotify:     /* マウス Move */
-			if (!win->dragging)
+			if (!win->dragging) {
 				mouseEvent(pane, &event);
-			else
+			} else {
 				selectPane(win->dragging, my, mx, false, pane->sel.rect);
+				write(redraw_pipe[1], "a", 1);
+			}
 			break;
 
 		case ButtonRelease:    /* マウス Release */
@@ -447,7 +465,7 @@ handleXEvent(Win *win)
 			break;
 
 		case Expose:            /* 再描画 */
-			pane->d.redraw_flag = true;
+			write(redraw_pipe[1], "a", 1);
 			break;
 
 		case ConfigureNotify:   /* ウィンドウサイズ変更 */
@@ -457,6 +475,7 @@ handleXEvent(Win *win)
 				setPaneSize(&pane->d, ce->width, ce->height);
 				setWinSize(pane->term, pane->d.rows, pane->d.cols,
 						ce->width, ce->height);
+				write(redraw_pipe[1], "a", 1);
 			}
 			break;
 
@@ -465,7 +484,7 @@ handleXEvent(Win *win)
 			pane->d.focus = event.type == FocusIn;
 			if (1 < pane->term->dec[1004])
 				writePty(pane->term, pane->d.focus ? "\e[I" : "\e[O", 3);
-			pane->d.redraw_flag = true;
+			write(redraw_pipe[1], "a", 1);
 			break;
 
 		case ClientMessage:     /* ウィンドウが閉じられた */
@@ -742,8 +761,7 @@ void
 preeditDone(XIM xim, Win *win, XPointer call)
 {
 	PUT_NUL(win->ime.peline, 0);
-	win->pane->d.redraw_flag = true;
-	redraw(win);
+	write(redraw_pipe[1], "a", 1);
 }
 
 void
@@ -788,14 +806,12 @@ preeditDraw(XIM xim, Win *win, XIMPreeditDrawCallbackStruct *call)
 	/* 終了 */
 	free(str);
 
-	win->pane->d.redraw_flag = true;
-	redraw(win);
+	write(redraw_pipe[1], "a", 1);
 }
 
 void
 preeditCaret(XIM xim, Win *win, XIMPreeditCaretCallbackStruct *call)
 {
 	win->ime.caret = call->position;
-	win->pane->d.redraw_flag = true;
-	redraw(win);
+	write(redraw_pipe[1], "a", 1);
 }

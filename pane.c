@@ -109,7 +109,6 @@ mouseEvent(Pane *pane, XEvent *event)
 void
 scrollPane(Drawing *d, int n)
 {
-	d->redraw_flag = true;
 	d->scr += n;
 }
 
@@ -119,7 +118,6 @@ selectPane(Pane *pane, int row, int col, bool start, bool rect)
 	/* スクロールの境界チェック */
 	pane->d.scr = CLIP(pane->d.scr, 0, SCROLLMAX(pane->term->sb));
 
-	pane->d.redraw_flag = true;
 	setSelection(&pane->sel, pane->term->sb, row - pane->d.scr, col, start, rect);
 }
 
@@ -212,22 +210,9 @@ drawPane(Drawing *d, nsec now, Line *peline, int pecaret)
 
 	/* ベルの消灯時刻をまたいでいたら画面クリア */
 	if (d->time_b < d->bell_time && d->bell_time <= now)
-		d->redraw_flag = d->clear_flag = true;
-
-	/* 点滅の切り替わり時刻をまたいでいたら再描画 */
-#define LIT(T,D) (((T) / (D)) % 2)
-#define CHECK(T,D,B) (d->timer_active[T] && LIT(d->time_b - (B), D) != LIT( now - (B), D))
-	if (CHECK(BLINK_TIMER, blink_duration, 0) ||
-	    CHECK(RAPID_TIMER, rapid_duration, 0) ||
-	    CHECK(CARET_TIMER, caret_duration, d->caret_time))
-		d->redraw_flag = true;
-#undef CHECK
-#undef LIT
+		d->clear_flag = true;
 
 	d->time_b = now;
-
-	if (!d->redraw_flag)
-		return 0;
 
 	/* --- 端末の内容を描画 --- */
 
@@ -307,8 +292,6 @@ drawPane(Drawing *d, nsec now, Line *peline, int pecaret)
 		if (caretrow <= d->rows)
 			drawCursor(d, line, caretrow, d->cx, d->ctype, now);
 	}
-
-	d->redraw_flag = false;
 
 	return 1;
 }
@@ -503,6 +486,4 @@ resizeLinebuf(Drawing *d)
 		d->new_lines[i] = allocLine();
 		d->old_lines[i] = allocLine();
 	}
-
-	d->redraw_flag = true;
 }
