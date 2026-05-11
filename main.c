@@ -1,6 +1,8 @@
 #include <sys/select.h>
+#include <sys/wait.h>
 #include <errno.h>
 #include <locale.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
@@ -44,11 +46,13 @@ static XIM xim;
 static Win *win;
 static struct timespec now;
 static int redraw_pipe[2];
+static int sigchld_pipe[2];
 
 static void init(int, char *[]);
 static void initPalette(Term *, float);
 static void run(void);
 static void fin(void);
+static void sigHandler(int);
 
 /* Win */
 static Win *openWindow(int ,int, int, int, int, float, char *const []);
@@ -92,6 +96,10 @@ main(int argc, char *argv[])
 void
 init(int argc, char *argv[])
 {
+	const struct sigaction act = {
+		.sa_handler = sigHandler,
+		.sa_flags = SA_NOCLDSTOP,
+	};
 	XVisualInfo vinfo;
 	char *xrm, *str_type;
 	XrmDatabase xdb;
@@ -105,9 +113,13 @@ init(int argc, char *argv[])
 	unsigned int row, col;
 	int x, y, w, h, i;
 
-	/* 再描画の指示を通知するパイプ */
-	if (pipe(redraw_pipe))
+	/* パイプ作成 */
+	if (pipe(redraw_pipe) || pipe(sigchld_pipe))
 		fatal("pipe failed.\n");
+
+	/* シグナル受信設定 */
+	if (sigaction(SIGCHLD, &act, NULL))
+		fatal("sigaction faild.\n");
 
 	/* localeを設定 */
 	setlocale(LC_CTYPE, "");
@@ -189,7 +201,8 @@ run(void)
 	const int xfd = XConnectionNumber(dinfo.disp);
 	const int tfd = pane->term->master;
 	const int rfd = redraw_pipe[0];
-	const int nfds = MAX(MAX(xfd, tfd), rfd) + 1;
+	const int sfd = sigchld_pipe[0];
+	const int nfds = MAX(MAX(MAX(xfd, tfd), rfd), sfd) + 1;
 	char rfd_buf[16];
 
 	clock_gettime(CLOCK_MONOTONIC, &lastdraw);
@@ -200,6 +213,7 @@ run(void)
 		FD_SET(xfd, &rfds);
 		FD_SET(tfd, &rfds);
 		FD_SET(rfd, &rfds);
+		FD_SET(sfd, &rfds);
 		if (pselect(nfds, &rfds, NULL, NULL, &timeout, NULL) < 0) {
 			if (errno == EINTR)
 				fprintf(stderr, "signal.\n");
@@ -215,15 +229,15 @@ run(void)
 			continue;
 		}
 
+		/* プロセスの終了 */
+		if (FD_ISSET(sfd, &rfds))
+			return;
+
 		/* 端末のread */
 		if (FD_ISSET(tfd, &rfds)) {
 			errno = 0;
-			if (readPty(pane->term) < 0) {
-				if (errno == EIO)
-					return;
-				else
-					errExit("pty read error.");
-			}
+			if (readPty(pane->term) < 0 && errno != EIO)
+				errExit("pty read error.");
 			write(redraw_pipe[1], "a", 1);
 		}
 
@@ -265,6 +279,13 @@ fin(void)
 	if (xim)
 		XCloseIM(xim);
 	XCloseDisplay(dinfo.disp);
+}
+
+void
+sigHandler(int sig)
+{
+	waitpid(-1, NULL, WNOHANG);
+	write(sigchld_pipe[1], "q", 1);
 }
 
 Win *
