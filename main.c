@@ -520,13 +520,13 @@ handleXEvent(Win *win)
 
 		case ButtonRelease:    /* マウス Release */
 			if (win->dragging && (mb == 1 || mb == 3)) {
-				if (win->dragging->sel.aline == win->dragging->sel.bline &&
-				    win->dragging->sel.acol  == win->dragging->sel.bcol)
-					break;
-				XSetSelectionOwner(dinfo.disp, XA_PRIMARY,
-						win->window, CurrentTime);
-				copySelection(&win->dragging->sel, &win->primary,
-						!win->dragging->sel.rect);
+				if (win->dragging->sel.aline != win->dragging->sel.bline ||
+				    win->dragging->sel.acol  != win->dragging->sel.bcol) {
+					XSetSelectionOwner(dinfo.disp, XA_PRIMARY,
+							win->window, CurrentTime);
+					copySelection(&win->dragging->sel, &win->primary,
+							!win->dragging->sel.rect);
+				}
 				win->dragging = NULL;
 			} else {
 				mouseEvent(pane, &event);
