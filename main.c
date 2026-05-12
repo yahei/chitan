@@ -40,7 +40,7 @@ typedef struct Win {
 
 typedef struct TTArgs {
 	Term *term;
-	int pipe;
+	int r_pipe, e_pipe;
 	pthread_mutex_t *mtx;
 } TTArgs;
 
@@ -53,6 +53,7 @@ static XIM xim;
 static Win *win;
 static struct timespec now;
 static int redraw_pipe[2];
+static int exit_pipe[2];
 static int sigchld_pipe[2];
 
 static void init(int, char *[]);
@@ -122,7 +123,7 @@ init(int argc, char *argv[])
 	int x, y, w, h, i;
 
 	/* パイプ作成 */
-	if (pipe(redraw_pipe) || pipe(sigchld_pipe))
+	if (pipe(redraw_pipe) || pipe(sigchld_pipe) || pipe(exit_pipe))
 		fatal("pipe failed.\n");
 
 	/* シグナル受信設定 */
@@ -205,16 +206,14 @@ run(void)
 	Pane *pane = win->pane;
 	pthread_t thd_term;
 	pthread_mutex_t term_mtx = PTHREAD_MUTEX_INITIALIZER;
-	TTArgs ttargs = { pane->term, redraw_pipe[1], &term_mtx};
-	struct timespec timeout = { 0, 0 }, lastdraw;
+	TTArgs ttargs = { pane->term, redraw_pipe[1], exit_pipe[0], &term_mtx};
+	struct timespec timeout = { 0, 0 };
 	fd_set rfds;
 	const int xfd = XConnectionNumber(dinfo.disp);
 	const int rfd = redraw_pipe[0];
 	const int sfd = sigchld_pipe[0];
 	const int nfds = MAX(MAX(xfd, rfd), sfd) + 1;
 	char rfd_buf[1024];
-
-	clock_gettime(CLOCK_MONOTONIC, &lastdraw);
 
 	/* 擬似端末を管理するスレッドを作成 */
 	pthread_create(&thd_term, NULL, (void *(*)(void*))termThread, &ttargs);
@@ -227,7 +226,7 @@ run(void)
 		FD_SET(sfd, &rfds);
 		if (pselect(nfds, &rfds, NULL, NULL, &timeout, NULL) < 0) {
 			if (errno == EINTR)
-				fprintf(stderr, "signal.\n");
+				continue;
 			else
 				errExit("pselect failed.\n");
 		}
@@ -242,7 +241,7 @@ run(void)
 
 		/* プロセスの終了 */
 		if (FD_ISSET(sfd, &rfds))
-			return;
+			break;
 
 		/* 再描画通知 */
 		if (FD_ISSET(rfd, &rfds))
@@ -260,11 +259,13 @@ run(void)
 		snapshot(win->pane, tstons(now));
 		pthread_mutex_unlock(&term_mtx);
 		redraw(win);
-		lastdraw = now;
 
 		/* 次の待機時間を取得 */
 		timeout = nstots(getNextTime(&pane->d, tstons(now)));
 	}
+
+	write(exit_pipe[1], "e", 1);
+	pthread_join(thd_term, NULL);
 }
 
 void *
@@ -272,26 +273,33 @@ termThread(TTArgs *ttargs)
 {
 	fd_set rfds;
 	const int tfd = ttargs->term->master;
-	const int nfds = tfd + 1;
+	const int efd = ttargs->e_pipe;
+	const int nfds = MAX(tfd, efd) + 1;
 	
 	while (1) {
 		FD_ZERO(&rfds);
 		FD_SET(tfd, &rfds);
+		FD_SET(efd, &rfds);
 		if (pselect(nfds, &rfds, NULL, NULL, NULL, NULL) < 0) {
 			if (errno == EINTR)
-				fprintf(stderr, "signal.\n");
+				continue;
 			else
 				errExit("pselect failed.\n");
 		}
 
+		/* 疑似端末を読む */
 		if (FD_ISSET(tfd, &rfds)) {
 			pthread_mutex_lock(ttargs->mtx);
+			write(ttargs->r_pipe, "a", 1);
 			errno = 0;
 			if (readPty(ttargs->term) < 0 && errno != EIO)
 				errExit("pty read error.");
-			write(ttargs->pipe, "a", 1);
 			pthread_mutex_unlock(ttargs->mtx);
 		}
+
+		/* 終了 */
+		if (FD_ISSET(efd, &rfds))
+			break;
 	}
 
 	return NULL;
