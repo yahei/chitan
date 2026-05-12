@@ -2,6 +2,7 @@
 #include <sys/wait.h>
 #include <errno.h>
 #include <locale.h>
+#include <pthread.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -37,6 +38,12 @@ typedef struct Win {
 	Pane *pane, *dragging;
 } Win;
 
+typedef struct TTArgs {
+	Term *term;
+	int pipe;
+	pthread_mutex_t *mtx;
+} TTArgs;
+
 enum { CLIPBOARD, UTF8_STRING, WM_DELETE_WINDOW, ATOM_NUM };
 
 static Atom atoms[ATOM_NUM];
@@ -51,6 +58,7 @@ static int sigchld_pipe[2];
 static void init(int, char *[]);
 static void initPalette(Term *, float);
 static void run(void);
+static void *termThread(TTArgs *);
 static void fin(void);
 static void sigHandler(int);
 
@@ -195,23 +203,26 @@ void
 run(void)
 {
 	Pane *pane = win->pane;
+	pthread_t thd_term;
+	pthread_mutex_t term_mtx = PTHREAD_MUTEX_INITIALIZER;
+	TTArgs ttargs = { pane->term, redraw_pipe[1], &term_mtx};
 	struct timespec timeout = { 0, 0 }, lastdraw;
-	nsec rest;
 	fd_set rfds;
 	const int xfd = XConnectionNumber(dinfo.disp);
-	const int tfd = pane->term->master;
 	const int rfd = redraw_pipe[0];
 	const int sfd = sigchld_pipe[0];
-	const int nfds = MAX(MAX(MAX(xfd, tfd), rfd), sfd) + 1;
-	char rfd_buf[16];
+	const int nfds = MAX(MAX(xfd, rfd), sfd) + 1;
+	char rfd_buf[1024];
 
 	clock_gettime(CLOCK_MONOTONIC, &lastdraw);
+
+	/* 擬似端末を管理するスレッドを作成 */
+	pthread_create(&thd_term, NULL, (void *(*)(void*))termThread, &ttargs);
 
 	while (1) {
 		/* ファイルディスクリプタの監視 */
 		FD_ZERO(&rfds);
 		FD_SET(xfd, &rfds);
-		FD_SET(tfd, &rfds);
 		FD_SET(rfd, &rfds);
 		FD_SET(sfd, &rfds);
 		if (pselect(nfds, &rfds, NULL, NULL, &timeout, NULL) < 0) {
@@ -233,26 +244,9 @@ run(void)
 		if (FD_ISSET(sfd, &rfds))
 			return;
 
-		/* 端末のread */
-		if (FD_ISSET(tfd, &rfds)) {
-			errno = 0;
-			if (readPty(pane->term) < 0 && errno != EIO)
-				errExit("pty read error.");
-			write(redraw_pipe[1], "a", 1);
-		}
-
 		/* 再描画通知 */
 		if (FD_ISSET(rfd, &rfds))
-			read(redraw_pipe[0], rfd_buf, 16);
-
-		/* 再描画の頻度を制限 */
-		if (FD_ISSET(xfd, &rfds) || FD_ISSET(tfd, &rfds)) {
-			rest = 50 * 1000 * 1000 - (tstons(now) - tstons(lastdraw));
-			if (0 < rest) {
-				timeout = (struct timespec){ 0, MIN(rest, 1 * 1000 * 1000) };
-				continue;
-			}
-		}
+			read(redraw_pipe[0], rfd_buf, 1024);
 
 		/* IMEスポット移動 */
 		if (win->ime.xic) {
@@ -262,12 +256,45 @@ run(void)
 		}
 
 		/* 再描画 */
+		pthread_mutex_lock(&term_mtx);
+		snapshot(win->pane, tstons(now));
+		pthread_mutex_unlock(&term_mtx);
 		redraw(win);
 		lastdraw = now;
 
 		/* 次の待機時間を取得 */
 		timeout = nstots(getNextTime(&pane->d, tstons(now)));
 	}
+}
+
+void *
+termThread(TTArgs *ttargs)
+{
+	fd_set rfds;
+	const int tfd = ttargs->term->master;
+	const int nfds = tfd + 1;
+	
+	while (1) {
+		FD_ZERO(&rfds);
+		FD_SET(tfd, &rfds);
+		if (pselect(nfds, &rfds, NULL, NULL, NULL, NULL) < 0) {
+			if (errno == EINTR)
+				fprintf(stderr, "signal.\n");
+			else
+				errExit("pselect failed.\n");
+		}
+
+		if (FD_ISSET(tfd, &rfds)) {
+			pthread_mutex_lock(ttargs->mtx);
+			errno = 0;
+			if (readPty(ttargs->term) < 0 && errno != EIO)
+				errExit("pty read error.");
+			write(ttargs->pipe, "a", 1);
+			pthread_mutex_unlock(ttargs->mtx);
+		}
+	}
+
+	return NULL;
 }
 
 void
@@ -673,7 +700,6 @@ void
 redraw(Win *win)
 {
 	setWindowName(win, win->pane->term->title);
-	snapshot(win->pane, tstons(now));
 	if (drawPane(&win->pane->d, tstons(now), win->ime.peline, win->ime.caret)) {
 		XCopyArea(dinfo.disp, win->pane->d.pixmap, win->window, win->gc,
 				0, 0, win->pane->d.width, win->pane->d.height, 0, 0);
