@@ -1,6 +1,7 @@
 #include <sys/select.h>
 #include <sys/wait.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <locale.h>
 #include <pthread.h>
 #include <signal.h>
@@ -105,6 +106,7 @@ main(int argc, char *argv[])
 void
 init(int argc, char *argv[])
 {
+	int flags;
 	const struct sigaction act = {
 		.sa_handler = sigHandler,
 		.sa_flags = SA_NOCLDSTOP,
@@ -125,6 +127,9 @@ init(int argc, char *argv[])
 	/* パイプ作成 */
 	if (pipe(redraw_pipe) || pipe(sigchld_pipe) || pipe(exit_pipe))
 		fatal("pipe failed.\n");
+	flags = fcntl(redraw_pipe[0], F_GETFL);
+	flags |= O_NONBLOCK;
+	fcntl(redraw_pipe[0], F_SETFL, flags);
 
 	/* シグナル受信設定 */
 	if (sigaction(SIGCHLD, &act, NULL))
@@ -213,7 +218,8 @@ run(void)
 	const int rfd = redraw_pipe[0];
 	const int sfd = sigchld_pipe[0];
 	const int nfds = MAX(MAX(xfd, rfd), sfd) + 1;
-	char rfd_buf[1024];
+	char rfd_buf[16];
+	int res;
 
 	/* 擬似端末を管理するスレッドを作成 */
 	pthread_create(&thd_term, NULL, (void *(*)(void*))termThread, &ttargs);
@@ -224,6 +230,7 @@ run(void)
 		FD_SET(xfd, &rfds);
 		FD_SET(rfd, &rfds);
 		FD_SET(sfd, &rfds);
+		timeout = nstots(getNextTime(&pane->d, tstons(now)));
 		if (pselect(nfds, &rfds, NULL, NULL, &timeout, NULL) < 0) {
 			if (errno == EINTR)
 				continue;
@@ -234,34 +241,40 @@ run(void)
 
 		/* ウィンドウのイベント処理 */
 		if (FD_ISSET(xfd, &rfds)) {
-			if (handleXEvent(win))
-				return;
-			continue;
-		}
-
-		/* プロセスの終了 */
-		if (FD_ISSET(sfd, &rfds))
-			break;
-
-		/* 再描画通知 */
-		if (FD_ISSET(rfd, &rfds))
-			read(redraw_pipe[0], rfd_buf, 1024);
-
-		/* IMEスポット移動 */
-		if (win->ime.xic) {
-			win->ime.spot.x = pane->d.xpad + pane->term->cx * xfont->cw;
-			win->ime.spot.y = pane->d.ypad + pane->term->cy * xfont->ch + xfont->ascent;
-			XSetICValues(win->ime.xic, XNPreeditAttributes, win->ime.spotlist, NULL);
+			pthread_mutex_lock(&term_mtx);
+			res = handleXEvent(win);
+			pthread_mutex_unlock(&term_mtx);
+			if (res)
+				break;
 		}
 
 		/* 再描画 */
-		pthread_mutex_lock(&term_mtx);
-		snapshot(win->pane, tstons(now));
-		pthread_mutex_unlock(&term_mtx);
-		redraw(win);
+		if (FD_ISSET(rfd, &rfds)) {
+			while (0 < read(redraw_pipe[0], rfd_buf, 16));
 
-		/* 次の待機時間を取得 */
-		timeout = nstots(getNextTime(&pane->d, tstons(now)));
+			/* IMEスポット移動 */
+			if (win->ime.xic) {
+				win->ime.spot.x = pane->d.xpad + pane->term->cx * xfont->cw;
+				win->ime.spot.y = pane->d.ypad + pane->term->cy * xfont->ch + xfont->ascent;
+				XSetICValues(win->ime.xic, XNPreeditAttributes, win->ime.spotlist, NULL);
+			}
+
+			/* 描画実行 */
+			pthread_mutex_lock(&term_mtx);
+			snapshot(win->pane, tstons(now));
+			pthread_mutex_unlock(&term_mtx);
+			redraw(win);
+		}
+
+		/* 子プロセスの終了 */
+		if (FD_ISSET(sfd, &rfds))
+			break;
+
+		/* タイムアウト */
+		if (!FD_ISSET(xfd, &rfds) &&
+		    !FD_ISSET(sfd, &rfds) &&
+		    !FD_ISSET(rfd, &rfds))
+			write(redraw_pipe[1], "s", 1);
 	}
 
 	write(exit_pipe[1], "e", 1);
