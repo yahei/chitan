@@ -1,4 +1,5 @@
 #include <stdbool.h>
+#include <unistd.h>
 
 #include "line.h"
 
@@ -40,6 +41,7 @@ typedef struct Selection {
 /* 端末 */
 typedef struct Term {
 	int master;             /* 疑似端末のFD */
+	pid_t pid;              /* 子プロセスのpid */
 	ScrBuf ori, alt, *sb;   /* バッファ */
 	int cx, cy;             /* カーソル位置 */
 	int svx, svy;           /* 保存したカーソル位置 */

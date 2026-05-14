@@ -4,7 +4,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
 #include <wchar.h>
 
 #include "term.h"
@@ -99,7 +98,7 @@ openTerm(int row, int col, int bufsize, const char *program, char *const cmd[])
 		goto FAIL;
 
 	/* forkしてslave側のプロセスを起動 */
-	switch (fork()) {
+	switch (term->pid = fork()) {
 	case -1:/* 失敗 */
 		goto FAIL;
 		break;
