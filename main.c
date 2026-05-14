@@ -178,7 +178,7 @@ finish:
 	names = (char *[]){ "CLIPBOARD", "UTF8_STRING", "WM_DELETE_WINDOW" };
 	for (i = 0; i < ATOM_NUM; i++)
 		atoms[i] = XInternAtom(dinfo.disp, names[i], True);
-	
+
 	/* XIM */
 	XRegisterIMInstantiateCallback(dinfo.disp, NULL, NULL, NULL, ximOpen, NULL);
 
@@ -289,7 +289,7 @@ termThread(TTArgs *ttargs)
 	const int tfd = ttargs->term->master;
 	const int efd = ttargs->e_pipe;
 	const int nfds = MAX(tfd, efd) + 1;
-	
+
 	while (1) {
 		FD_ZERO(&rfds);
 		FD_SET(tfd, &rfds);
