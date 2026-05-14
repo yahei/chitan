@@ -87,7 +87,7 @@ openTerm(int row, int col, int bufsize, const char *program, char *const cmd[])
 	setDefaultPalette(term->palette);
 	setDefaultPalette(term->def_palette);
 
-	/* 疑似端末を開く */
+	/* 疑似端末マスタデバイスを開く */
 	errno = -1;
 	if ((term->master = posix_openpt(O_RDWR | O_NOCTTY)) < 0)
 		goto FAIL;
@@ -97,10 +97,8 @@ openTerm(int row, int col, int bufsize, const char *program, char *const cmd[])
 		goto FAIL;
 	if (unlockpt(term->master) < 0)
 		goto FAIL;
-	if ((slave = open(sname, O_RDWR | O_NOCTTY)) < 0)
-		goto FAIL;
 
-	/* slave側でプロセスを起動 */
+	/* forkしてslave側のプロセスを起動 */
 	switch (fork()) {
 	case -1:/* 失敗 */
 		goto FAIL;
@@ -108,20 +106,25 @@ openTerm(int row, int col, int bufsize, const char *program, char *const cmd[])
 
 	case 0: /* slave側 */
 		close(term->master);
+
+		if ((slave = open(sname, O_RDWR)) < 0)
+			errExit("open slave failed.\n");
 		dup2(slave, 0);
 		dup2(slave, 1);
 		dup2(slave, 2);
-		close(slave);
-		setenv("TERM", "chitan-256color", 1);
+		if (STDERR_FILENO < slave)
+			close(slave);
+
 		if (setsid() < 0)
 			fatal("setsid failed.\n");
 		if (ioctl(0, TIOCSCTTY) < 0)
 			fprintf(stderr, "TIOCSCTTY failed.\n");
+
+		setenv("TERM", "chitan-256color", 1);
 		execvp(program, cmd);
 		fatal("exec failed.\n");
 
 	default: /* master側 */
-		close(slave);
 		setWinSize(term, row, col, 0, 0);
 	}
 
