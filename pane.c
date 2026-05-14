@@ -59,7 +59,6 @@ destroyPane(Pane *pane)
 {
 	Line **plines;
 
-	closeTerm(pane->term);
 	freePixmap(&pane->d);
 	for (plines = pane->d.new_lines; *plines; plines++)
 		freeLine(*plines);

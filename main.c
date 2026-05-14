@@ -431,6 +431,7 @@ initPalette(Term *term, float alpha)
 void
 closeWindow(Win *win)
 {
+	closeTerm(win->pane->term);
 	destroyPane(win->pane);
 	freeLine(win->ime.peline);
 	XFree(win->ime.spotlist);
