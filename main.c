@@ -218,8 +218,8 @@ run(void)
 	const int rfd = redraw_pipe[0];
 	const int sfd = sigchld_pipe[0];
 	const int nfds = MAX(MAX(xfd, rfd), sfd) + 1;
-	char rfd_buf[16];
-	int res;
+	char pipe_buf[16];
+	int res, ocx, ocy;
 
 	/* 擬似端末を管理するスレッドを作成 */
 	pthread_create(&thd_term, NULL, (void *(*)(void*))termThread, &ttargs);
@@ -250,20 +250,22 @@ run(void)
 
 		/* 再描画 */
 		if (FD_ISSET(rfd, &rfds)) {
-			while (0 < read(redraw_pipe[0], rfd_buf, 16));
+			while (0 < read(redraw_pipe[0], pipe_buf, 16));
 
-			/* IMEスポット移動 */
-			if (win->ime.xic) {
-				win->ime.spot.x = pane->d.xpad + pane->term->cx * xfont->cw;
-				win->ime.spot.y = pane->d.ypad + pane->term->cy * xfont->ch + xfont->ascent;
-				XSetICValues(win->ime.xic, XNPreeditAttributes, win->ime.spotlist, NULL);
-			}
+			ocx = pane->d.cx;
+			ocy = pane->d.cy;
 
-			/* 描画実行 */
 			pthread_mutex_lock(&term_mtx);
-			snapshot(win->pane, tstons(now));
+			snapshot(pane, tstons(now));
 			pthread_mutex_unlock(&term_mtx);
 			redraw(win);
+
+			/* IMEスポット移動 */
+			if ((ocx != pane->d.cx || ocy != pane->d.cy) && win->ime.xic) {
+				win->ime.spot.x = pane->d.xpad + pane->d.cx * xfont->cw;
+				win->ime.spot.y = pane->d.ypad + pane->d.cy * xfont->ch + xfont->ascent;
+				XSetICValues(win->ime.xic, XNPreeditAttributes, win->ime.spotlist, NULL);
+			}
 		}
 
 		/* 子プロセスの終了 */
