@@ -37,6 +37,7 @@ typedef struct Win {
 	char *primary, *clip;
 	IME ime;
 	Pane *pane, *dragging;
+	int redraw_pipe[2];
 } Win;
 
 typedef struct TTArgs {
@@ -53,8 +54,6 @@ static XFont *xfont;
 static XIM xim;
 static Win *win;
 static struct timespec now;
-static int redraw_pipe[2];
-static int exit_pipe[2];
 static int sigchld_pipe[2];
 
 static void init(int, char *[]);
@@ -62,7 +61,7 @@ static void initPalette(Term *, float);
 static void run(void);
 static void *termThread(TTArgs *);
 static void fin(void);
-static void sigHandler(int);
+static void sigchldHandler(int);
 
 /* Win */
 static Win *openWindow(int ,int, int, int, int, float, char *const []);
@@ -106,9 +105,8 @@ main(int argc, char *argv[])
 void
 init(int argc, char *argv[])
 {
-	int flags;
 	const struct sigaction act = {
-		.sa_handler = sigHandler,
+		.sa_handler = sigchldHandler,
 		.sa_flags = SA_NOCLDSTOP,
 	};
 	XVisualInfo vinfo;
@@ -124,14 +122,9 @@ init(int argc, char *argv[])
 	unsigned int row, col;
 	int x, y, w, h, i;
 
-	/* パイプ作成 */
-	if (pipe(redraw_pipe) || pipe(sigchld_pipe) || pipe(exit_pipe))
+	/* SIGCHLDを受け取る準備 */
+	if (pipe(sigchld_pipe))
 		fatal("pipe failed.\n");
-	flags = fcntl(redraw_pipe[0], F_GETFL);
-	flags |= O_NONBLOCK;
-	fcntl(redraw_pipe[0], F_SETFL, flags);
-
-	/* シグナル受信設定 */
 	if (sigaction(SIGCHLD, &act, NULL))
 		fatal("sigaction faild.\n");
 
@@ -211,11 +204,12 @@ run(void)
 	Pane *pane = win->pane;
 	pthread_t thd_term;
 	pthread_mutex_t term_mtx = PTHREAD_MUTEX_INITIALIZER;
-	TTArgs ttargs = { pane->term, redraw_pipe[1], exit_pipe[0], &term_mtx};
+	int exit_pipe[2];
+	TTArgs ttargs;
 	struct timespec timeout = { 0, 0 };
 	fd_set rfds;
 	const int xfd = XConnectionNumber(dinfo.disp);
-	const int rfd = redraw_pipe[0];
+	const int rfd = win->redraw_pipe[0];
 	const int sfd = sigchld_pipe[0];
 	const int nfds = MAX(MAX(xfd, rfd), sfd) + 1;
 	char pipe_buf[16];
@@ -223,6 +217,9 @@ run(void)
 
 	/* 擬似端末を管理するスレッドを作成 */
 	pthread_create(&thd_term, NULL, (void *(*)(void*))termThread, &ttargs);
+	if (pipe(exit_pipe))
+		fatal("pipe failed.\n");
+	ttargs = (TTArgs){ pane->term, win->redraw_pipe[1], exit_pipe[0], &term_mtx};
 
 	while (1) {
 		/* ファイルディスクリプタの監視 */
@@ -250,7 +247,7 @@ run(void)
 
 		/* 再描画 */
 		if (FD_ISSET(rfd, &rfds)) {
-			while (0 < read(redraw_pipe[0], pipe_buf, 16));
+			while (0 < read(win->redraw_pipe[0], pipe_buf, 16));
 
 			ocx = pane->d.cx;
 			ocy = pane->d.cy;
@@ -276,11 +273,13 @@ run(void)
 		if (!FD_ISSET(xfd, &rfds) &&
 		    !FD_ISSET(sfd, &rfds) &&
 		    !FD_ISSET(rfd, &rfds))
-			write(redraw_pipe[1], "s", 1);
+			write(win->redraw_pipe[1], "s", 1);
 	}
 
 	write(exit_pipe[1], "e", 1);
 	pthread_join(thd_term, NULL);
+	close(exit_pipe[0]);
+	close(exit_pipe[1]);
 }
 
 void *
@@ -332,7 +331,7 @@ fin(void)
 }
 
 void
-sigHandler(int sig)
+sigchldHandler(int sig)
 {
 	waitpid(-1, NULL, WNOHANG);
 	write(sigchld_pipe[1], "q", 1);
@@ -346,6 +345,7 @@ openWindow(int w, int h, int x, int y, int buflines, float alpha, char *const cm
 	const int pad = xfont->cw / 2;
 	const int row = (h - pad * 2) / xfont->ch;
 	const int col = (w - pad * 2) / xfont->cw;
+	int flags;
 
 	*win = (Win){ .width = w, .height = h};
 
@@ -392,6 +392,13 @@ openWindow(int w, int h, int x, int y, int buflines, float alpha, char *const cm
 	/* Pane作成 */
 	win->pane = createPane(&dinfo, xfont, w, h, pad, pad, term);
 
+	/* 再描画通知のパイプ */
+	if (pipe(win->redraw_pipe))
+		fatal("pipe failed.\n");
+	flags = fcntl(win->redraw_pipe[0], F_GETFL);
+	flags |= O_NONBLOCK;
+	fcntl(win->redraw_pipe[0], F_SETFL, flags);
+
 	return win;
 }
 
@@ -433,6 +440,8 @@ initPalette(Term *term, float alpha)
 void
 closeWindow(Win *win)
 {
+	close(win->redraw_pipe[0]);
+	close(win->redraw_pipe[1]);
 	closeTerm(win->pane->term);
 	destroyPane(win->pane);
 	freeLine(win->ime.peline);
@@ -497,7 +506,7 @@ handleXEvent(Win *win)
 		case ButtonPress:       /* マウス Press */
 			if ((mb == 4 || mb == 5) && pane->term->sb == &pane->term->ori) {
 				scrollPane(&pane->d, (mb == 4 ? 1 : -1) * 3);
-				write(redraw_pipe[1], "a", 1);
+				write(win->redraw_pipe[1], "a", 1);
 			} else if (!BETWEEN(mb, 1, 4) || (ms & ~(ShiftMask | Mod1Mask | Mod2Mask)) ||
 					(pane->term->sb == &pane->term->alt && !(ms & ShiftMask))) {
 				mouseEvent(pane, &event);
@@ -508,7 +517,7 @@ handleXEvent(Win *win)
 			} else {
 				win->dragging = pane;
 				selectPane(pane, my, mx, mb == 1, 0 < (ms & Mod1Mask));
-				write(redraw_pipe[1], "a", 1);
+				write(win->redraw_pipe[1], "a", 1);
 			}
 			break;
 
@@ -517,7 +526,7 @@ handleXEvent(Win *win)
 				mouseEvent(pane, &event);
 			} else {
 				selectPane(win->dragging, my, mx, false, pane->sel.rect);
-				write(redraw_pipe[1], "a", 1);
+				write(win->redraw_pipe[1], "a", 1);
 			}
 			break;
 
@@ -537,7 +546,7 @@ handleXEvent(Win *win)
 			break;
 
 		case Expose:            /* 再描画 */
-			write(redraw_pipe[1], "a", 1);
+			write(win->redraw_pipe[1], "a", 1);
 			break;
 
 		case ConfigureNotify:   /* ウィンドウサイズ変更 */
@@ -547,7 +556,7 @@ handleXEvent(Win *win)
 				setPaneSize(&pane->d, ce->width, ce->height);
 				setWinSize(pane->term, pane->d.rows, pane->d.cols,
 						ce->width, ce->height);
-				write(redraw_pipe[1], "a", 1);
+				write(win->redraw_pipe[1], "a", 1);
 			}
 			break;
 
@@ -556,7 +565,7 @@ handleXEvent(Win *win)
 			pane->d.focus = event.type == FocusIn;
 			if (1 < pane->term->dec[1004])
 				writePty(pane->term, pane->d.focus ? "\e[I" : "\e[O", 3);
-			write(redraw_pipe[1], "a", 1);
+			write(win->redraw_pipe[1], "a", 1);
 			break;
 
 		case ClientMessage:     /* ウィンドウが閉じられた */
@@ -832,7 +841,7 @@ void
 preeditDone(XIM xim, Win *win, XPointer call)
 {
 	PUT_NUL(win->ime.peline, 0);
-	write(redraw_pipe[1], "a", 1);
+	write(win->redraw_pipe[1], "a", 1);
 }
 
 void
@@ -877,12 +886,12 @@ preeditDraw(XIM xim, Win *win, XIMPreeditDrawCallbackStruct *call)
 	/* 終了 */
 	free(str);
 
-	write(redraw_pipe[1], "a", 1);
+	write(win->redraw_pipe[1], "a", 1);
 }
 
 void
 preeditCaret(XIM xim, Win *win, XIMPreeditCaretCallbackStruct *call)
 {
 	win->ime.caret = call->position;
-	write(redraw_pipe[1], "a", 1);
+	write(win->redraw_pipe[1], "a", 1);
 }
