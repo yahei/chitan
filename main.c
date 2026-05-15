@@ -236,15 +236,6 @@ run(void)
 		}
 		clock_gettime(CLOCK_MONOTONIC, &now);
 
-		/* ウィンドウのイベント処理 */
-		if (FD_ISSET(xfd, &rfds)) {
-			pthread_mutex_lock(&term_mtx);
-			res = handleXEvent(win);
-			pthread_mutex_unlock(&term_mtx);
-			if (res)
-				break;
-		}
-
 		/* 再描画 */
 		if (FD_ISSET(rfd, &rfds)) {
 			while (0 < read(win->redraw_pipe[0], pipe_buf, 16));
@@ -263,6 +254,15 @@ run(void)
 				win->ime.spot.y = pane->d.ypad + pane->d.cy * xfont->ch + xfont->ascent;
 				XSetICValues(win->ime.xic, XNPreeditAttributes, win->ime.spotlist, NULL);
 			}
+		}
+
+		/* ウィンドウのイベント処理 */
+		if (0 < XPending(dinfo.disp)) {
+			pthread_mutex_lock(&term_mtx);
+			res = handleXEvent(win);
+			pthread_mutex_unlock(&term_mtx);
+			if (res)
+				break;
 		}
 
 		/* 子プロセスの終了 */
