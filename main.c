@@ -216,10 +216,10 @@ run(void)
 	int res, ocx, ocy;
 
 	/* 擬似端末を管理するスレッドを作成 */
-	pthread_create(&thd_term, NULL, (void *(*)(void*))termThread, &ttargs);
 	if (pipe(exit_pipe))
 		fatal("pipe failed.\n");
 	ttargs = (TTArgs){ pane->term, win->redraw_pipe[1], exit_pipe[0], &term_mtx};
+	pthread_create(&thd_term, NULL, (void *(*)(void*))termThread, &ttargs);
 
 	while (1) {
 		/* ファイルディスクリプタの監視 */
