@@ -261,7 +261,9 @@ run(void)
 			pthread_mutex_lock(&term_mtx);
 			res = handleXEvent(win);
 			pthread_mutex_unlock(&term_mtx);
-			if (res)
+			if (0 < res)
+				usleep(res);
+			if (res < 0)
 				break;
 		}
 
@@ -478,7 +480,7 @@ handleXEvent(Win *win)
 	XEvent event;
 	const XConfigureEvent *ce = (XConfigureEvent *)&event;
 	const XClientMessageEvent *cme = (XClientMessageEvent *)&event;
-	int mx, my, ms, mb;
+	int mx, my, ms, mb, res = 0;
 
 	while (0 < XPending(dinfo.disp)) {
 		XNextEvent(dinfo.disp, &event);
@@ -510,6 +512,7 @@ handleXEvent(Win *win)
 			} else if (!BETWEEN(mb, 1, 4) || (ms & ~(ShiftMask | Mod1Mask | Mod2Mask)) ||
 					(pane->term->sb == &pane->term->alt && !(ms & ShiftMask))) {
 				mouseEvent(pane, &event);
+				res = MAX(res, 10 * 1000);
 			} else if (mb == 2) {
 				XConvertSelection(dinfo.disp, XA_PRIMARY, atoms[UTF8_STRING],
 						XA_PRIMARY, win->window, CurrentTime);
@@ -524,6 +527,7 @@ handleXEvent(Win *win)
 		case MotionNotify:     /* マウス Move */
 			if (!win->dragging) {
 				mouseEvent(pane, &event);
+				res = MAX(res, 10 * 1000);
 			} else {
 				selectPane(win->dragging, my, mx, false, pane->sel.rect);
 				write(win->redraw_pipe[1], "a", 1);
@@ -542,6 +546,7 @@ handleXEvent(Win *win)
 				win->dragging = NULL;
 			} else {
 				mouseEvent(pane, &event);
+				res = MAX(res, 10 * 1000);
 			}
 			break;
 
@@ -569,7 +574,8 @@ handleXEvent(Win *win)
 			break;
 
 		case ClientMessage:     /* ウィンドウが閉じられた */
-			return cme->data.l[0] == atoms[WM_DELETE_WINDOW];
+			if (cme->data.l[0] == atoms[WM_DELETE_WINDOW])
+				return -1;
 
 		case SelectionRequest:  /* 貼り付ける文字列を送る */
 			sendSelection(win, event);
@@ -581,7 +587,7 @@ handleXEvent(Win *win)
 		}
 	}
 
-	return 0;
+	return res;
 }
 
 int
