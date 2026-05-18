@@ -300,9 +300,9 @@ drawLine(Drawing *d, Line *line, int row, int col, int width, int pos, nsec now)
 {
 	int next, i = getIndex(line->str, pos);
 	int x, y, w;
-	int attr, fg, bg, blink, rapid;
+	int attr, blink, rapid;
 	XftColor xc;
-	Color fc, bc;
+	Color fg, bg, fc, bc;
 	int sl;
 
 	if (width <= pos || line->str[i] == L'\0')
@@ -340,7 +340,7 @@ drawLine(Drawing *d, Line *line, int row, int col, int width, int pos, nsec now)
 	bg = line->attr[i] & NEGA ? line->fg[i] : line->bg[i];
 	if (line->attr[i] & BOLD)                               /* 太字 */
 		fg += fg < 8 ? 8 : 0;
-	fc = fg < PALETTE_SIZE ? d->palette[fg] : fg;  /* 色を取得 */
+	fc = fg < PALETTE_SIZE ? d->palette[fg] : fg;           /* 色を取得 */
 	bc = bg < PALETTE_SIZE ? d->palette[bg] : bg;
 	if (line->attr[i] & FAINT)                              /* 細字 */
 		fc = BLEND_COLOR(fc, 0.6, bc, 0.4);
