@@ -303,7 +303,7 @@ drawLine(Drawing *d, Line *line, int row, int col, int width, int pos, nsec now)
 	int attr, blink, rapid;
 	XftColor xc;
 	Color fg, bg, fc, bc;
-	int sl;
+	int n;
 
 	if (width <= pos || line->str[i] == L'\0')
 		return;
@@ -320,19 +320,18 @@ drawLine(Drawing *d, Line *line, int row, int col, int width, int pos, nsec now)
 	/* 変化無し・コピー・書き直しの分岐 */
 #define LINE_CMP(R) linecmp(line, OLD_LINE(d, R), pos, next - i)
 	if (line->attr[i] & (ITALIC | BLINK | RAPID))
-		sl = d->rows;
-	else if (BETWEEN(row, -1, d->rows + 2) && LINE_CMP(row))
+		goto skip;
+	if (BETWEEN(row, -1, d->rows + 2) && LINE_CMP(row))
 		return;
-	else
-		for (sl = 0; sl < d->rows; sl++)
-			if (LINE_CMP(sl))
-				break;
-	if (sl < d->rows) {
+	for (n = 0; n < d->rows; n++) {
+		if (!LINE_CMP(n))
+			continue;
 		XCopyArea(d->dinfo->disp, d->pixbuf, d->pixmap, d->gc,
-				x, d->ypad + (sl) * d->xfont->ch,
+				x, d->ypad + n * d->xfont->ch,
 				w, d->xfont->ch, x, y);
 		return;
 	}
+skip:
 #undef LINE_CMP
 
 	/* 前処理 */
