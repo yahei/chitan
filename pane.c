@@ -46,6 +46,9 @@ createPane(DispInfo *dinfo, XFont *xfont, int w, int h, int xpad, int ypad, Term
 	memset(&pane->d.timer_active, 0, TIMER_NUM);
 	memcpy(pane->d.palette, term->palette, PALETTE_SIZE * sizeof(Color));
 
+	/* Paneで対応しているモード */
+	term->decmode[25]   = 1;        /* Show cursor */
+
 	/* 描画の準備 */
 	createPixmap(&pane->d, w, h);
 	resizeLinebuf(&pane->d);

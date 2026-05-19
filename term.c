@@ -843,16 +843,7 @@ initMode(Term *term)
 	memset(term->mode, 0, 64);
 	memset(term->decmode, 0, 8800);
 
-	/* main */
-	term->decmode[1]    = 1;        /* Application Cursor Keys */
-	term->decmode[1004] = 2;        /* Focus In/Out */
-	term->decmode[2004] = 2;        /* Bracketed Paste Mode */
-	term->decmode[7727] = 2;        /* Application escape key mode */
-
-	/* pane */
-	term->decmode[25]   = 1;        /* Show cursor */
-
-	/* term */
+	/* Termで対応しているモード */
 	term->decmode[6]    = 2;        /* Origin Mode */
 	term->decmode[7]    = 1;        /* Auto-Wrap */
 	term->decmode[12]   = 2;        /* Start blinking cursor */

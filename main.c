@@ -391,6 +391,12 @@ openWindow(int w, int h, int x, int y, int buflines, float alpha, char *const cm
 		errExit("openTerm failed.\n");
 	initPalette(term, alpha);
 
+	/* mainで対応しているモード */
+	term->decmode[1]    = 1;        /* Application Cursor Keys */
+	term->decmode[1004] = 2;        /* Focus In/Out */
+	term->decmode[2004] = 2;        /* Bracketed Paste Mode */
+	term->decmode[7727] = 2;        /* Application escape key mode */
+
 	/* Pane作成 */
 	win->pane = createPane(&dinfo, xfont, w, h, pad, pad, term);
 
