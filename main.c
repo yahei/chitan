@@ -568,7 +568,7 @@ handleXEvent(Win *win)
 		case FocusIn:
 		case FocusOut:          /* フォーカスの変化 */
 			pane->d.focus = event.type == FocusIn;
-			if (1 < pane->term->dec[1004])
+			if (DECMODE(pane->term, 1004))
 				writePty(pane->term, pane->d.focus ? "\e[I" : "\e[O", 3);
 			write(win->redraw_pipe[1], "a", 1);
 			break;
@@ -665,9 +665,9 @@ keyPressEvent(Win *win, XEvent event, int bufsize)
 	for (key = keys; key->symbol != XK_VoidSymbol; key++) {
 		if (key->symbol == keysym) {
 			if (mod == 0) {
-				str = win->pane->term->dec[1] < 2 ? key->normal : key->app;
+				str = DECMODE(win->pane->term, 1) ? key->app : key->normal;
 			} else {
-				str = win->pane->term->dec[1] < 2 ? key->normal_m : key->app_m;
+				str = DECMODE(win->pane->term, 1) ? key->app_m : key->normal_m;
 				snprintf(buf, bufsize, str, mod + 1);
 				str = buf;
 			}
@@ -680,7 +680,7 @@ keyPressEvent(Win *win, XEvent event, int bufsize)
 	if (strlen(buf)) {
 		if (event.xkey.state & Mod1Mask)
 			writePty(win->pane->term, "\e", 1);
-		if (keysym == XK_Escape && 1 < win->pane->term->dec[7727])
+		if (keysym == XK_Escape && DECMODE(win->pane->term, 7727))
 			writePty(win->pane->term, "\eO[", 3);
 		else
 			writePty(win->pane->term, buf, len);
@@ -727,10 +727,10 @@ receiveSelection(Win *win, Pane *pane, XEvent event)
 			atoms[UTF8_STRING], &type, &format, &ntimes, &after, &props);
 	if (res != Success)
 		return;
-	if (1 < pane->term->dec[2004])
+	if (DECMODE(pane->term, 2004))
 		writePty(pane->term, "\e[200~", 6);
 	writePty(pane->term, (char *)props, ntimes);
-	if (1 < pane->term->dec[2004])
+	if (DECMODE(pane->term, 2004))
 		writePty(pane->term, "\e[201~", 6);
 	XFree(props);
 }

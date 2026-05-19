@@ -7,6 +7,7 @@
 #define RED(c)          ((c) >> 16 & 0xff)
 #define GREEN(c)        ((c) >>  8 & 0xff)
 #define BLUE(c)         ((c) >>  0 & 0xff)
+#define DECMODE(term,n) ((term)->decmode[n] % 2)
 
 #define TITLE_MAX       (256)
 
@@ -48,8 +49,8 @@ typedef struct Term {
 	int ctype;              /* カーソル形状 */
 	char *readbuf;          /* 可変長リードバッファ */
 	int rblen;              /* リードバッファに残っている文字の数 */
-	char opt[64];           /* オプション */
-	char dec[8800];         /* 拡張オプション */
+	char mode[64];          /* ANSIモード */
+	char decmode[8800];     /* DECプライベートモード */
 	char appkeypad;         /* Application Keypadの状態 */
 	int attr;               /* 現在の属性 */
 	Color fg, bg;           /* 現在の色 */

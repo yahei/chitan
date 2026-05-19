@@ -151,7 +151,8 @@ snapshot(Pane *pane, nsec now)
 	pane->d.cx = pane->term->cx;
 	pane->d.cy = pane->term->cy;
 	pane->d.ctype = pane->term->ctype;
-	pane->d.DECTCEM = pane->term->dec[25];
+	pane->d.DECTCEM = DECMODE(pane->term, 25) ||
+	                  pane->term->decmode[25] == 0;
 
 	/* スクロールの境界チェック */
 	pane->d.scr = CLIP(pane->d.scr, 0, SCROLLMAX(pane->term->sb));
@@ -284,7 +285,7 @@ drawPane(Drawing *d, nsec now, Line *peline, int pecaret)
 		/* 次回の消去範囲を変更 */
 		d->clear_x = d->xpad + d->xfont->cw * (pepos - 0.5);
 		d->clear_w = d->xfont->cw * (pewidth + 1);
-	} else if (1 <= d->DECTCEM && d->cx < d->cols + 2) {
+	} else if (d->DECTCEM && d->cx < d->cols + 2) {
 		/* カーソルの描画 */
 		caretrow = d->cy + d->scr;
 		line = NEW_LINE(d, caretrow);

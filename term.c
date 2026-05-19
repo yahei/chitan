@@ -35,8 +35,9 @@ static void linefeed(Term *);
 static void setCursorPos(Term *, int, int);
 static void moveCursorPos(Term *, int, int, int);
 static void areaScroll(Term *, int, int, int);
-static void optset(Term *, unsigned int, int);
-static void decset(Term *, unsigned int, int);
+static void initMode(Term *);
+static void setMode(Term *, unsigned int, int);
+static void setDECMode(Term *, unsigned int, int);
 static void setScrBufSize(Term *term, int, int);
 static void setSGR(Term *, char *, size_t);
 static void setSGRColor(Color *, char **, const char *);
@@ -77,9 +78,8 @@ openTerm(int row, int col, int bufsize, const char *program, char *const cmd[])
 	term->readbuf = xmalloc(READ_SIZE + 1);
 	term->readbuf[0] = '\0';
 
-	/* オプションの初期化 */
-	memset(term->opt, 1, 64);
-	memset(term->dec, 1, 8800);
+	/* モードの初期化 */
+	initMode(term);
 	term->appkeypad = 1;
 
 	/* カラーパレットの初期化 */
@@ -252,7 +252,7 @@ GCs(Term *term, const char *head)
 		}
 
 		/* 行が埋まる場合は自動改行を設定して行末までを書く */
-		term->sb->am = 0 < term->dec[7] && max <= u32swidth(dp);
+		term->sb->am = DECMODE(term, 7) && max <= u32swidth(dp);
 		wlen = term->sb->am ? getIndex(dp, max) : u32slen(dp);
 		wlen = MAX(wlen, 1);
 
@@ -289,7 +289,7 @@ CC(Term *term, const char *head, const char *tail)
 	case 0x1a:                                              break; /* SUB */
 	case 0x1b: return ESC(term, head + 1, tail);                   /* ESC */
 	case 0x7f:                                              break; /* DEL */
-	default: fprintf(stderr, "Not Supported C0: (%#x)\n", *head);  /* etc */
+	default: fprintf(stderr, "Unsupported C0: (%#x)\n", *head);    /* etc */
 	}
 
 	return head + 1;
@@ -360,7 +360,7 @@ ESC(Term *term, const char *head, const char *tail)
 		 * 0x40-0x5f   Fe型     C1 補助集合
 		 * 0x60-0x7e   Fs型     標準単独制御機能
 		 */
-		fprintf(stderr, "Not Supported ESC Seq: ESC %c(%#04x)\n", *head, *head);
+		fprintf(stderr, "Unsupported ESC Seq: ESC %c(%#04x)\n", *head, *head);
 	}
 
 	return head + 1;
@@ -453,7 +453,7 @@ CSI(Term *term, const char *head, const char *tail)
 		p = strpbrk(param, ";");
 		b = atoi(param) - 1;
 		a = p && (p < param + p_len) ? atoi(p + 1) - 1 : 0;
-		if (1 < term->dec[6])
+		if (DECMODE(term, 6))
 			b = MIN(b + term->sb->scrs, term->sb->scre);
 		setCursorPos(term, a, b);
 		break;
@@ -543,23 +543,23 @@ CSI(Term *term, const char *head, const char *tail)
 
 	case 0x64: /* VPA 行位置決め */
 		a = atoi(param) - 1;
-		if (1 < term->dec[6])
+		if (DECMODE(term, 6))
 			a = MIN(a + term->sb->scrs, term->sb->scre);
 		setCursorPos(term, term->cx, a);
 		break;
 
-	case 0x68: /* SM DECSET オプション設定 */
+	case 0x68: /* SM DECSET モードセット */
 		if (*param == '?')
-			decset(term, atoi(param + 1), 1);
+			setDECMode(term, atoi(param + 1), 1);
 		else
-			optset(term, atoi(param), 1);
+			setMode(term, atoi(param), 1);
 		break;
 
-	case 0x6c: /* RM DECRST オプション解除 */
+	case 0x6c: /* RM DECRST モードリセット */
 		if (*param == '?')
-			decset(term, atoi(param + 1), 0);
+			setDECMode(term, atoi(param + 1), 0);
 		else
-			optset(term, atoi(param), 0);
+			setMode(term, atoi(param), 0);
 		break;
 
 	case 0x6d: /* SGR 表示様式選択 */
@@ -578,7 +578,7 @@ CSI(Term *term, const char *head, const char *tail)
 			break;
 		term->sb->scrs = CLIP(a, 1, sb->rows) - 1;
 		term->sb->scre = CLIP(b, 1, sb->rows) - 1;
-		setCursorPos(term, 0, term->dec[6] < 2 ? 0 : term->sb->scrs);
+		setCursorPos(term, 0, DECMODE(term, 6) ? term->sb->scrs : 0);
 		break;
 
 	default: /* 未対応 */
@@ -598,7 +598,7 @@ UNKNOWN:
 		return head + index;
 	}
 	/* 未対応 */
-	fprintf(stderr, "Not Supported CSI: CSI [%.*s][%.*s]%c(%#04x)\n",
+	fprintf(stderr, "Unsupported CSI: CSI [%.*s][%.*s]%c(%#04x)\n",
 			p_len, param, i_len, inter, final, final);
 	return head + index + 1;
 }
@@ -661,7 +661,7 @@ ctrlSeq(Term *term, const char *head, const char *tail, enum cseq_type type)
 void
 CStr(Term *term, const char *payload, const char *err, const char *type)
 {
-	fprintf(stderr, "Not Supported %s: %s\n", type, err);
+	fprintf(stderr, "Unsupported %s: %s\n", type, err);
 }
 
 void
@@ -766,7 +766,7 @@ OSC(Term *term, char *payload, const char *err)
 	}
 
 	/* 未対応 */
-	fprintf(stderr, "Not Supported OSC: %s\n", err);
+	fprintf(stderr, "Unsupported OSC: %s\n", err);
 	return;
 }
 
@@ -838,40 +838,68 @@ areaScroll(Term *term, int first, int last, int num)
 }
 
 void
-optset(Term *term, unsigned int num, int flag)
+initMode(Term *term)
 {
-	if (sizeof(term->opt) <= num) {
-		fprintf(stderr, "Option: %d %s\e[m\n", num,
-				flag ? "\e[32mset" : "\e[31mrst");
-		return;
-	}
+	memset(term->mode, 0, 64);
+	memset(term->decmode, 0, 8800);
 
-	term->opt[num] = flag ? 2 : 0;
+	/* main */
+	term->decmode[1]    = 1;        /* Application Cursor Keys */
+	term->decmode[1004] = 2;        /* Focus In/Out */
+	term->decmode[2004] = 2;        /* Bracketed Paste Mode */
+	term->decmode[7727] = 2;        /* Application escape key mode */
+
+	/* pane */
+	term->decmode[25]   = 1;        /* Show cursor */
+
+	/* term */
+	term->decmode[6]    = 2;        /* Origin Mode */
+	term->decmode[7]    = 1;        /* Auto-Wrap */
+	term->decmode[12]   = 2;        /* Start blinking cursor */
+	term->decmode[9]    = 1;        /* Mouse Tracking - X10 */
+	term->decmode[1000] = 2;        /* Mouse Tracking - normal */
+	term->decmode[1002] = 2;        /* Mouse Tracking - button */
+	term->decmode[1003] = 2;        /* Mouse Tracking - any */
+	term->decmode[1005] = 4;        /* Mouse Tracking - UTF-8 (非対応) */
+	term->decmode[1006] = 2;        /* Mouse Tracking - SGR */
+	term->decmode[1015] = 4;        /* Mouse Tracking - urxvt (非対応) */
+	term->decmode[1047] = 2;        /* Alternate Screen Buffer */
+	term->decmode[1049] = 2;        /* Alternate Screen Buffer clear */
 }
 
 void
-decset(Term *term, unsigned int num, int flag)
+setMode(Term *term, unsigned int num, int flag)
+{
+	/* 未対応 */
+	if (sizeof(term->mode) <= num || term->mode[num] == 0) {
+		fprintf(stderr, "Unsupported Mode: %s\e[m %d\n",
+				flag ? "\e[32mSM" : "\e[31mRM", num);
+		return;
+	}
+
+	term->mode[num] = flag ? 1 : 2;
+}
+
+void
+setDECMode(Term *term, unsigned int num, int flag)
 {
 	struct ScrBuf *oldsb;
 	Line *line;
 	int i;
 
-	switch (num) {
-	case 1:    /* Application Cursor Keys */
-	case 6:    /* Origin Mode */
-	case 25:   /* Show cursor */
-	case 9:    /* Mouse Tracking - X10 */
-	case 1000: /* Mouse Tracking - normal */
-	case 1002: /* Mouse Tracking - button */
-	case 1003: /* Mouse Tracking - any */
-	case 1004: /* Focus In/Out */
-	case 1005: /* Mouse Tracking - UTF-8 (非対応) */
-	case 1006: /* Mouse Tracking - SGR */
-	case 1015: /* Mouse Tracking - urxvt (非対応) */
-	case 2004: /* Bracketed Paste Mode */
-	case 7727: /* Application escape key mode */
-		break;
+	/* 未対応 */
+	if (sizeof(term->decmode) <= num || term->decmode[num] == 0) {
+		fprintf(stderr, "Unsupported Mode: %s\e[m %d\n",
+				flag ? "\e[32mDECSET" : "\e[31mDECRST", num);
+		return;
+	}
 
+	/* 変更不可 */
+	if (2 < term->decmode[num])
+		return;
+
+	/* 対応 */
+	switch (num) {
 	case 7:    /* Auto-Wrap */
 		term->sb->am = 0;
 		break;
@@ -901,15 +929,9 @@ decset(Term *term, unsigned int num, int flag)
 
 		setScrBufSize(term, oldsb->rows, oldsb->cols);
 		break;
-
-	default:
-		fprintf(stderr, "DEC Option: %d %s\e[m\n", num,
-				flag ? "\e[32mset" : "\e[31mrst");
-		if (sizeof(term->dec) <= num)
-			return;
 	}
 
-	term->dec[num] = flag ? 2 : 0;
+	term->decmode[num] = flag ? 1 : 2;
 }
 
 ssize_t
@@ -980,17 +1002,17 @@ reportMouse(Term *term, int btn, int release, int mx, int my)
 
 	/* 対象外のイベントは報告しない */
 	type = (btn & MOVE) ?  ((btn & 3) == 3) ?  any : button : normal;
-	if (!(1 < term->dec[1000] && type <= normal) &&
-	    !(1 < term->dec[1002] && type <= button) &&
-	    !(1 < term->dec[1003] && type <= any   ))
+	if (!(DECMODE(term, 1000) && type <= normal) &&
+	    !(DECMODE(term, 1002) && type <= button) &&
+	    !(DECMODE(term, 1003) && type <= any   ))
 		return;
 
 	/* 報告を実行 */
-	if (1 < term->dec[1006]) {
+	if (DECMODE(term, 1006)) {
 		/* SGR */
 		len = snprintf(buf, sizeof(buf), "\e[<%d;%d;%d%c",
 				btn, mx + 1, my + 1, release ? 'm' : 'M');
-	} else if (1 <= term->dec[9]) {
+	} else if (DECMODE(term, 9)) {
 		/* X10 */
 		if (!BETWEEN(btn, 0, 255 - 32) ||
 		    !BETWEEN( mx, 0, 255 - 32) ||
@@ -1092,7 +1114,7 @@ setSGRColor(Color *dst, char **p, const char *param)
 		else
 			fprintf(stderr, "Invalid Color: %d;%d;%d\n", r, g, b);
 	} else {
-		fprintf(stderr, "Not Supported SGR: %s\n", param);
+		fprintf(stderr, "Unsupported SGR: %s\n", param);
 	}
 }
 
@@ -1146,7 +1168,7 @@ designateCharSet(Term *term, const char *head, const char *tail)
 		term->g[gnum] = cset94[(unsigned int)name[0]];
 
 	if (!term->g[gnum] && name[0] != 'B')
-		fprintf(stderr, "Not Supported CharSet. (%s %c%c)\n",
+		fprintf(stderr, "Unsupported CharSet. (%s %c%c)\n",
 				size[multi + set96 * 2], name[0],
 				strchr("\"%`&", name[0]) ? name[1] : '\0');
 
