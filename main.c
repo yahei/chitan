@@ -306,11 +306,11 @@ termThread(TTArgs *ttargs)
 		/* 疑似端末を読む */
 		if (FD_ISSET(tfd, &rfds)) {
 			pthread_mutex_lock(ttargs->mtx);
-			write(ttargs->r_pipe, "a", 1);
 			errno = 0;
 			if (readPty(ttargs->term) < 0 && errno != EIO)
 				errExit("pty read error.");
 			pthread_mutex_unlock(ttargs->mtx);
+			write(ttargs->r_pipe, "a", 1);
 		}
 
 		/* 終了 */
