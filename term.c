@@ -375,6 +375,7 @@ CSI(Term *term, const char *head, const char *tail)
 	char final;
 	Line *line;
 	int i, a, b, len, index = 0;
+	char buf[12];
 
 	/* パラメタバイト */
 	for (p_len = 0; BETWEEN(head[p_len], 0x30, 0x40); p_len++);
@@ -400,11 +401,34 @@ CSI(Term *term, const char *head, const char *tail)
 	}
 
 	/* 中間バイトがSPのもの */
-	if (0 < i_len && memcmp(inter, " ", i_len) == 0) {
+	if (0 < i_len && inter[0] == ' ') {
 		switch (final) {
 		case 0x71: /* DECSCUSR カーソル形状設定 */
 			if (atoi(param) < 7)
 				term->ctype = atoi(param);
+			break;
+
+		default: /* 未対応 */
+			goto UNKNOWN;
+		}
+
+		return head + index + 1;
+	}
+
+	/* 中間バイトが$のもの */
+	if (0 < i_len && inter[0] == '$') {
+		switch (final) {
+		case 0x70: /* DECRQM モード要求 */
+			a = (*param == '?') ?
+				term->decmode[atoi(param + 1)] :
+				term->mode[atoi(param)];
+			snprintf(buf, sizeof(buf), "\e[%.*s;%d$y", p_len, param, a);
+			writePty(term, buf, strlen(buf));
+
+			/* 未対応モード */
+			if (a == 0)
+				fprintf(stderr, "Unsupported Mode: %s\e[m %.*s\n",
+						"\e[33mDECRQM", p_len, param);
 			break;
 
 		default: /* 未対応 */
