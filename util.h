@@ -19,4 +19,11 @@ void fatal(const char *);
 void *xmalloc(size_t);
 void *xrealloc(void *, size_t);
 
+/* ini file */
+typedef struct Ini Ini;
+
+Ini *readIni(const char *, const char *);
+const char *getIniValue(Ini *, const char *);
+void destroyIni(Ini *);
+
 #endif
