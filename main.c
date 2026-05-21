@@ -110,9 +110,8 @@ init(int argc, char *argv[])
 		.sa_flags = SA_NOCLDSTOP,
 	};
 	XVisualInfo vinfo;
-	char *xrm, *str_type;
-	XrmDatabase xdb;
-	XrmValue val;
+	Ini *ini;
+	const char *v;
 	float alpha = 1.0;
 	int buflines = 1024;
 	char pattern_str[256] = "monospace", *pattern = pattern_str;
@@ -142,18 +141,15 @@ init(int argc, char *argv[])
 	dinfo.visual = vinfo.visual;
 	dinfo.cmap = XCreateColormap(dinfo.disp, dinfo.root, dinfo.visual, None);
 
-	/* X resources */
-	XrmInitialize();
-	xrm = XResourceManagerString(dinfo.disp);
-	xdb = XrmGetStringDatabase(xrm ? xrm : "");
-#define XRES(name) (XrmGetResource(xdb, (name), "chitan", &str_type, &val) &&\
-		strncmp(str_type, "String", 6) == 0)
-	if (XRES("chitan.alpha"))       alpha    = atof(val.addr);
-	if (XRES("chitan.font"))        strcpy(pattern_str, val.addr);
-	if (XRES("chitan.geometry"))    strcpy(geometry_str, val.addr);
-	if (XRES("chitan.lines"))       buflines = atof(val.addr);
-#undef XRES
-	XrmDestroyDatabase(xdb);
+	/* ini file */
+	ini = readIni("chitan", "chitan.ini");
+	if (ini) {
+		if ((v = getIniValue(ini, "alpha"   ))[0]) alpha = atof(v);
+		if ((v = getIniValue(ini, "font"    ))[0]) strcpy(pattern_str, v);
+		if ((v = getIniValue(ini, "geometry"))[0]) strcpy(geometry_str, v);
+		if ((v = getIniValue(ini, "lines"   ))[0]) buflines = atof(v);
+		destroyIni(ini);
+	}
 
 	/* コマンドライン引数 */
 	while (1) {
@@ -191,6 +187,8 @@ finish:
 	/* ウィンドウの作成 */
 	x = y = col = row = 0;
 	XParseGeometry(geometry, &x, &y, &col, &row);
+	if (col < 1 || row < 1)
+		XParseGeometry("80x24+0+0", &x, &y, &col, &row);
 	cmd    = cmd[0] ? cmd    : (char *[]){ getenv("SHELL"), NULL };
 	cmd[0] = cmd[0] ? cmd[0] : "/bin/sh";
 	w = col * xfont->cw + xfont->cw;
@@ -413,28 +411,28 @@ openWindow(int w, int h, int x, int y, int buflines, float alpha, char *const cm
 void
 initPalette(Term *term, float alpha)
 {
-	char *xrm, *str_type, buf[16];
-	XrmDatabase xdb;
-	XrmValue val;
+	Ini *ini;
+	const char *v;
+	char buf[16];
 	int i;
 
 	/* パレットの設定を読み込む */
-	xrm = XResourceManagerString(dinfo.disp);
-	xdb = XrmGetStringDatabase(xrm ? xrm : "");
-#define XRCOLOR(name, num) do {\
-	if (XrmGetResource(xdb, (name), "chitan", &str_type, &val) &&\
-	    strncmp(str_type, "String", 6) == 0 &&\
-	    strlen(val.addr) ==7 && val.addr[0] == '#')\
-		term->palette[num] = strtol(val.addr + 1, NULL, 16) + 0xff000000;\
+#define INICOLOR(name, num) do {\
+	v = getIniValue(ini, (name));\
+	if (strlen(v) == 7 && v[0] == '#')\
+		term->palette[num] = strtol(v + 1, NULL, 16) + 0xff000000;\
 } while (0)
-	XRCOLOR("chitan.foreground", deffg);
-	XRCOLOR("chitan.background", defbg);
-	for (i = 0; i < 256; i++) {
-		snprintf(buf, 16, "chitan.color%d", i);
-		XRCOLOR(buf, i);
+	ini = readIni("chitan", "chitan.ini");
+	if (ini) {
+		INICOLOR("foreground", deffg);
+		INICOLOR("background", defbg);
+		for (i = 0; i < 256; i++) {
+			snprintf(buf, 16, "color%d", i);
+			INICOLOR(buf, i);
+		}
+		destroyIni(ini);
 	}
-#undef XRCOLOR
-	XrmDestroyDatabase(xdb);
+#undef INICOLOR
 
 	/* 背景の不透明度を設定 */
 	term->palette[defbg] = ((0xff & (int)(0xff * alpha)) << 24) +
