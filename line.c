@@ -67,6 +67,7 @@ linecpy(Line *dst, const Line *src)
 	memcpy(dst->attr, src->attr, len * sizeof(int));
 	memcpy(dst->fg,   src->fg,   len * sizeof(Color));
 	memcpy(dst->bg,   src->bg,   len * sizeof(Color));
+	dst->ver++;
 }
 
 int
@@ -194,6 +195,7 @@ putU32s(Line *line, int col, const char32_t *str, int attr, Color fg, Color bg, 
 			line->fg  [i] = fg;
 			line->bg  [i] = bg;
 		}
+		line->ver++;
 	}
 
 	return width;
