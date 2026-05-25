@@ -16,7 +16,6 @@
  * 疑似端末とバッファを管理する
  */
 
-#define READ_SIZE       (1 << 14)
 #define LINE(a, b)      ((a)->lines[(b) % (a)->maxlines])
 #define IS_GC(c)        (BETWEEN((c), 0x20, 0x7f) || (c) & 0x80)
 
@@ -75,7 +74,6 @@ openTerm(int row, int col, int bufsize, const char *program, char *const cmd[])
 		term->alt.lines[i] = allocLine();
 
 	/* リードバッファの初期化 */
-	term->readbuf = xmalloc(READ_SIZE + 1);
 	term->readbuf[0] = '\0';
 
 	/* モードの初期化 */
@@ -181,7 +179,6 @@ closeTerm(Term *term)
 
 	free(term->ori.lines);
 	free(term->alt.lines);
-	free(term->readbuf);
 	free(term);
 }
 

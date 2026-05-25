@@ -10,6 +10,7 @@
 #define DECMODE(term,n) ((term)->decmode[n] % 2)
 
 #define TITLE_MAX       (256)
+#define READ_SIZE       (1 << 14)
 
 enum mouse_event_type {
 	SHIFT   = 4,
@@ -47,7 +48,7 @@ typedef struct Term {
 	int cx, cy;             /* カーソル位置 */
 	int svx, svy;           /* 保存したカーソル位置 */
 	int ctype;              /* カーソル形状 */
-	char *readbuf;          /* 可変長リードバッファ */
+	char readbuf[READ_SIZE + 1];    /* リードバッファ */
 	int rblen;              /* リードバッファに残っている文字の数 */
 	char mode[64];          /* ANSIモード */
 	char decmode[8800];     /* DECプライベートモード */
