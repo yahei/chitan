@@ -189,6 +189,7 @@ readPty(Term *term)
 {
 	const char *head, *tail;
 	ssize_t size;
+	enum receive_mode old_mode;
 
 	/* バッファを使い切ったら全部捨ててから読む */
 	term->rblen = term->rblen < READ_SIZE ? term->rblen : 0;
@@ -202,14 +203,13 @@ readPty(Term *term)
 	*(char *)tail = '\0';
 
 	/* 受信モードに応じた処理 */
-	switch (term->rcv) {
-	case RCV_NORMAL:
-		head = readNormal(term, head, tail);
-		break;
-	default:
-		head = readCtlSeq(term, head, tail, term->rcv);
-		break;
-	}
+	do {
+		old_mode = term->rcv;
+		switch (term->rcv) {
+		case RCV_NORMAL: head = readNormal(term, head, tail); break;
+		default:         head = readCtlSeq(term, head, tail, term->rcv); break;
+		}
+	} while (old_mode != term->rcv);
 
 	/* 残りをバッファの先頭に移す */
 	memmove(term->readbuf, head, tail - head);
@@ -267,6 +267,10 @@ readCtlSeq(Term *term, const char *head, const char *tail, const enum receive_mo
 			term->rcv = RCV_NORMAL;
 			return head + 1;
 		}
+
+		/* 末尾がESCの場合、次が\かもしれない */
+		if (head == tail - 1 && *head == 0x1b)
+			return head;
 
 		/* SOSの場合、STとSOS以外は全て使用可能 */
 		if (rcv == RCV_SOS && strncmp(head, "\eX", 2) != 0)
@@ -757,6 +761,10 @@ OSC(Term *term, const char *head, const char *tail)
 			return p + (*p == 0x07 ? 1 : 2);
 		}
 		
+		/* 末尾がESCの場合、次が\かもしれない */
+		if (head == tail - 1 && *head == 0x1b)
+			return NULL;
+
 		/* NULがあったら取り除いて読み直す */
 		if (*p == 0x00) {
 			removeCharFromReadbuf(term, p);
