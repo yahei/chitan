@@ -30,6 +30,7 @@ static const char *CC(Term *, const char *, const char *);
 static const char *ESC(Term *, const char *, const char *);
 static const char *CSI(Term *, const char *, const char *);
 static const char *ctrlSeq(Term *, const char *, const char *, enum cseq_type type);
+static const char *ESC_k(Term *, const char *, const char *);
 static void OSC(Term *, char *, const char *);
 static void linefeed(Term *);
 static void setCursorPos(Term *, int, int);
@@ -297,6 +298,7 @@ void
 removeCharFromReadbuf(Term *term, const char *target)
 {
 	memmove(term->readbuf + 1, term->readbuf, target - term->readbuf);
+	term->readbuf[0] = 0x00;
 }
 
 const char *
@@ -416,7 +418,7 @@ ESC(Term *term, const char *head, const char *tail)
 	case 0x5d: return ctrlSeq(term, head + 1, tail, CS_OSC);    /* OSC */
 	case 0x5e: return readCtlSeq(term, head + 1, tail, RCV_PM); /* PM  */
 	case 0x5f: return readCtlSeq(term, head + 1, tail, RCV_APC);/* APC */
-	case 0x6b: return ctrlSeq(term, head + 1, tail, CS_k);      /* k   */
+	case 0x6b: return      ESC_k(term, head + 1, tail);         /* k   */
 	case 0x00: return     ESC(term, head + 1, tail);            /* NUL */
 
 	default:
@@ -704,6 +706,38 @@ UNKNOWN:
 }
 
 const char *
+ESC_k(Term *term, const char *head, const char *tail)
+{
+	const char *p;
+	int title_len;
+
+	for (p = head; p < tail; p++) {
+		/* ST(ESC \)で終了 */
+		if (strncmp(p, "\e\\", 2) == 0) {
+			title_len = MIN(p - head, TITLE_MAX - 1);
+			strncpy(term->title, head, title_len);
+			term->title[title_len] = '\0';
+			return p + 2;
+		}
+
+		/* CAN/SUBで中断 */
+		if (*p == 0x18 || *p == 0x1a)
+			return p + 1;
+
+		/* 使用可能な文字か確認 */
+		if (*p == 0x00 || BETWEEN(*p, 0x08, 0x0e) || IS_GC(*p))
+			continue;
+
+		/* エラー */
+		fprintf(stderr, "ESC k \"%.*s\" was interrupted by '%#x'\n",
+				(int)(p - head), head, *p);
+		return p + 1;
+	}
+
+	return NULL;
+}
+
+const char *
 ctrlSeq(Term *term, const char *head, const char *tail, enum cseq_type type)
 {
 	const int len = tail - head;
@@ -747,7 +781,6 @@ ctrlSeq(Term *term, const char *head, const char *tail, enum cseq_type type)
 	/* 制御列の種類ごとの処理 */
 	switch (type) {
 	case CS_OSC:     OSC(term, payload, err);                       break;
-	case CS_k:      strncpy(term->title, payload, TITLE_MAX - 1);   break;
 	default:
 	}
 
