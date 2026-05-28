@@ -29,9 +29,9 @@ static const char *GCs(Term *, const char *);
 static const char *CC(Term *, const char *, const char *);
 static const char *ESC(Term *, const char *, const char *);
 static const char *CSI(Term *, const char *, const char *);
-static const char *ctrlSeq(Term *, const char *, const char *, enum cseq_type type);
 static const char *ESC_k(Term *, const char *, const char *);
-static void OSC(Term *, char *, const char *);
+static const char *OSC(Term *, const char *, const char *);
+static void interpretOSC(Term *, char *);
 static void linefeed(Term *);
 static void setCursorPos(Term *, int, int);
 static void moveCursorPos(Term *, int, int, int);
@@ -414,12 +414,12 @@ ESC(Term *term, const char *head, const char *tail)
 
 	case 0x50: return readCtlSeq(term, head + 1, tail, RCV_DCS);/* DCS */
 	case 0x58: return readCtlSeq(term, head + 1, tail, RCV_SOS);/* SOS */
-	case 0x5b: return     CSI(term, head + 1, tail);            /* CSI */
-	case 0x5d: return ctrlSeq(term, head + 1, tail, CS_OSC);    /* OSC */
+	case 0x5b: return        CSI(term, head + 1, tail);         /* CSI */
+	case 0x5d: return        OSC(term, head + 1, tail);         /* OSC */
 	case 0x5e: return readCtlSeq(term, head + 1, tail, RCV_PM); /* PM  */
 	case 0x5f: return readCtlSeq(term, head + 1, tail, RCV_APC);/* APC */
 	case 0x6b: return      ESC_k(term, head + 1, tail);         /* k   */
-	case 0x00: return     ESC(term, head + 1, tail);            /* NUL */
+	case 0x00: return        ESC(term, head + 1, tail);         /* NUL */
 
 	default:
 		/* 中断 */
@@ -731,66 +731,59 @@ ESC_k(Term *term, const char *head, const char *tail)
 		/* エラー */
 		fprintf(stderr, "ESC k \"%.*s\" was interrupted by '%#x'\n",
 				(int)(p - head), head, *p);
-		return p + 1;
+		return p;
 	}
 
 	return NULL;
 }
 
 const char *
-ctrlSeq(Term *term, const char *head, const char *tail, enum cseq_type type)
+OSC(Term *term, const char *head, const char *tail)
 {
-	const int len = tail - head;
-	char payload[len + 1], err[len + 1];
-	int i;
+	char payload[tail - head + 1];
+	const char *p;
 
-	/* 中身を読み取る */
-	for (i = 0; i <= len; i++) {
-		/* 末尾に到達して中断 */
-		if (len <= i)
-			return NULL;
+	/* OSC1337の場合は受信モード変更 */
+	if (strchr(head, ';') && strtol(head, NULL, 10) == 1337)
+		return readCtlSeq(term, head, tail, RCV_OSC);
+
+	/* その他は全部読んでから解釈する */
+	for (p = head; p < tail; p++) {
 		/* ST(ESC \)またはBELで終了 */
-		if (i < len && strncmp(&head[i], "\e\\", 2) == 0)
-			break;
-		if (type == CS_OSC && head[i] == 0x07)
-			break;
-		/* 使えない文字またはSOSが現れて中断 */
-		if ((type != CS_SOS && !(BETWEEN(head[i], 0x08, 0x0e) || IS_GC(head[i]))) ||
-		    (type == CS_SOS && i < len && strncmp(&head[i], "\eX", 2) == 0)) {
-			if (head[i] == 0x00) {
-				/* NULが原因なら取り除いて読み直す */
-				removeCharFromReadbuf(term, head + i);
-				return ctrlSeq(term, head + 1, tail, type);
-			} else if (head[i] == 0x18 || head[i] == 0x1a) {
-				/* CAN/SUBで中断 */
-				return &head[i] + 1;
-			} else {
-				/* エラー */
-				err[i] = '\0';
-				fprintf(stderr, "CtrlSeq \"%s\" was interrupted by '%#x'\n",
-						err, head[i]);
-				return &head[i];
-			}
+		if (strncmp(p, "\e\\", 2) == 0 || *p == 0x07) {
+			strncpy(payload, head, p - head);
+			payload[p - head] = '\0';
+			interpretOSC(term, payload);
+			return p + (*p == 0x07 ? 1 : 2);
 		}
-		/* 内容を記録 */
-		err[i] = IS_GC(head[i]) ? head[i] : '?';
-	}
-	strncpy(payload, head, i);
-	payload[i] = err[i] = '\0';
+		
+		/* NULがあったら取り除いて読み直す */
+		if (*p == 0x00) {
+			removeCharFromReadbuf(term, p);
+			return OSC(term, head + 1, tail);
+		}
 
-	/* 制御列の種類ごとの処理 */
-	switch (type) {
-	case CS_OSC:     OSC(term, payload, err);                       break;
-	default:
+		/* CAN/SUBで中断 */
+		if (*p == 0x18 || *p == 0x1a)
+			return p + 1;
+
+		/* 使用可能な文字か確認 */
+		if (IS_GC(*p))
+			continue;
+
+		/* エラー */
+		fprintf(stderr, "OSC \"%.*s\" was interrupted by '%#x'\n",
+				(int)(p - head), head, *p);
+		return p;
 	}
 
-	return head + i + (head[i] == 0x07 ? 1 : 2);
+	return NULL;
 }
 
 void
-OSC(Term *term, char *payload, const char *err)
+interpretOSC(Term *term, char *payload)
 {
-	char *spec, *endptr, res[28];
+	char *spec, *endptr, res[28], *err = payload;
 	char *r, *g, *b;
 	Color color = 0;
 	int pn, pc, i;
