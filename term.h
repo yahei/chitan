@@ -40,6 +40,16 @@ typedef struct Selection {
 	int *vers;
 } Selection;
 
+/* 受信モード */
+enum receive_mode {
+	RCV_NORMAL,
+	RCV_DCS,
+	RCV_SOS,
+	RCV_OSC,
+	RCV_PM,
+	RCV_APC,
+};
+
 /* 端末 */
 typedef struct Term {
 	int master;             /* 疑似端末のFD */
@@ -50,6 +60,7 @@ typedef struct Term {
 	int ctype;              /* カーソル形状 */
 	char readbuf[READ_SIZE + 1];    /* リードバッファ */
 	int rblen;              /* リードバッファに残っている文字の数 */
+	enum receive_mode rcv;  /* 受信モード */
 	char mode[64];          /* ANSIモード */
 	char decmode[8800];     /* DECプライベートモード */
 	char appkeypad;         /* Application Keypadの状態 */

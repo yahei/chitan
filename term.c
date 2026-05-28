@@ -23,12 +23,13 @@ enum cseq_type { CS_DCS, CS_SOS, CS_OSC, CS_PM, CS_APC, CS_k };
 
 static void setDefaultPalette(Color *);
 static void removeCharFromReadbuf(Term *, const char *);
+static const char *readNormal(Term *, const char *, const char *);
+static const char *readCtlSeq(Term *, const char *, const char *, const enum receive_mode);
 static const char *GCs(Term *, const char *);
 static const char *CC(Term *, const char *, const char *);
 static const char *ESC(Term *, const char *, const char *);
 static const char *CSI(Term *, const char *, const char *);
 static const char *ctrlSeq(Term *, const char *, const char *, enum cseq_type type);
-static void CStr(Term *, const char *, const char *, const char *);
 static void OSC(Term *, char *, const char *);
 static void linefeed(Term *);
 static void setCursorPos(Term *, int, int);
@@ -185,20 +186,43 @@ closeTerm(Term *term)
 ssize_t
 readPty(Term *term)
 {
-	const char *head, *reading, *rest, *tail;
+	const char *head, *tail;
 	ssize_t size;
 
-	/* バッファが枯渇したら全部捨てる */
+	/* バッファを使い切ったら全部捨ててから読む */
 	term->rblen = term->rblen < READ_SIZE ? term->rblen : 0;
 	size = read(term->master, term->readbuf + term->rblen, READ_SIZE - term->rblen);
 
 	if (size < 0)
 		return size;
 
+	head = term->readbuf;
 	tail = term->readbuf + term->rblen + size;
 	*(char *)tail = '\0';
 
-	for (head = reading = term->readbuf; reading < tail;) {
+	/* 受信モードに応じた処理 */
+	switch (term->rcv) {
+	case RCV_NORMAL:
+		head = readNormal(term, head, tail);
+		break;
+	default:
+		head = readCtlSeq(term, head, tail, term->rcv);
+		break;
+	}
+
+	/* 残りをバッファの先頭に移す */
+	memmove(term->readbuf, head, tail - head);
+	term->rblen = tail - head;
+
+	return size;
+}
+
+const char *
+readNormal(Term *term, const char *head, const char *tail)
+{
+	const char *reading, *rest;
+
+	for (reading = head; reading < tail;) {
 		rest = IS_GC(*reading) ? GCs(term, reading) : CC(term, reading, tail);
 
 		if (rest == NULL)
@@ -208,10 +232,65 @@ readPty(Term *term)
 		else
 			head = reading = rest;
 	}
-	memmove(term->readbuf, head, tail - head);
-	term->rblen = tail - head;
 
-	return size;
+	return head;
+}
+
+const char *
+readCtlSeq(Term *term, const char *head, const char *tail, const enum receive_mode rcv)
+{
+	static const char *RCV[] = {
+		[RCV_DCS] = "DCS",
+		[RCV_SOS] = "SOS",
+		[RCV_OSC] = "OSC",
+		[RCV_PM]  = "PM",
+		[RCV_APC] = "APC",
+	};
+
+	/* 受信開始時 */
+	if (term->rcv != rcv) {
+		term->rcv = rcv;
+		fprintf(stderr, "Unsupported %s\n", RCV[rcv]);
+	}
+
+	/* 中身を読み取る */
+	for (; head < tail; head++) {
+		/* STが現れたら終了 */
+		if (strncmp(head, "\e\\", 2) == 0) {
+			term->rcv = RCV_NORMAL;
+			return head + 2;
+		}
+
+		/* OSCの場合、BELが現れたら終了 */
+		if (rcv == RCV_OSC && *head == 0x07) {
+			term->rcv = RCV_NORMAL;
+			return head + 1;
+		}
+
+		/* SOSの場合、STとSOS以外は全て使用可能 */
+		if (rcv == RCV_SOS && strncmp(head, "\eX", 2) != 0)
+			continue;
+
+		/* CAN/SUBで中断 */
+		if (*head == 0x18 || *head == 0x1a)
+			return head + 1;
+
+		/* ESC以外の制御文字を処理 */
+		if (*head < 0x20 && *head != 0x1b) {
+			CC(term, head, tail);
+			continue;
+		}
+
+		/* 使えない文字が現れたらエラーで終了 */
+		if (!(BETWEEN(*head, 0x08, 0x0e) || IS_GC(*head))) {
+			fprintf(stderr, "%s was interrupted by '%#x'\n",
+				RCV[rcv], *head);
+			term->rcv = RCV_NORMAL;
+			return head + 1;
+		}
+	}
+
+	return tail;
 }
 
 void
@@ -331,12 +410,12 @@ ESC(Term *term, const char *head, const char *tail)
 			term->cy--;
 		break;
 
-	case 0x50: return ctrlSeq(term, head + 1, tail, CS_DCS);    /* DCS */
-	case 0x58: return ctrlSeq(term, head + 1, tail, CS_SOS);    /* SOS */
+	case 0x50: return readCtlSeq(term, head + 1, tail, RCV_DCS);/* DCS */
+	case 0x58: return readCtlSeq(term, head + 1, tail, RCV_SOS);/* SOS */
 	case 0x5b: return     CSI(term, head + 1, tail);            /* CSI */
 	case 0x5d: return ctrlSeq(term, head + 1, tail, CS_OSC);    /* OSC */
-	case 0x5e: return ctrlSeq(term, head + 1, tail, CS_PM);     /* PM  */
-	case 0x5f: return ctrlSeq(term, head + 1, tail, CS_APC);    /* APC */
+	case 0x5e: return readCtlSeq(term, head + 1, tail, RCV_PM); /* PM  */
+	case 0x5f: return readCtlSeq(term, head + 1, tail, RCV_APC);/* APC */
 	case 0x6b: return ctrlSeq(term, head + 1, tail, CS_k);      /* k   */
 	case 0x00: return     ESC(term, head + 1, tail);            /* NUL */
 
@@ -668,21 +747,11 @@ ctrlSeq(Term *term, const char *head, const char *tail, enum cseq_type type)
 	/* 制御列の種類ごとの処理 */
 	switch (type) {
 	case CS_OSC:     OSC(term, payload, err);                       break;
-	case CS_SOS:    CStr(term, payload, err, "SOS");                break;
-	case CS_DCS:    CStr(term, payload, err, "DCS");                break;
-	case CS_PM:     CStr(term, payload, err, "PM");                 break;
-	case CS_APC:    CStr(term, payload, err, "APC");                break;
 	case CS_k:      strncpy(term->title, payload, TITLE_MAX - 1);   break;
 	default:
 	}
 
 	return head + i + (head[i] == 0x07 ? 1 : 2);
-}
-
-void
-CStr(Term *term, const char *payload, const char *err, const char *type)
-{
-	fprintf(stderr, "Unsupported %s: %s\n", type, err);
 }
 
 void
