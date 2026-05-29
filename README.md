@@ -33,23 +33,24 @@ terminfoは削除されません。
 
 ### 設定
 
-xrdbを使用しています。  
+設定ファイルは`$XDG_CONFIG_HOME/chitan/chitan.ini`  
+または`~/.config/chitan/chitan.ini`です。  
 引数のa,f,g,lと同様の設定に加えて色の設定ができます。  
 
-`chitan.foreground` 文字色  
-`chitan.background` 背景色  
-`chitan.color*` パレットの*番目の色  
+`foreground` 文字色  
+`background` 背景色  
+`color*` パレットの*番目の色  
 
 記述例  
 ```
-! --- chitan ---
-chitan.alpha:           0.95
-chitan.font:            monospace:size=12
-chitan.geometry:        80x24+0+0
-chitan.lines:           1024
-chitan.foreground:      #ffffff
-chitan.background:      #000000
-chitan.color10:         #00ff00
+# comment
+alpha           = 0.95
+font            = monospace:size=12
+geometry        = 80x24+0+0
+lines           = 1024
+foreground      = #ffffff
+background      = #000000
+color10         = #00ff00
 ```
 
 デフォルトのカラースキームは[Selenized black](https://github.com/jan-warchol/selenized)です。  
