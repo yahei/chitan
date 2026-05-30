@@ -228,9 +228,12 @@ readPty(Term *term)
 const char *
 changeMode(Term *term, const char *head, const enum receive_mode rcv)
 {
-	/* 未対応のものを無視するためのモードに切り替えるとき */
+	/* 未対応の制御列 */
+	term->err_cnt = 0;
 	if (rcv != RCV_NORMAL)
-		fprintf(stderr, "Unsupported %s\n", RCV[rcv]);
+		fprintf(stderr, "Unsupported %s: ", RCV[rcv]);
+	if (term->rcv != RCV_NORMAL)
+		fprintf(stderr, "\n");
 
 	term->rcv = rcv;
 	return head;
@@ -285,6 +288,13 @@ readCtlSeq(Term *term, const char *head, const char *tail)
 				RCV[term->rcv], *head);
 			return changeMode(term, head + 1, RCV_NORMAL);
 		}
+
+		/* 未対応の表示 */
+		if (term->err_cnt < 60)
+			fprintf(stderr, "%c", *head);
+		if (term->err_cnt == 60)
+			fprintf(stderr, "...");
+		term->err_cnt++;
 	}
 
 	return tail;
@@ -434,7 +444,7 @@ ESC(Term *term, const char *head, const char *tail)
 		 * 0x40-0x5f   Fe型     C1 補助集合
 		 * 0x60-0x7e   Fs型     標準単独制御機能
 		 */
-		fprintf(stderr, "Unsupported ESC Seq: ESC %c(%#04x)\n", *head, *head);
+		fprintf(stderr, "Unsupported ESC Seq: %c(%#04x)\n", *head, *head);
 	}
 
 	return head + 1;
@@ -691,12 +701,12 @@ UNKNOWN:
 		return head + index + 1;
 	/* 無効 */
 	if (!BETWEEN(final, 0x40, 0x7f)) {
-		fprintf(stderr, "Invalid CSI: CSI [%.*s][%.*s](%#04x)\n",
+		fprintf(stderr, "Invalid CSI: [%.*s][%.*s](%#04x)\n",
 				p_len, param, i_len, inter, final);
 		return head + index;
 	}
 	/* 未対応 */
-	fprintf(stderr, "Unsupported CSI: CSI [%.*s][%.*s]%c(%#04x)\n",
+	fprintf(stderr, "Unsupported CSI: [%.*s][%.*s]%c(%#04x)\n",
 			p_len, param, i_len, inter, final, final);
 	return head + index + 1;
 }

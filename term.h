@@ -61,6 +61,7 @@ typedef struct Term {
 	char readbuf[READ_SIZE + 1];    /* リードバッファ */
 	int rblen;              /* リードバッファに残っている文字の数 */
 	enum receive_mode rcv;  /* 受信モード */
+	unsigned int err_cnt;   /* 未対応の表示の文字数カウンタ */
 	char mode[64];          /* ANSIモード */
 	char decmode[8800];     /* DECプライベートモード */
 	char appkeypad;         /* Application Keypadの状態 */
