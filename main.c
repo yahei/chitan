@@ -24,6 +24,7 @@ typedef struct IME {
 	XPoint spot;
 	Line *peline;
 	int caret;
+	bool IMEReport;
 } IME;
 
 typedef struct Win {
@@ -82,8 +83,9 @@ static void preeditStart(XIM, Win *, XPointer);
 static void preeditDone(XIM, Win *, XPointer);
 static void preeditDraw(XIM, Win *, XIMPreeditDrawCallbackStruct *);
 static void preeditCaret(XIM, Win *, XIMPreeditCaretCallbackStruct *);
+static void OSCp(Win *, int);
 
-static const char version[] = "chitan 0.4.0";
+static const char version[] = "chitan 0.4.0 ime";
 static const char help[] = "usage: chitan [-options] [[-e] command [args ...]]\n"
 "        -a alpha                background opacity (0.0-1.0)\n"
 "        -f font                 font selection pattern (ex. monospace:size=12)\n"
@@ -393,6 +395,7 @@ openWindow(int w, int h, int x, int y, int buflines, float alpha, char *const cm
 	term->decmode[1]    = 1;        /* Application Cursor Keys */
 	term->decmode[1004] = 2;        /* Focus In/Out */
 	term->decmode[2004] = 2;        /* Bracketed Paste Mode */
+	term->decmode[4160] = 2;        /* IME Preedit */
 	term->decmode[7727] = 2;        /* Application escape key mode */
 
 	/* Pane作成 */
@@ -742,8 +745,15 @@ receiveSelection(Win *win, Pane *pane, XEvent event)
 void
 redraw(Win *win)
 {
+	Line *line = win->ime.peline;
+
+	if (win->ime.IMEReport) {
+		win->pane->d.DECTCEM = 0;
+		line = NULL;
+	}
+
 	setWindowName(win, win->pane->term->title);
-	if (drawPane(&win->pane->d, tstons(now), win->ime.peline, win->ime.caret)) {
+	if (drawPane(&win->pane->d, tstons(now), line, win->ime.caret)) {
 		XCopyArea(dinfo.disp, win->pane->d.pixmap, win->window, win->gc,
 				0, 0, win->pane->d.width, win->pane->d.height, 0, 0);
 		XFlush(dinfo.disp);
@@ -851,7 +861,11 @@ void
 preeditDone(XIM xim, Win *win, XPointer call)
 {
 	PUT_NUL(win->ime.peline, 0);
-	write(win->redraw_pipe[1], "a", 1);
+	win->ime.IMEReport = false;
+	if (DECMODE(win->pane->term, 4160))
+		writePty(win->pane->term, "\e]p;;\a", 6);
+	else
+		write(win->redraw_pipe[1], "a", 1);
 }
 
 void
@@ -896,7 +910,37 @@ preeditDraw(XIM xim, Win *win, XIMPreeditDrawCallbackStruct *call)
 	/* 終了 */
 	free(str);
 
-	write(win->redraw_pipe[1], "a", 1);
+	win->ime.IMEReport = DECMODE(win->pane->term, 4160);
+	if (win->ime.IMEReport)
+		OSCp(win, len);
+	else
+		write(win->redraw_pipe[1], "a", 1);
+}
+
+void
+OSCp(Win *win, int len)
+{
+	char buf[len*6 + 1], osc_str[len*7 + 7];
+	int s, e;
+
+	/* 変換中は反転文字の範囲を送る */
+	for (s = 0; s < len; s++)
+		if (win->ime.peline->attr[s] == NEGA)
+			break;
+	for (e = s; e < len; e++)
+		if (win->ime.peline->attr[e] != NEGA)
+			break;
+
+	/* 変換前はカーソルの位置を送る */
+	if (s == e)
+		s = e = win->ime.caret;
+
+	/* OSC */
+	wcstombs(buf, (wchar_t*)win->ime.peline->str, sizeof(buf));
+	snprintf(osc_str, sizeof(osc_str), "\e]p%d;%d;%s\a", s, e, buf);
+
+	/* 送信 */
+	writePty(win->pane->term, osc_str, strlen(osc_str));
 }
 
 void

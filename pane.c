@@ -270,7 +270,7 @@ drawPane(Drawing *d, nsec now, Line *peline, int pecaret)
 	/* --- カーソル/Preeditの描画 --- */
 
 	XSetForeground(d->dinfo->disp, d->gc, d->palette[deffg]);
-	if (u32slen(peline->str)) {
+	if (peline && u32slen(peline->str)) {
 		/* Preeditの幅とキャレットのPreedit内での位置を取得 */
 		pewidth = u32swidth(peline->str);
 		pecaretpos = u32snwidth(peline->str, pecaret);
